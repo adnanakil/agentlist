@@ -1,0 +1,19 @@
+name: base64-encoder
+version: "0.1.0"
+description: "Encodes text to Base64 or decodes Base64 back to text."
+runtime: python
+entrypoint: agent.py
+category: utilities
+tags: [base64, encoding, decoding]
+price_per_call_cents: 1
+input_schema:
+  type: object
+  properties:
+    text:
+      type: string
+      description: "The text to encode, or the Base64 string to decode"
+    operation:
+      type: string
+      enum: [encode, decode]
+      description: "Whether to encode or decode"
+  required: [text, operation]

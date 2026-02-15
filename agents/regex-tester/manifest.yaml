@@ -1,0 +1,21 @@
+name: regex-tester
+version: "0.1.0"
+description: "Tests a regular expression pattern against input text and returns all matches with their positions."
+runtime: python
+entrypoint: agent.py
+category: utilities
+tags: [regex, test, pattern]
+price_per_call_cents: 1
+input_schema:
+  type: object
+  properties:
+    pattern:
+      type: string
+      description: "The regex pattern to test"
+    text:
+      type: string
+      description: "The text to test the pattern against"
+    flags:
+      type: string
+      description: "Optional regex flags (i=ignorecase, m=multiline, s=dotall)"
+  required: [pattern, text]

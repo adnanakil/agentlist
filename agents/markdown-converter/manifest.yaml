@@ -1,0 +1,15 @@
+name: markdown-converter
+version: "0.1.0"
+description: "Converts Markdown text to HTML. Supports headers, bold, italic, links, code blocks, inline code, unordered and ordered lists."
+runtime: python
+entrypoint: agent.py
+category: text
+tags: [markdown, html, conversion]
+price_per_call_cents: 2
+input_schema:
+  type: object
+  properties:
+    markdown:
+      type: string
+      description: "The Markdown text to convert to HTML"
+  required: [markdown]

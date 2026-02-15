@@ -1,0 +1,15 @@
+name: echo
+version: "0.1.0"
+description: "A simple echo agent that returns the input back. Useful for testing the AgentGate platform."
+runtime: python
+entrypoint: agent.py
+category: utilities
+tags: [test, echo, debug]
+price_per_call_cents: 1
+input_schema:
+  type: object
+  properties:
+    message:
+      type: string
+      description: "The message to echo back"
+  required: [message]

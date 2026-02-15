@@ -1,0 +1,15 @@
+name: ip-lookup
+version: "0.1.0"
+description: "Parses and analyzes IP addresses. Determines IPv4/IPv6, private/public status, loopback detection, and calculates CIDR network information."
+runtime: python
+entrypoint: agent.py
+category: utilities
+tags: [ip, network, lookup]
+price_per_call_cents: 1
+input_schema:
+  type: object
+  properties:
+    ip:
+      type: string
+      description: "The IP address to analyze (optionally with CIDR notation, e.g. 192.168.1.0/24)"
+  required: [ip]

@@ -1,0 +1,25 @@
+name: json-transformer
+version: "0.1.0"
+description: "Transforms JSON data using JMESPath-like expressions. Supports field extraction, filtering, flattening, and restructuring of JSON documents."
+runtime: python
+entrypoint: agent.py
+category: data
+tags: [json, data, transform, jmespath]
+price_per_call_cents: 2
+input_schema:
+  type: object
+  properties:
+    data:
+      description: "The JSON data to transform"
+    operations:
+      type: array
+      description: "List of transform operations"
+      items:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [pick, omit, rename, flatten, filter_keys]
+          args:
+            type: object
+  required: [data, operations]

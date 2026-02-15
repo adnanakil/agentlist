@@ -1,0 +1,19 @@
+name: web-scraper
+version: "0.1.0"
+description: "Scrapes a web page and extracts its text content, title, and links. Supports CSS selector filtering for targeted extraction."
+runtime: python
+entrypoint: agent.py
+category: web
+tags: [web, scraping, html, extraction]
+price_per_call_cents: 5
+network_access: true
+input_schema:
+  type: object
+  properties:
+    url:
+      type: string
+      description: "The URL to scrape"
+    selector:
+      type: string
+      description: "Optional CSS selector to filter content"
+  required: [url]

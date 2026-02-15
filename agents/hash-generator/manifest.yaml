@@ -1,0 +1,19 @@
+name: hash-generator
+version: "0.1.0"
+description: "Generates cryptographic hashes of input text. Supports MD5, SHA-1, and SHA-256 algorithms."
+runtime: python
+entrypoint: agent.py
+category: utilities
+tags: [hash, crypto, security]
+price_per_call_cents: 1
+input_schema:
+  type: object
+  properties:
+    text:
+      type: string
+      description: "The text to hash"
+    algorithm:
+      type: string
+      enum: [md5, sha1, sha256]
+      description: "The hash algorithm to use"
+  required: [text, algorithm]

@@ -1,0 +1,19 @@
+name: code-formatter
+version: "0.1.0"
+description: "Formats Python code using basic indentation rules, or prettifies JSON. Supports consistent styling for readable code output."
+runtime: python
+entrypoint: agent.py
+category: code
+tags: [code, format, python, json]
+price_per_call_cents: 2
+input_schema:
+  type: object
+  properties:
+    code:
+      type: string
+      description: "The source code or JSON to format"
+    language:
+      type: string
+      enum: [python, json]
+      description: "The language of the code to format"
+  required: [code, language]

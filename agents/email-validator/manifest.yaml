@@ -1,0 +1,19 @@
+name: email-validator
+version: "0.1.0"
+description: "Validates email addresses using regex pattern matching. Checks format validity and common patterns. Supports single or batch validation."
+runtime: python
+entrypoint: agent.py
+category: utilities
+tags: [email, validation, check]
+price_per_call_cents: 1
+input_schema:
+  type: object
+  properties:
+    email:
+      type: string
+      description: "A single email address to validate"
+    emails:
+      type: array
+      items:
+        type: string
+      description: "A list of email addresses to validate"

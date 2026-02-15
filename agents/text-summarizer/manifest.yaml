@@ -1,0 +1,18 @@
+name: text-summarizer
+version: "0.1.0"
+description: "Summarizes text content by extracting the most important sentences. Uses extractive summarization based on word frequency analysis."
+runtime: python
+entrypoint: agent.py
+category: text
+tags: [text, summarization, nlp, extraction]
+price_per_call_cents: 3
+input_schema:
+  type: object
+  properties:
+    text:
+      type: string
+      description: "The text to summarize"
+    num_sentences:
+      type: integer
+      description: "Number of sentences in summary (default: 3)"
+  required: [text]

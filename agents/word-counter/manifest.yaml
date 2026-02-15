@@ -1,0 +1,15 @@
+name: word-counter
+version: "0.1.0"
+description: "Counts words, characters, sentences, and paragraphs in text. Also provides top word frequency analysis."
+runtime: python
+entrypoint: agent.py
+category: text
+tags: [text, words, count, analysis]
+price_per_call_cents: 1
+input_schema:
+  type: object
+  properties:
+    text:
+      type: string
+      description: "The text to analyze"
+  required: [text]
