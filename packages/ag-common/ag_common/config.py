@@ -34,3 +34,12 @@ class OrchestratorConfig(BaseConfig):
     agent_memory_limit_mb: int = 512
     agent_cpu_limit: float = 1.0
     encryption_key: str = ""
+
+
+class WebConfig(BaseConfig):
+    session_secret: str = "change-me-in-production"
+    encryption_key: str = ""
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_verify_service_sid: str = ""
+    hal_provision_secret: str = ""

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Verify — Get HAL{% endblock %}
+
+{% block nav_links %}
+<a href="/get-hal">Back</a>
+{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 2rem 0;">
+    <h1>Check your phone</h1>
+    <p style="max-width: 400px; margin: 0 auto 2rem;">
+        We sent a 6-digit code to <strong style="color: #fff;">{{ phone }}</strong>
+    </p>
+</div>
+
+<div class="card" style="max-width: 400px; margin: 0 auto;">
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/get-hal/confirm">
+        <div class="form-group">
+            <label for="code">Verification code</label>
+            <input type="text" id="code" name="code" required
+                   maxlength="6" pattern="[0-9]{6}"
+                   placeholder="000000" autocomplete="one-time-code"
+                   style="font-size: 1.5rem; text-align: center; letter-spacing: 0.5rem;">
+        </div>
+
+        <button type="submit" class="btn" style="width: 100%;">Verify</button>
+    </form>
+
+    <p style="margin-top: 1rem; text-align: center; font-size: 0.85rem;">
+        Didn't get it? <a href="/get-hal">Try again</a>
+    </p>
+</div>
+{% endblock %}

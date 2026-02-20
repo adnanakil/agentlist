@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}You're In — HAL{% endblock %}
+
+{% block nav_links %}
+<a href="/">Home</a>
+{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 3rem 0;">
+    <div style="font-size: 3rem; margin-bottom: 1rem;">&#10003;</div>
+    <h1>You're all set!</h1>
+    <p style="max-width: 450px; margin: 0 auto 2rem; font-size: 1.1rem;">
+        HAL will text you shortly at <strong style="color: #fff;">{{ phone }}</strong>.
+        Just reply to start chatting.
+    </p>
+</div>
+
+<div class="card" style="max-width: 500px; margin: 0 auto;">
+    <h2 style="margin-bottom: 1rem;">What HAL can do</h2>
+    <ul style="list-style: none; padding: 0; color: #a0a0a0; line-height: 2;">
+        <li style="color: #6ee7b7;">&#x2713; <span style="color: #e0e0e0;">Answer questions &amp; research anything</span></li>
+        <li style="color: #6ee7b7;">&#x2713; <span style="color: #e0e0e0;">Set reminders &amp; manage your schedule</span></li>
+        <li style="color: #6ee7b7;">&#x2713; <span style="color: #e0e0e0;">Browse the web on your behalf</span></li>
+        <li style="color: #6ee7b7;">&#x2713; <span style="color: #e0e0e0;">Order groceries &amp; book restaurants</span></li>
+        <li style="color: #6ee7b7;">&#x2713; <span style="color: #e0e0e0;">Generate images &amp; creative content</span></li>
+    </ul>
+</div>
+{% endblock %}

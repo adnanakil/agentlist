@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Get HAL — Dispatch{% endblock %}
+
+{% block nav_links %}
+<a href="/signup" class="btn btn-outline">Sign Up</a>
+<a href="/login">Log In</a>
+{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 2rem 0;">
+    <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">Meet <span style="color: #6ee7b7;">HAL</span></h1>
+    <p style="font-size: 1.2rem; max-width: 500px; margin: 0 auto 2rem;">
+        Your AI assistant, right in iMessage. Research, reminders, groceries, reservations — just text.
+    </p>
+</div>
+
+<div class="card" style="max-width: 440px; margin: 0 auto;">
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/get-hal/verify">
+        <div class="form-group">
+            <label for="phone">Your phone number</label>
+            <input type="tel" id="phone" name="phone" required
+                   placeholder="+1 (555) 123-4567"
+                   style="font-size: 1.1rem; text-align: center;">
+        </div>
+
+        <button type="submit" class="btn" style="width: 100%; font-size: 1.1rem;">
+            Get Started
+        </button>
+    </form>
+
+    <p style="margin-top: 1rem; text-align: center; font-size: 0.8rem; color: #666;">
+        We'll send a verification code via SMS. Standard rates apply.
+    </p>
+</div>
+
+<div style="max-width: 600px; margin: 3rem auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+    <div class="card" style="margin-bottom: 0;">
+        <h2 style="font-size: 1.1rem;">Research</h2>
+        <p style="font-size: 0.9rem; margin-bottom: 0;">Ask anything — HAL searches the web and gives you concise answers.</p>
+    </div>
+    <div class="card" style="margin-bottom: 0;">
+        <h2 style="font-size: 1.1rem;">Reminders</h2>
+        <p style="font-size: 0.9rem; margin-bottom: 0;">"Remind me to call the dentist at 3pm" — HAL texts you on time.</p>
+    </div>
+    <div class="card" style="margin-bottom: 0;">
+        <h2 style="font-size: 1.1rem;">Calendar</h2>
+        <p style="font-size: 0.9rem; margin-bottom: 0;">Connect Google Calendar — HAL manages events and checks your schedule.</p>
+    </div>
+    <div class="card" style="margin-bottom: 0;">
+        <h2 style="font-size: 1.1rem;">Browse</h2>
+        <p style="font-size: 0.9rem; margin-bottom: 0;">HAL can navigate the web for you — order groceries, book restaurants, and more.</p>
+    </div>
+</div>
+{% endblock %}

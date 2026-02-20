@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Submit Agent — Dispatch{% endblock %}
+
+{% block nav_links %}
+<span style="color: #888;">{{ account.email }}</span>
+<a href="/dashboard">Dashboard</a>
+<a href="/logout" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Log Out</a>
+{% endblock %}
+
+{% block content %}
+<h1>Submit an Agent</h1>
+<p>Fill in the details below to list your agent on the marketplace.</p>
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+<form method="POST" action="/dashboard/submit-agent">
+    <div class="card">
+        <h2 style="margin-bottom: 1.25rem;">Basic Info</h2>
+
+        <div class="form-group">
+            <label for="slug">Slug <span style="color: #666; font-weight: 400;">(unique identifier, lowercase, hyphens only)</span></label>
+            <input type="text" id="slug" name="slug" placeholder="my-agent" pattern="[a-z0-9\-]+" required value="{{ values.slug or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="name">Display Name</label>
+            <input type="text" id="name" name="name" placeholder="My Agent" required value="{{ values.name or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="3" placeholder="What does this agent do?" required style="width: 100%; padding: 0.75rem 1rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 1rem; font-family: inherit; resize: vertical;">{{ values.description or '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="price">Price <span style="color: #666; font-weight: 400;">(cents per call)</span></label>
+            <input type="number" id="price" name="price_per_call_cents" min="0" max="1000" placeholder="0" required value="{{ values.price_per_call_cents or '0' }}">
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom: 1.25rem;">Hosting</h2>
+        <p style="font-size: 0.9rem; margin-bottom: 1.25rem;">
+            Choose how your agent runs. Hosted agents run on our infrastructure. External agents run on your own server &mdash; we just proxy requests to your endpoint.
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+            <label id="option-hosted" style="display: block; padding: 1rem 1.25rem; background: #1a1a1a; border: 2px solid #6ee7b7; border-radius: 8px; cursor: pointer; transition: border-color 0.2s;">
+                <input type="radio" name="hosting_type" value="hosted" {% if not values.hosting_type or values.hosting_type == 'hosted' %}checked{% endif %} style="display: none;" onchange="toggleHosting()">
+                <div style="color: #fff; font-weight: 600; margin-bottom: 0.25rem;">Hosted</div>
+                <div style="font-size: 0.8rem; color: #888;">We run your Python code. Upload your agent source and we handle the rest.</div>
+            </label>
+            <label id="option-external" style="display: block; padding: 1rem 1.25rem; background: #1a1a1a; border: 2px solid #333; border-radius: 8px; cursor: pointer; transition: border-color 0.2s;">
+                <input type="radio" name="hosting_type" value="external" {% if values.hosting_type == 'external' %}checked{% endif %} style="display: none;" onchange="toggleHosting()">
+                <div style="color: #fff; font-weight: 600; margin-bottom: 0.25rem;">External Endpoint</div>
+                <div style="font-size: 0.8rem; color: #888;">You host it. We proxy requests to your HTTPS endpoint. Run anything &mdash; Chromium, GPU, etc.</div>
+            </label>
+        </div>
+
+        <div id="section-hosted">
+            <div class="form-group">
+                <label for="agent_code">Python Code</label>
+                <textarea id="agent_code" name="agent_code" rows="16" placeholder='from agentgate_sdk import AgentHandler, run_agent
+
+class MyAgent(AgentHandler):
+    def handle(self, input_data: dict) -> dict:
+        # Your logic here
+        return {"result": "hello"}
+
+if __name__ == "__main__":
+    run_agent(MyAgent())' style="width: 100%; padding: 0.75rem 1rem; background: #111; border: 1px solid #333; border-radius: 6px; color: #6ee7b7; font-size: 0.85rem; font-family: 'SF Mono', 'Fira Code', monospace; resize: vertical; line-height: 1.6; tab-size: 4;">{{ values.agent_code or '' }}</textarea>
+            </div>
+        </div>
+
+        <div id="section-external" style="display: none;">
+            <div class="form-group">
+                <label for="endpoint_url">Endpoint URL <span style="color: #666; font-weight: 400;">(HTTPS required)</span></label>
+                <input type="url" id="endpoint_url" name="endpoint_url" placeholder="https://your-server.com/api/agent" value="{{ values.endpoint_url or '' }}">
+            </div>
+            <div style="background: #111; border: 1px solid #222; border-radius: 6px; padding: 1rem 1.25rem; font-size: 0.85rem;">
+                <div style="color: #fff; font-weight: 600; margin-bottom: 0.5rem;">Endpoint Contract</div>
+                <p style="color: #888; margin-bottom: 0.5rem;">Your endpoint must accept a POST with this JSON body:</p>
+                <pre style="background: #0a0a0a; border: 1px solid #222; border-radius: 4px; padding: 0.75rem; color: #6ee7b7; font-size: 0.8rem; margin-bottom: 0.75rem;">{"input": {"message": "hello", ...}}</pre>
+                <p style="color: #888; margin-bottom: 0.5rem;">And return JSON:</p>
+                <pre style="background: #0a0a0a; border: 1px solid #222; border-radius: 4px; padding: 0.75rem; color: #6ee7b7; font-size: 0.8rem; margin-bottom: 0;">{"output": {"result": "world", ...}}</pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom: 1.25rem;">Credentials <span style="color: #666; font-weight: 400; font-size: 0.9rem;">(optional)</span></h2>
+        <p style="font-size: 0.9rem; margin-bottom: 1rem;">
+            If your agent needs API keys or secrets, add them here. They'll be encrypted and available
+            as environment variables at runtime (e.g. <code>os.environ["GEMINI_API_KEY"]</code>).
+            You can also manage these later from your dashboard.
+        </p>
+
+        <div id="credentials-list">
+            <!-- Dynamic credential rows added by JS -->
+        </div>
+
+        <button type="button" onclick="addCredentialRow()" style="background: none; border: 1px dashed #333; color: #6ee7b7; padding: 0.6rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-top: 0.5rem;">
+            + Add Credential
+        </button>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom: 1.25rem;">Required Consumer Credentials <span style="color: #666; font-weight: 400; font-size: 0.9rem;">(optional)</span></h2>
+        <p style="font-size: 0.9rem; margin-bottom: 1rem;">
+            If your agent needs the consumer's own API keys (e.g. their Instacart or Anthropic key), list them here.
+            Consumers will be prompted to store these credentials before invoking your agent.
+            At runtime they'll be available as <code>CONSUMER_CRED_{NAME}</code>.
+        </p>
+        <div class="form-group">
+            <label for="required_consumer_credentials">Credential Names <span style="color: #666; font-weight: 400;">(comma-separated, e.g. INSTACART_API_KEY, ANTHROPIC_API_KEY)</span></label>
+            <input type="text" id="required_consumer_credentials" name="required_consumer_credentials" placeholder="INSTACART_API_KEY" value="{{ values.required_consumer_credentials or '' }}" style="text-transform: uppercase;">
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom: 1.25rem;">Input Schema</h2>
+        <p style="font-size: 0.9rem; margin-bottom: 1rem;">
+            Define the expected input as a JSON object. This helps consumers know what to send.
+        </p>
+
+        <div class="form-group">
+            <label for="input_schema">JSON Schema <span style="color: #666; font-weight: 400;">(optional)</span></label>
+            <textarea id="input_schema" name="input_schema" rows="6" placeholder='{
+  "type": "object",
+  "properties": {
+    "message": {"type": "string", "description": "Input message"}
+  },
+  "required": ["message"]
+}' style="width: 100%; padding: 0.75rem 1rem; background: #111; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 0.85rem; font-family: 'SF Mono', 'Fira Code', monospace; resize: vertical; line-height: 1.6;">{{ values.input_schema or '' }}</textarea>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <button type="submit" class="btn" style="padding: 0.85rem 2.5rem;">Submit Agent</button>
+        <a href="/dashboard" style="color: #888;">Cancel</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-generate slug from name
+document.getElementById('name').addEventListener('input', function() {
+    const slugField = document.getElementById('slug');
+    if (!slugField.dataset.manual) {
+        slugField.value = this.value.toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+    }
+});
+document.getElementById('slug').addEventListener('input', function() {
+    this.dataset.manual = 'true';
+});
+
+// Hosting type toggle
+function toggleHosting() {
+    const isExternal = document.querySelector('input[name="hosting_type"][value="external"]').checked;
+    document.getElementById('section-hosted').style.display = isExternal ? 'none' : 'block';
+    document.getElementById('section-external').style.display = isExternal ? 'block' : 'none';
+    document.getElementById('option-hosted').style.borderColor = isExternal ? '#333' : '#6ee7b7';
+    document.getElementById('option-external').style.borderColor = isExternal ? '#6ee7b7' : '#333';
+}
+// Initialize on load
+toggleHosting();
+
+// Dynamic credential rows
+function addCredentialRow() {
+    const list = document.getElementById('credentials-list');
+    const row = document.createElement('div');
+    row.style.cssText = 'display: grid; grid-template-columns: 1fr 2fr auto; gap: 0.75rem; align-items: end; margin-bottom: 0.75rem;';
+    row.innerHTML = `
+        <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem;">Name</label>
+            <input type="text" name="cred_name" placeholder="API_KEY" pattern="[A-Z][A-Z0-9_]*" style="text-transform: uppercase;">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem;">Value</label>
+            <input type="password" name="cred_value" placeholder="sk-...">
+        </div>
+        <button type="button" onclick="this.parentElement.remove()" style="background: none; border: 1px solid #333; color: #f87171; padding: 0.65rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; margin-bottom: 0;">Remove</button>
+    `;
+    list.appendChild(row);
+}
+</script>
+{% endblock %}

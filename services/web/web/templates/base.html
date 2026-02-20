@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dispatch{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        a { color: #6ee7b7; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        nav {
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        nav .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: -0.5px;
+        }
+
+        nav .logo span { color: #6ee7b7; }
+
+        nav .nav-links { display: flex; gap: 1.5rem; align-items: center; }
+
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 3rem 1.5rem;
+            flex: 1;
+        }
+
+        .container.wide { max-width: 900px; }
+
+        h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 1rem; color: #fff; }
+        h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; color: #fff; }
+        p { line-height: 1.7; margin-bottom: 1rem; color: #a0a0a0; }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background: #6ee7b7;
+            color: #0a0a0a;
+            font-weight: 600;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background: #5cd6a8; text-decoration: none; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #333;
+            color: #e0e0e0;
+        }
+        .btn-outline:hover { border-color: #6ee7b7; color: #6ee7b7; }
+
+        .card {
+            background: #141414;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 1rem;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #6ee7b7;
+        }
+
+        .error {
+            background: #2a1215;
+            border: 1px solid #5c2328;
+            color: #f87171;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            margin-bottom: 1.25rem;
+            font-size: 0.9rem;
+        }
+
+        .success {
+            background: #0f291e;
+            border: 1px solid #1a4a35;
+            color: #6ee7b7;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            margin-bottom: 1.25rem;
+            font-size: 0.9rem;
+        }
+
+        .api-key-display {
+            background: #1a1a1a;
+            border: 1px solid #6ee7b7;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: "SF Mono", "Fira Code", monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+            position: relative;
+        }
+
+        .snippet-box {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: "SF Mono", "Fira Code", monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.75rem;
+            background: #333;
+            color: #ccc;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .copy-btn:hover { background: #444; }
+
+        .stat { display: inline-block; margin-right: 2rem; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: #fff; }
+        .stat-label { font-size: 0.85rem; color: #888; }
+
+        footer {
+            border-top: 1px solid #222;
+            padding: 1.5rem 2rem;
+            text-align: center;
+            color: #555;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/" class="logo">Dis<span>patch</span></a>
+        <div class="nav-links">
+            {% block nav_links %}
+            <a href="/get-hal" class="btn">Get HAL</a>
+            <a href="/signup">Sign Up</a>
+            <a href="/login">Log In</a>
+            {% endblock %}
+        </div>
+    </nav>
+
+    <div class="container {% block container_class %}{% endblock %}">
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer>Dispatch &mdash; One URL, one API key, any agent.</footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

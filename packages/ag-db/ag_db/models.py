@@ -3,7 +3,6 @@
 import uuid
 from datetime import datetime, timezone
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -57,6 +56,7 @@ class Account(Base):
 
     api_keys: Mapped[list["ApiKey"]] = relationship(back_populates="account")
     ledger_accounts: Mapped[list["LedgerAccount"]] = relationship(back_populates="account")
+    consumer_credentials: Mapped[list["ConsumerCredential"]] = relationship(back_populates="account")
 
 
 class ApiKey(Base):
@@ -119,9 +119,11 @@ class Agent(Base):
     price_per_call_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     input_schema: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     manifest: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    description_embedding = mapped_column(Vector(1536), nullable=True)
+    description_embedding = mapped_column(JSONB, nullable=True)
     tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     image_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    endpoint_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    required_consumer_credentials: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
 
     # Stats
     total_invocations: Mapped[int] = mapped_column(Integer, default=0)
@@ -158,6 +160,25 @@ class AgentCredential(Base):
 
     __table_args__ = (
         UniqueConstraint("agent_id", "credential_name", name="uq_agent_credential"),
+    )
+
+
+class ConsumerCredential(Base):
+    __tablename__ = "consumer_credentials"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False
+    )
+    service_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    encrypted_value: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    encryption_key_id: Mapped[str] = mapped_column(String(100), nullable=False, default="default")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    account: Mapped["Account"] = relationship(back_populates="consumer_credentials")
+
+    __table_args__ = (
+        UniqueConstraint("account_id", "service_name", name="uq_consumer_credential"),
     )
 
 
@@ -283,6 +304,32 @@ class Invocation(Base):
         Index("ix_invocations_consumer", "consumer_id"),
         Index("ix_invocations_agent", "agent_id"),
         Index("ix_invocations_status", "status"),
+    )
+
+
+# --- Stripe Events (idempotency) ---
+
+
+class AgentSubscription(Base):
+    __tablename__ = "agent_subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    agent_slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum(
+            "pending_provision", "active", "suspended", "cancelled",
+            name="subscription_status",
+        ),
+        nullable=False,
+    )
+    provisioned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("phone", "agent_slug", name="uq_subscription_phone_agent"),
+        Index("ix_agent_subscriptions_status", "status"),
+        Index("ix_agent_subscriptions_phone", "phone"),
     )
 
 
