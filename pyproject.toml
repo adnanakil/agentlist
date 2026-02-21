@@ -4,6 +4,11 @@ version = "0.1.0"
 description = "Hosted agent marketplace — one URL, one API key, any agent"
 requires-python = ">=3.12"
 readme = "README.md"
+dependencies = [
+    "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
+    "pyyaml>=6.0.3",
+]
 
 [tool.uv.workspace]
 members = [
@@ -13,8 +18,14 @@ members = [
     "services/registry",
     "services/orchestrator",
     "services/billing",
+    "services/web",
+    "services/hal-orchestrator",
     "agent-sdk/python",
 ]
+
+[tool.uv.sources]
+ag-common = { workspace = true }
+ag-db = { workspace = true }
 
 [tool.uv]
 dev-dependencies = [
@@ -34,7 +45,7 @@ line-length = 100
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "T20"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["ag_common", "ag_db", "gateway", "registry", "orchestrator", "billing", "agentgate_sdk"]
+known-first-party = ["ag_common", "ag_db", "gateway", "registry", "orchestrator", "billing", "web", "hal_orchestrator", "agentgate_sdk"]
 
 [tool.mypy]
 python_version = "3.12"

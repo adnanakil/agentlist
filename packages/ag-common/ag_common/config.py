@@ -43,3 +43,19 @@ class WebConfig(BaseConfig):
     twilio_auth_token: str = ""
     twilio_verify_service_sid: str = ""
     hal_provision_secret: str = ""
+
+
+class HalOrchestratorConfig(BaseConfig):
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.1-pro-preview"
+    gemini_flash_model: str = "gemini-3-flash-preview"
+    hal_bridge_secret: str = ""
+    hal_bridge_url: str = ""
+    orchestrator_url: str = "http://localhost:8005"
+    max_tool_iterations: int = 15
+    max_specialist_iterations: int = 10
+    max_conversation_turns: int = 40
+    gemini_timeout_seconds: int = 90
+    gemini_temperature: float = 0.7
+    gemini_max_output_tokens: int = 2048
+    reminder_check_interval_seconds: int = 30

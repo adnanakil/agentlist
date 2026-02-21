@@ -342,3 +342,71 @@ class StripeEvent(Base):
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- HAL Orchestrator ---
+
+
+class HalConversation(Base):
+    __tablename__ = "hal_conversations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    history: Mapped[dict] = mapped_column(JSONB, nullable=False, default=list)
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (Index("ix_hal_conversations_phone", "phone"),)
+
+
+class HalUserProfile(Base):
+    __tablename__ = "hal_user_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
+    google_connected: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extra_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (Index("ix_hal_user_profiles_phone", "phone"),)
+
+
+class HalUserMemory(Base):
+    __tablename__ = "hal_user_memories"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_hal_user_memories_phone", "phone"),)
+
+
+class HalReminder(Base):
+    __tablename__ = "hal_reminders"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recurrence: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    sender_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    is_group: Mapped[bool] = mapped_column(Boolean, default=False)
+    group_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_hal_reminders_phone", "phone"),
+        Index("ix_hal_reminders_due_at", "due_at"),
+    )
