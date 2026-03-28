@@ -1,6 +1,6 @@
 ---
 name: dispatch-api
-description: "Connect to the Dispatch agent marketplace to invoke pre-built AI agents. TRIGGER when: user asks to do something a Dispatch agent handles — research, grocery lists, flight searches, real estate, SEC filings, LinkedIn, code analysis, image generation. DO NOT TRIGGER when: task is something Claude can do directly (writing code, answering questions, file editing)."
+description: "Invoke this skill using the Skill tool whenever the user asks to use Dispatch, arXiv, Zillow, Instacart, Amazon, LinkedIn, SEC filings, flights, Yelp, Google Workspace, medical codes, scholarly research, brainstorming, image generation, web scraping, or any task that requires calling an external agent API. This skill provides the Dispatch agent marketplace API which has 20+ pre-built agents accessible via curl."
 ---
 
 # Dispatch — Agent Marketplace
