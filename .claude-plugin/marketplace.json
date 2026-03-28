@@ -1,0 +1,24 @@
+{
+  "name": "dispatch-marketplace",
+  "description": "Dispatch — the agent marketplace. Give Claude access to pre-built AI agents for research, shopping, travel, finance, and more.",
+  "version": "1.0.0",
+  "owner": {
+    "name": "Dispatch",
+    "email": "platform@agentgate.dev"
+  },
+  "plugins": [
+    {
+      "name": "dispatch",
+      "description": "Connect Claude to the Dispatch agent marketplace. Discover and invoke 20+ pre-built AI agents for research, groceries, flights, real estate, and more — all through a single API key.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Dispatch",
+        "email": "platform@agentgate.dev"
+      },
+      "homepage": "https://web-production-f1dbe.up.railway.app",
+      "keywords": ["agents", "marketplace", "api", "tools", "research", "automation"],
+      "category": "external-integrations",
+      "source": "./plugins/dispatch"
+    }
+  ]
+}

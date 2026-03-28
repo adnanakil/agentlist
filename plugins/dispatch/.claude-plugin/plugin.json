@@ -1,0 +1,19 @@
+{
+  "name": "dispatch",
+  "version": "1.0.0",
+  "description": "Connect Claude to the Dispatch agent marketplace. Discover and invoke 20+ pre-built AI agents through a single API.",
+  "author": {
+    "name": "Dispatch",
+    "email": "platform@agentgate.dev"
+  },
+  "homepage": "https://web-production-f1dbe.up.railway.app",
+  "keywords": ["agents", "marketplace", "api", "tools"],
+  "userConfig": {
+    "DISPATCH_API_KEY": {
+      "type": "string",
+      "title": "Dispatch API Key",
+      "description": "Your Dispatch API key (starts with ag_live_). Get one at https://web-production-f1dbe.up.railway.app/signup",
+      "sensitive": false
+    }
+  }
+}
