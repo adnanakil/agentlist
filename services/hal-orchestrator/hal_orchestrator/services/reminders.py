@@ -70,8 +70,8 @@ async def list_reminders(session: AsyncSession, phone: str) -> list[dict]:
     ]
 
 
-async def delete_reminder(session: AsyncSession, reminder_id: str) -> bool:
-    """Delete a reminder by ID."""
+async def delete_reminder(session: AsyncSession, reminder_id: str, phone: str) -> bool:
+    """Delete a reminder by ID (scoped to user's phone)."""
     from uuid import UUID
 
     try:
@@ -79,7 +79,7 @@ async def delete_reminder(session: AsyncSession, reminder_id: str) -> bool:
     except ValueError:
         return False
 
-    stmt = select(HalReminder).where(HalReminder.id == uid)
+    stmt = select(HalReminder).where(HalReminder.id == uid, HalReminder.phone == phone)
     result = await session.execute(stmt)
     reminder = result.scalar_one_or_none()
 
@@ -170,21 +170,12 @@ async def _send_reminder_via_bridge(
     http_client: httpx.AsyncClient,
     reminder: HalReminder,
 ) -> None:
-    """Send a reminder message through the iMessage bridge."""
-    if not settings.hal_bridge_url:
-        log.warning("reminder.no_bridge_url")
-        return
+    """Queue a reminder message in the outbox for the bridge to pick up."""
+    import hal_orchestrator.state as state
 
     message = f"Reminder: {reminder.text}"
-
-    await http_client.post(
-        f"{settings.hal_bridge_url}/send",
-        json={"to": reminder.phone, "text": message},
-        headers={"Authorization": f"Bearer {settings.hal_bridge_secret}"},
-        timeout=30,
-    )
-
-    log.info("reminder.sent", phone=reminder.phone, text=reminder.text[:50])
+    await state.outbox.put({"to": reminder.phone, "text": message})
+    log.info("reminder.queued", phone=reminder.phone, text=reminder.text[:50])
 
 
 def _next_occurrence(current: datetime, recurrence: str) -> datetime | None:

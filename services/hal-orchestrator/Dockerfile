@@ -22,4 +22,4 @@ WORKDIR /app/services/hal-orchestrator
 
 ENV PORT=8005
 
-CMD uvicorn hal_orchestrator.main:app --host 0.0.0.0 --port $PORT
+CMD cd /app/packages/ag-db && alembic upgrade head && cd /app/services/hal-orchestrator && uvicorn hal_orchestrator.main:app --host 0.0.0.0 --port $PORT

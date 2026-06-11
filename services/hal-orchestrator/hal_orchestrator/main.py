@@ -18,8 +18,16 @@ from fastapi import FastAPI
 from ag_db.session import create_engine_and_session
 
 import hal_orchestrator.state as state
+from hal_orchestrator.routes.google import build_google_router
 from hal_orchestrator.routes.message import build_message_router
+from hal_orchestrator.services.baby_watch import baby_watch_loop
+from hal_orchestrator.services.cron import run_cron_checker
+from hal_orchestrator.services.curator import curator_loop
+from hal_orchestrator.services.profile_enricher import profile_enricher_loop
+from hal_orchestrator.services.reflection import reflection_loop
 from hal_orchestrator.services.reminders import run_reminder_checker
+from hal_orchestrator.services.skill_synthesizer import skill_synthesizer_loop
+from hal_orchestrator.services.summarizer import summarizer_loop
 
 # --------------------------------------------------------------------------- #
 # Logging
@@ -65,14 +73,57 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         run_reminder_checker(settings, state.http_client)
     )
 
+    # Start skills curator background task (no-op until interval+idle gates pass)
+    curator_task = asyncio.create_task(
+        curator_loop(settings, state.http_client)
+    )
+
+    # Start conversation summarizer background task (~20 min cadence)
+    summarizer_task = asyncio.create_task(
+        summarizer_loop(settings, state.http_client)
+    )
+
+    # Start profile enricher background task (~30 min cadence): distills durable
+    # preferences/needs (1:1) or interests/dynamics/goals (group) into the
+    # silo's structured profile, so the agent knows each user/group better over time.
+    enricher_task = asyncio.create_task(
+        profile_enricher_loop(settings, state.http_client)
+    )
+
+    # Agentic cron (scheduled full agent turns) + auto-skill synthesizer.
+    cron_task = asyncio.create_task(run_cron_checker(settings, state.http_client))
+    synth_task = asyncio.create_task(
+        skill_synthesizer_loop(settings, state.http_client)
+    )
+
+    # Nightly self-improvement: auto-create shared skills + propose features.
+    reflection_task = asyncio.create_task(
+        reflection_loop(settings, state.http_client)
+    )
+
+    # Baby nap-cap watcher: unprompted nudge when a logged nap runs long.
+    baby_watch_task = asyncio.create_task(
+        baby_watch_loop(settings, state.http_client)
+    )
+
     yield
 
     log.info("hal_orchestrator.shutdown")
-    reminder_task.cancel()
-    try:
-        await reminder_task
-    except asyncio.CancelledError:
-        pass
+    for task in (
+        reminder_task,
+        curator_task,
+        summarizer_task,
+        enricher_task,
+        cron_task,
+        synth_task,
+        reflection_task,
+        baby_watch_task,
+    ):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     if state.http_client:
         await state.http_client.aclose()
     await engine.dispose()
@@ -97,6 +148,9 @@ def create_app() -> FastAPI:
 
     # Message processing
     application.include_router(build_message_router())
+
+    # Google OAuth callback (public landing page after consent)
+    application.include_router(build_google_router())
 
     return application
 

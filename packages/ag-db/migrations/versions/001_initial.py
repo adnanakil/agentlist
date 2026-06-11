@@ -9,7 +9,6 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision: str = "001"
@@ -19,9 +18,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Enable pgvector extension
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-
     # Enums
     account_role = sa.Enum("consumer", "developer", "admin", name="account_role")
     agent_runtime = sa.Enum("python", name="agent_runtime")
@@ -92,7 +88,7 @@ def upgrade() -> None:
         sa.Column("price_per_call_cents", sa.Integer, nullable=False, server_default="0"),
         sa.Column("input_schema", JSONB, nullable=False, server_default="{}"),
         sa.Column("manifest", JSONB, nullable=False, server_default="{}"),
-        sa.Column("description_embedding", Vector(1536), nullable=True),
+        sa.Column("description_embedding", JSONB, nullable=True),
         sa.Column("tags", JSONB, nullable=False, server_default="[]"),
         sa.Column("image_uri", sa.String(500), nullable=True),
         sa.Column("total_invocations", sa.Integer, server_default="0"),
@@ -236,4 +232,3 @@ def downgrade() -> None:
     op.execute("DROP TYPE IF EXISTS agent_status")
     op.execute("DROP TYPE IF EXISTS agent_runtime")
     op.execute("DROP TYPE IF EXISTS account_role")
-    op.execute("DROP EXTENSION IF EXISTS vector")

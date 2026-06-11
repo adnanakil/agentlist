@@ -60,6 +60,10 @@ async def tool_web_fetch(args: dict, ctx: ToolContext) -> str:
     if not url:
         return "Error: url is required"
 
+    # Reddit blocks simple HTTP fetches; use old.reddit.com which serves static HTML
+    if "reddit.com/" in url and "old.reddit.com" not in url:
+        url = url.replace("www.reddit.com", "old.reddit.com").replace("://reddit.com", "://old.reddit.com")
+
     try:
         resp = await ctx.http_client.get(
             url,

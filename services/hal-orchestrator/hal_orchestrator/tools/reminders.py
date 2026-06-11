@@ -47,7 +47,7 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
         if not reminders:
             return "No pending reminders."
         return "Pending reminders:\n" + "\n".join(
-            f"- [{r['id'][:8]}] {r['text']} (due: {r['due_at']}"
+            f"- [id: {r['id']}] {r['text']} (due: {r['due_at']}"
             + (f", {r['recurrence']}" if r.get("recurrence") else "")
             + ")"
             for r in reminders
@@ -57,7 +57,7 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
         reminder_id = args.get("reminder_id", "")
         if not reminder_id:
             return "Error: reminder_id is required"
-        deleted = await delete_reminder(ctx.session, reminder_id)
+        deleted = await delete_reminder(ctx.session, reminder_id, ctx.phone)
         return "Reminder deleted." if deleted else "Reminder not found."
 
     else:

@@ -47,15 +47,47 @@ class WebConfig(BaseConfig):
 
 class HalOrchestratorConfig(BaseConfig):
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.1-pro-preview"
-    gemini_flash_model: str = "gemini-3-flash-preview"
+    gemini_model: str = "gemini-3.5-flash"
+    gemini_flash_model: str = "gemini-3.5-flash"
+    # Thinking level for Gemini 3.5+ models. Valid: LOW, MEDIUM, HIGH, or empty
+    # to disable. Empty/"NONE" → no thinkingConfig sent. Default MEDIUM gives a
+    # nice quality boost without the latency of HIGH.
+    gemini_thinking_level: str = "MEDIUM"
     hal_bridge_secret: str = ""
     hal_bridge_url: str = ""
     orchestrator_url: str = "http://localhost:8005"
     max_tool_iterations: int = 15
     max_specialist_iterations: int = 10
     max_conversation_turns: int = 40
-    gemini_timeout_seconds: int = 90
+    gemini_timeout_seconds: int = 60
     gemini_temperature: float = 0.7
     gemini_max_output_tokens: int = 2048
     reminder_check_interval_seconds: int = 30
+    gemini_image_model: str = "gemini-2.5-flash-image"
+    browser_service_url: str = ""
+    # Skills curator settings. interval=0 disables; default weekly.
+    curator_check_interval_seconds: int = 60 * 30  # how often loop wakes
+    curator_interval_hours: int = 24 * 7  # min hours between actual passes
+    curator_min_idle_seconds: int = 60 * 60 * 2  # require this much quiet first
+    curator_auto_apply: bool = True  # apply archive recommendations automatically
+    curator_enabled: bool = True
+    agentlist_orchestrator_url: str = ""  # e.g. "http://orchestrator.railway.internal:8003"
+    agentlist_gateway_url: str = ""       # fallback: "https://gateway-production-cd14.up.railway.app"
+    agentlist_api_key: str = ""           # Bearer token for gateway fallback
+    agentlist_account_id: str = ""        # UUID for internal invoke X-Account-ID header
+    rapidapi_key: str = ""                # RapidAPI key for Airbnb search
+    # Google OAuth (per-user read-only Calendar + Gmail). client_id/secret come
+    # from a Google Cloud OAuth 2.0 Web client; redirect_uri must be registered
+    # on that client and point at this service's public /api/google/callback.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
+    # Fernet key (urlsafe-base64 of 32 bytes) for encrypting OAuth tokens at rest.
+    encryption_key: str = ""
+    # Where the nightly self-improvement digest (feature proposals) is sent.
+    admin_phone: str = ""
+    # Resy private-API web key (swappable without redeploy if Resy rotates it).
+    # Defaults to Resy's public website key.
+    resy_api_key: str = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
+    # Public base URL of this service (for the Resy connect web form link).
+    public_base_url: str = "https://hal-orchestrator-production.up.railway.app"

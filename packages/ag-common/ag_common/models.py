@@ -83,6 +83,8 @@ class AgentSummary(BaseModel):
     category: str
     price_per_call_cents: int
     tags: list[str]
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    required_consumer_credentials: list[str] = Field(default_factory=list)
     total_invocations: int
     success_rate: float
     avg_latency_ms: float
@@ -92,7 +94,6 @@ class AgentSummary(BaseModel):
 class AgentDetail(AgentSummary):
     version: str
     runtime: AgentRuntime
-    input_schema: dict[str, Any]
     created_at: datetime
 
 
