@@ -742,6 +742,85 @@ class HalFamilyMember(Base):
     __table_args__ = (Index("ix_hal_family_members_family", "family_id"),)
 
 
+class HalTurn(Base):
+    """One agent turn, captured for the nightly growth loop (GROWTH.md).
+    Unlike HalSkillTrajectory (≥5-tool successes only), EVERY turn lands here —
+    including model failures and quiet-sentinel turns — so failures are visible.
+    Content is private (data plane); the nightly grader reads it one silo at a
+    time and only de-identified verdicts aggregate globally."""
+
+    __tablename__ = "hal_turns"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    phone: Mapped[str] = mapped_column(String(255), nullable=False)  # silo
+    sender_phone: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    user_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    reply: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    steps: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="ok")
+    grade: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    failure_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    grade_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    signals: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_hal_turns_ungraded", "graded_at", "created_at"),
+        Index("ix_hal_turns_phone_created", "phone", "created_at"),
+    )
+
+
+class HalPlaybookEntry(Base):
+    """A self-authored operating note injected into the system prompt for ALL
+    users (global learning plane). Additive guidance only — hard rules stay
+    code-owned. Each entry carries a falsifiable hypothesis (the failure it
+    should eliminate) that the nightly verifier re-checks."""
+
+    __tablename__ = "hal_playbook"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    hypothesis: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    target_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    target_detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    origin_reflection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    clean_nights: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fail_nights: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (Index("ix_hal_playbook_status", "status"),)
+
+
+class HalFeatureRequest(Base):
+    """Persistent, deduped feature backlog (global learning plane). Evidence
+    accumulates across nights; admin is pinged on new items or threshold
+    crossings; high-priority items get a build spec drafted."""
+
+    __tablename__ = "hal_feature_backlog"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    problem: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    evidence: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    sketch: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    spec: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    priority: Mapped[str] = mapped_column(String(8), nullable=False, default="medium")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    evidence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_hal_feature_backlog_status", "status"),)
+
+
 class HalBabyEvent(Base):
     """One logged baby event. Structured replacement for the free-text memory
     lines ("Bazzy fed 9:47am") — powers analytics, forecasts, and digests."""

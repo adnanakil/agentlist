@@ -101,6 +101,52 @@ def _reset_failures(silo: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Growth-loop capture (GROWTH.md Stage 1)
+# --------------------------------------------------------------------------- #
+
+import re as _re
+
+# Fast signal that HAL told the user it can't do something — the nightly
+# grader is the real judge; this just flags turns for the failure inventory.
+_REFUSAL_RX = _re.compile(
+    r"\b(I (?:actually )?can'?t|I cannot|I'?m (?:not able|unable)|"
+    r"I don'?t have (?:access|the ability|a way)|not something I can|"
+    r"blocks automated access)\b",
+    _re.I,
+)
+
+
+async def _capture_turn(
+    session,
+    silo: str,
+    sender_phone: str | None,
+    user_text: str,
+    reply: str,
+    steps: list,
+    status: str,
+) -> None:
+    """Record EVERY turn for the nightly growth loop (best-effort; callers
+    wrap so this can never break a reply). Refusal replies also get a friction
+    event so capability gaps show up in the aggregate inventory immediately."""
+    from ag_db.models import HalTurn
+
+    session.add(
+        HalTurn(
+            phone=silo,
+            sender_phone=sender_phone,
+            user_text=(user_text or "")[:4000],
+            reply=(reply or "")[:4000],
+            steps=steps[:50],
+            status=status,
+        )
+    )
+    if status == "ok" and reply and _REFUSAL_RX.search(reply):
+        from hal_orchestrator.services.friction import KIND_REFUSAL, log_friction
+
+        log_friction(session, silo, KIND_REFUSAL, reply[:200])
+
+
+# --------------------------------------------------------------------------- #
 # Request / Response models
 # --------------------------------------------------------------------------- #
 
@@ -248,6 +294,15 @@ def build_message_router() -> APIRouter:
             ambient_watch=ambient_watch,
         )
         system_prompt = SYSTEM_PROMPT + user_context
+
+        # Self-authored playbook (growth loop) — operating notes HAL learned
+        # from its own past failures. Additive guidance; lint-checked at write.
+        try:
+            from hal_orchestrator.services.playbook import get_block
+
+            system_prompt += await get_block(session)
+        except Exception:
+            log.exception("message.playbook_failed", silo=silo)
 
         # T0.5: auto-recall semantically relevant memories for THIS message so the
         # signals attach themselves, instead of relying on the model to call recall.
@@ -422,9 +477,18 @@ def build_message_router() -> APIRouter:
             # +1646... silo). Archive the user's real text for recall, then
             # deliver the breaker-managed reply (possibly silence).
             try:
+                from hal_orchestrator.services.friction import (
+                    KIND_MODEL_FAILURE,
+                    log_friction,
+                )
                 from hal_orchestrator.services.history_search import archive_turn
 
                 await archive_turn(session, silo, "user", user_text)
+                log_friction(session, silo, KIND_MODEL_FAILURE, "gemini_failed")
+                await _capture_turn(
+                    session, silo, sender_phone, user_text, reply,
+                    trajectory_steps, "gemini_failed",
+                )
             except Exception:
                 log.exception("message.archive_failed", silo=silo)
             await session.commit()
@@ -484,6 +548,10 @@ def build_message_router() -> APIRouter:
                 await capture_trajectory(
                     session, silo, user_text, trajectory_steps, reply
                 )
+            await _capture_turn(
+                session, silo, sender_phone, user_text, reply,
+                trajectory_steps, "ok" if outbound_reply else "quiet",
+            )
         except Exception:
             log.exception("message.post_hooks_failed", silo=silo)
 

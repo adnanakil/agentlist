@@ -24,7 +24,7 @@ from hal_orchestrator.services.baby_watch import baby_watch_loop
 from hal_orchestrator.services.cron import run_cron_checker
 from hal_orchestrator.services.curator import curator_loop
 from hal_orchestrator.services.profile_enricher import profile_enricher_loop
-from hal_orchestrator.services.reflection import reflection_loop
+from hal_orchestrator.services.growth import growth_loop
 from hal_orchestrator.services.reminders import run_reminder_checker
 from hal_orchestrator.services.skill_synthesizer import skill_synthesizer_loop
 from hal_orchestrator.services.summarizer import summarizer_loop
@@ -96,9 +96,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         skill_synthesizer_loop(settings, state.http_client)
     )
 
-    # Nightly self-improvement: auto-create shared skills + propose features.
+    # Nightly growth loop: grade every turn in-silo, aggregate de-identified
+    # verdicts, self-author playbook notes + skills, maintain the feature
+    # backlog, verify past improvements (GROWTH.md).
     reflection_task = asyncio.create_task(
-        reflection_loop(settings, state.http_client)
+        growth_loop(settings, state.http_client)
     )
 
     # Baby nap-cap watcher: unprompted nudge when a logged nap runs long.
