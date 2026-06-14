@@ -72,6 +72,9 @@ async def execute_tool(
     from hal_orchestrator.tools.reminders import tool_set_reminder
     from hal_orchestrator.tools.send_message import tool_send_message
     from hal_orchestrator.tools.skill import tool_skill
+    from hal_orchestrator.tools.sports_score import tool_sports_score
+    from hal_orchestrator.tools.travel_time import tool_travel_time
+    from hal_orchestrator.tools.watch import tool_watch
     from hal_orchestrator.tools.weather import tool_weather
     from hal_orchestrator.tools.stubs import tool_stub
     from hal_orchestrator.tools.trips import tool_trip
@@ -94,6 +97,7 @@ async def execute_tool(
         "web_search": lambda: tool_web_search(args, ctx),
         "web_fetch": lambda: tool_web_fetch(args, ctx),
         "get_weather": lambda: tool_weather(args, ctx),
+        "travel_time": lambda: tool_travel_time(args, ctx),
         "send_message": lambda: tool_send_message(args, ctx),
         "baby": lambda: tool_baby(args, ctx),
         "memory": lambda: tool_memory(args, ctx),
@@ -111,6 +115,8 @@ async def execute_tool(
         "recall_history": lambda: tool_recall_history(args, ctx),
         "schedule": lambda: tool_schedule(args, ctx),
         "resy": lambda: tool_resy(args, ctx),
+        "watch": lambda: tool_watch(args, ctx),
+        "sports_score": lambda: tool_sports_score(args, ctx),
     }
 
     handler = handlers.get(name)

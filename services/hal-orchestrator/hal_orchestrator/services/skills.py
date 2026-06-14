@@ -16,6 +16,9 @@ SKILL.md format:
     ---
     <markdown body with {{var}}, {{$(cmd)}}, {{file:rel/path}} tokens>
 
+{{$(cmd)}} runs only in bundled skills; in user/auto-created skills it is
+neutralized to a placeholder (see _expand).
+
 The curator only ever sees user skills; bundled are immutable.
 """
 
@@ -177,8 +180,18 @@ async def _user_list(session: AsyncSession, phone: str) -> list[HalUserSkill]:
     return list(q.scalars().all())
 
 
-def _expand(body: str, files: dict, inputs: dict) -> tuple[str, list[str]]:
-    """Apply {{var}}, {{$(cmd)}}, {{file:path}} substitutions."""
+def _expand(
+    body: str, files: dict, inputs: dict, *, allow_shell: bool = False
+) -> tuple[str, list[str]]:
+    """Apply {{var}}, {{$(cmd)}}, {{file:path}} substitutions.
+
+    {{$(cmd)}} only executes when allow_shell is True — i.e. for bundled
+    skills, which ship in this repo and are human-reviewed. User-created and
+    auto-synthesized skills (anything from the hal_user_skills table) must
+    not be a code-execution path: a skill body is model- or user-authored
+    text, and the container env holds DATABASE_URL, API keys, and the token
+    Fernet key. Dynamic values in non-bundled skills belong in real tools.
+    """
     warnings: list[str] = []
 
     def replace(m: re.Match) -> str:
@@ -186,6 +199,9 @@ def _expand(body: str, files: dict, inputs: dict) -> tuple[str, list[str]]:
         # {{$(cmd)}}
         if token.startswith("$(") and token.endswith(")"):
             cmd = token[2:-1]
+            if not allow_shell:
+                warnings.append(f"shell disabled in non-bundled skill: {cmd!r}")
+                return "[shell disabled]"
             try:
                 out = subprocess.check_output(
                     ["/bin/sh", "-c", cmd],
@@ -272,7 +288,13 @@ async def invoke(
     ]
     if missing:
         return None, f"Missing required inputs: {', '.join(missing)}"
-    rendered, warnings = await asyncio.to_thread(_expand, rec.body, rec.files, provided)
+    rendered, warnings = await asyncio.to_thread(
+        _expand,
+        rec.body,
+        rec.files,
+        provided,
+        allow_shell=rec.source == SOURCE_BUNDLED,
+    )
     return {
         "name": rec.name,
         "source": rec.source,

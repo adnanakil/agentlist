@@ -169,6 +169,124 @@ MAIN_TOOLS: list[dict] = [
                 },
             },
             {
+                "name": "sports_score",
+                "description": (
+                    "Live/today's scores from ESPN (no key, deterministic). Use "
+                    "for 'what's the score', 'did the Knicks win', and as the "
+                    "check for any score-related watch condition — more reliable "
+                    "than web_search for scores."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "league": {
+                            "type": "string",
+                            "description": (
+                                "nba, wnba, ncaab/cbb, nfl, ncaaf/cfb, mlb, nhl, "
+                                "epl, laliga, mls, ucl (default nba)"
+                            ),
+                        },
+                        "team": {
+                            "type": "string",
+                            "description": "Optional team name/abbr to filter to one game, e.g. 'Knicks'",
+                        },
+                    },
+                },
+            },
+            {
+                "name": "watch",
+                "description": (
+                    "Notify the user ONCE when a condition becomes true, then "
+                    "stop — staying silent until then. For 'let me know if/when "
+                    "X happens' (a lead change, a price drop, a restock, a game "
+                    "result). If you promise to alert them, you MUST create a "
+                    "watch — never claim to be watching without one. Distinct "
+                    "from schedule (runs on a clock) and set_reminder (re-sends "
+                    "static text). 'stop watching' → action=cancel."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "description": "create, list, or cancel",
+                        },
+                        "condition": {
+                            "type": "string",
+                            "description": (
+                                "What to watch for, in plain language, e.g. "
+                                "'the Knicks take the lead' or 'the PS5 is back in stock at Best Buy'"
+                            ),
+                        },
+                        "check_prompt": {
+                            "type": "string",
+                            "description": "Optional explicit instruction for how to check (defaults to the condition).",
+                        },
+                        "notify": {
+                            "type": "string",
+                            "description": "Optional message to send when it fires (defaults to 'Heads up — <condition>').",
+                        },
+                        "poll_every_sec": {
+                            "type": "integer",
+                            "description": "How often to re-check (min 90; default 150).",
+                        },
+                        "expires_in_min": {
+                            "type": "integer",
+                            "description": (
+                                "Give up after this many minutes — set it to the "
+                                "realistic window (a game ~180, a restock maybe a day). Default 360."
+                            ),
+                        },
+                        "max_polls": {
+                            "type": "integer",
+                            "description": "Hard cap on checks (default 60).",
+                        },
+                        "job_id": {
+                            "type": "string",
+                            "description": "For cancel: the watch id (omit to cancel all in this chat).",
+                        },
+                    },
+                    "required": ["action"],
+                },
+            },
+            {
+                "name": "travel_time",
+                "description": (
+                    "Real travel time + distance between two places (Google Routes). "
+                    "drive is LIVE-TRAFFIC-aware (shows current vs typical, so you can "
+                    "say 'leave 15 min early'); transit returns real lines and departure "
+                    "times. Use for ANY 'how long to get there / when should I leave' "
+                    "question and for travel legs in day plans — never estimate from "
+                    "memory or web_search."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "origin": {
+                            "type": "string",
+                            "description": "Start address or place, e.g. 'Chelsea, Manhattan' or '123 W 23rd St, NYC'",
+                        },
+                        "destination": {
+                            "type": "string",
+                            "description": "End address or place",
+                        },
+                        "mode": {
+                            "type": "string",
+                            "description": "drive (default, traffic-aware), walk, transit, bicycle",
+                        },
+                        "departure_time": {
+                            "type": "string",
+                            "description": "Optional future ISO time to leave (drive/transit), e.g. 2026-06-12T17:30:00-04:00. Omit for 'leave now'.",
+                        },
+                        "arrival_time": {
+                            "type": "string",
+                            "description": "Optional ISO time to arrive by (transit only) — finds the train/bus that makes it.",
+                        },
+                    },
+                    "required": ["origin", "destination"],
+                },
+            },
+            {
                 "name": "profile",
                 "description": (
                     "Read or update the user's persistent profile — a markdown doc "

@@ -26,12 +26,15 @@ async def call_gemini(
     model: str | None = None,
     max_retries: int = 3,
     max_output_tokens: int | None = None,
+    thinking_level: str | None = None,
 ) -> dict | None:
     """Call Gemini API with tool definitions and conversation history.
 
     Returns the parsed JSON response, or None on failure. Pass
     `max_output_tokens` to override the default cap for calls that produce a lot
-    (e.g. the nightly reflection's multi-skill + feature JSON).
+    (e.g. the nightly reflection's multi-skill + feature JSON). Pass
+    `thinking_level` (e.g. "MINIMAL") to override the global thinking level for
+    one call — used by the watch poll to force a cheap shallow check.
     """
     model = model or settings.gemini_model
     url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={settings.gemini_api_key}"
@@ -42,11 +45,12 @@ async def call_gemini(
     }
 
     # Gemini 3.5+ thinking models — opt in via settings.gemini_thinking_level
-    # (LOW/MEDIUM/HIGH). Empty/"NONE" means don't send the field (default off
-    # for older models that reject the parameter).
-    thinking_level = (settings.gemini_thinking_level or "").strip().upper()
-    if thinking_level and thinking_level != "NONE":
-        generation_config["thinkingConfig"] = {"thinkingLevel": thinking_level}
+    # (LOW/MEDIUM/HIGH), or a per-call `thinking_level` override (e.g. the watch
+    # poll forcing MINIMAL). Empty/"NONE" means don't send the field (default
+    # off for older models that reject the parameter).
+    level = (thinking_level or settings.gemini_thinking_level or "").strip().upper()
+    if level and level != "NONE":
+        generation_config["thinkingConfig"] = {"thinkingLevel": level}
 
     payload: dict = {
         "contents": history,

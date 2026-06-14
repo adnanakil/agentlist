@@ -64,6 +64,12 @@ class HalOrchestratorConfig(BaseConfig):
     gemini_max_output_tokens: int = 2048
     reminder_check_interval_seconds: int = 30
     gemini_image_model: str = "gemini-2.5-flash-image"
+    # Cheap shallow model for watch polls (WATCH_FEATURE_SPEC.md). Forced to
+    # thinkingLevel=MINIMAL per-call so a silent high-frequency poll never runs
+    # the full pro pipeline.
+    gemini_watch_model: str = "gemini-3.1-flash-lite"
+    watch_check_interval_seconds: int = 60
+    watch_max_per_silo: int = 3
     browser_service_url: str = ""
     # Skills curator settings. interval=0 disables; default weekly.
     curator_check_interval_seconds: int = 60 * 30  # how often loop wakes
@@ -76,6 +82,19 @@ class HalOrchestratorConfig(BaseConfig):
     agentlist_api_key: str = ""           # Bearer token for gateway fallback
     agentlist_account_id: str = ""        # UUID for internal invoke X-Account-ID header
     rapidapi_key: str = ""                # RapidAPI key for Airbnb search
+    # Google Routes API key (travel_time tool: live-traffic drive times,
+    # walking, transit with real schedules).
+    google_maps_api_key: str = ""
+    # Heartbeat: per-silo anticipation checks ("is anything coming up, and did
+    # the world change under it?"). Runs a silent internal agent turn per
+    # recently-active silo every interval; texts only when genuinely useful.
+    heartbeat_enabled: bool = True
+    heartbeat_interval_minutes: int = 15
+    heartbeat_activity_window_hours: int = 48
+    heartbeat_active_hour_start: int = 7   # local (USER_TZ) hour, inclusive
+    heartbeat_active_hour_end: int = 22    # local hour, exclusive
+    heartbeat_include_groups: bool = False  # group tools can't see calendar/gmail
+    heartbeat_max_silos_per_tick: int = 10
     # Google OAuth (per-user read-only Calendar + Gmail). client_id/secret come
     # from a Google Cloud OAuth 2.0 Web client; redirect_uri must be registered
     # on that client and point at this service's public /api/google/callback.

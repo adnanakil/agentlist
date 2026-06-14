@@ -97,7 +97,20 @@ Rules:
   events.
 - Organize as concise markdown with short headers. Under ~400 words; dedupe.
 
-Output ONLY the updated profile markdown, nothing else."""
+Output the updated profile markdown. THEN, on its own line, output exactly
+===OBSERVATIONS=== followed by a JSON array of observations for individual
+members' PERSONAL assistants — current, useful things happening to a specific
+member, sourced from this group conversation: their stated plans, things
+they're expecting or dealing with, commitments they made here ("planning a
+Mattituck trip this weekend", "agreed to bring the cake Saturday").
+Rules for observations:
+- handle must be a sender handle seen in THIS transcript (the [+1...] prefix);
+  observations for anyone else are dropped.
+- Things about that member's own life only — never another member's private
+  info, never baby feed/nap logging (already shared), never chit-chat.
+- 0-3 per member, one sentence each, self-contained (name the thing, the
+  when, the where). Most runs: an empty array.
+Format: [{"handle": "+1XXXXXXXXXX", "observation": "..."}] or []"""
 
 
 def _build_transcript(history: list[dict], limit: int = 40) -> str:
@@ -136,6 +149,30 @@ async def _load_memories(session: AsyncSession, phone: str) -> str:
 
 def _pick_prompt(silo: str) -> str:
     return _GROUP_PROMPT if is_group_id(silo) else _PERSON_PROMPT
+
+
+OBS_MARKER = "===OBSERVATIONS==="
+
+
+def split_profile_and_observations(text: str) -> tuple[str, list[dict]]:
+    """Split group-enricher output into (profile_md, observations). Missing or
+    malformed observations degrade to none — the profile is never lost."""
+    import json as _json
+
+    if OBS_MARKER not in text:
+        return text.strip(), []
+    profile, _, rest = text.partition(OBS_MARKER)
+    rest = rest.strip()
+    if rest.startswith("```"):
+        rest = rest.strip("`").removeprefix("json").strip()
+    start = rest.find("[")
+    if start == -1:
+        return profile.strip(), []
+    try:
+        obj = _json.JSONDecoder().raw_decode(rest[start:])[0]
+    except (ValueError, TypeError):
+        return profile.strip(), []
+    return profile.strip(), obj if isinstance(obj, list) else []
 
 
 def _passes_guard(existing: str, new: str) -> bool:
@@ -182,11 +219,40 @@ async def _enrich_one(
         parts = resp["candidates"][0]["content"].get("parts", [])
     except (KeyError, IndexError):
         return False
-    new_notes = "\n".join(p.get("text", "") for p in parts if "text" in p).strip()
+    raw = "\n".join(p.get("text", "") for p in parts if "text" in p).strip()
+
+    # Group output may carry per-member observations after the profile — the
+    # one-way valve into members' personal silos (group_observations.py).
+    observations: list[dict] = []
+    if is_group_id(conv.phone):
+        new_notes, observations = split_profile_and_observations(raw)
+    else:
+        new_notes = raw
 
     if not _passes_guard(existing_notes, new_notes):
         log.warning("enricher.guard_skipped", silo=conv.phone)
         return False
+
+    if observations:
+        from hal_orchestrator.services.group_observations import (
+            add_observations,
+            extract_participants,
+        )
+        from hal_orchestrator.services.profiles import get_profile
+
+        try:
+            group_name = (await get_profile(session, conv.phone)).get("name") or ""
+            n = await add_observations(
+                session,
+                conv.phone,
+                group_name,
+                observations,
+                extract_participants(transcript),
+            )
+            if n:
+                log.info("enricher.observations", silo=conv.phone, written=n)
+        except Exception:
+            log.exception("enricher.observations_failed", silo=conv.phone)
 
     await update_profile(
         session,

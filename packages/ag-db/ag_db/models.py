@@ -660,6 +660,36 @@ class HalReflection(Base):
     __table_args__ = (Index("ix_hal_reflections_created", "created_at"),)
 
 
+class HalWatch(Base):
+    """Notify-when-condition watcher. A background checker re-polls `condition`
+    on a cheap model and, the first time it's true, delivers `notify` once and
+    deactivates. Silent until then. Distinct from HalCronJob (clock schedule)
+    and HalReminder (static text)."""
+
+    __tablename__ = "hal_watches"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    phone: Mapped[str] = mapped_column(String(255), nullable=False)        # silo / delivery target
+    condition: Mapped[str] = mapped_column(Text, nullable=False)
+    check_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    notify: Mapped[str] = mapped_column(Text, nullable=False)
+    is_group: Mapped[bool] = mapped_column(Boolean, default=False)
+    chat_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sender_phone: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    poll_every_seconds: Mapped[int] = mapped_column(Integer, default=150)
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    max_polls: Mapped[int] = mapped_column(Integer, default=60)
+    polls_done: Mapped[int] = mapped_column(Integer, default=0)
+    consecutive_fails: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_observation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_hal_watches_due", "active", "next_run_at"),)
+
+
 class HalCuratorState(Base):
     """Singleton row tracking when the curator last ran."""
 
@@ -840,3 +870,27 @@ class HalBabyEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (Index("ix_hal_baby_events_family_at", "family_id", "event_at"),)
+
+
+class HalGroupObservation(Base):
+    """One-way valve from the group plane to a member's personal silo.
+
+    Written ONLY by the group-side enricher (facts about a member, sourced
+    from a group conversation they participated in); read ONLY by that
+    member's 1:1 context. The group agent never reads this table, and nothing
+    here ever flows back into a group — so personal HAL learns what's
+    happening to its user in groups without the group gaining any access to
+    personal state."""
+
+    __tablename__ = "hal_group_observations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    member_phone: Mapped[str] = mapped_column(String(255), nullable=False)
+    group_silo: Mapped[str] = mapped_column(String(255), nullable=False)
+    group_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_hal_group_obs_member_created", "member_phone", "created_at"),
+    )

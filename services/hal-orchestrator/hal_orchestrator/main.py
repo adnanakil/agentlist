@@ -25,9 +25,11 @@ from hal_orchestrator.services.cron import run_cron_checker
 from hal_orchestrator.services.curator import curator_loop
 from hal_orchestrator.services.profile_enricher import profile_enricher_loop
 from hal_orchestrator.services.growth import growth_loop
+from hal_orchestrator.services.heartbeat import heartbeat_loop
 from hal_orchestrator.services.reminders import run_reminder_checker
 from hal_orchestrator.services.skill_synthesizer import skill_synthesizer_loop
 from hal_orchestrator.services.summarizer import summarizer_loop
+from hal_orchestrator.services.watch import run_watch_checker
 
 # --------------------------------------------------------------------------- #
 # Logging
@@ -108,6 +110,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         baby_watch_loop(settings, state.http_client)
     )
 
+    # Heartbeat: per-silo anticipation checks (upcoming plans vs traffic /
+    # weather / expected emails). Silent by default; texts only when useful.
+    heartbeat_task = asyncio.create_task(
+        heartbeat_loop(settings, state.http_client)
+    )
+
+    # Watch checker: re-polls notify-when conditions on a cheap model and fires
+    # once when true. Silent until then (WATCH_FEATURE_SPEC.md).
+    watch_task = asyncio.create_task(
+        run_watch_checker(settings, state.http_client)
+    )
+
     yield
 
     log.info("hal_orchestrator.shutdown")
@@ -120,6 +134,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         synth_task,
         reflection_task,
         baby_watch_task,
+        heartbeat_task,
+        watch_task,
     ):
         task.cancel()
         try:

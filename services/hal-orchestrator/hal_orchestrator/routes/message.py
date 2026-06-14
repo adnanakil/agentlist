@@ -164,6 +164,10 @@ class MessageRequest(BaseModel):
     group_name: str | None = None
     chat_id: str | None = None  # Group chat identifier (for trips, etc.)
     images: list[ImageData] = []
+    # Internal turn (heartbeat/daemon): the user did not send this. A silent
+    # outcome persists NOTHING (no history, no archive, no turn capture); an
+    # alert persists a compact stub instead of the synthetic prompt.
+    internal: bool = False
 
 
 class SideMessage(BaseModel):
@@ -239,7 +243,9 @@ def build_message_router() -> APIRouter:
         silo = (chat_id or body.phone) if is_group else (sender_phone or body.phone)
 
         # Notify curator idle tracker so it backs off while users are active.
-        mark_activity()
+        # Internal (heartbeat) turns are not user activity.
+        if not body.internal:
+            mark_activity()
 
         log.info(
             "message.received",
@@ -304,6 +310,30 @@ def build_message_router() -> APIRouter:
         except Exception:
             log.exception("message.playbook_failed", silo=silo)
 
+        # Group observations — the one-way valve: things happening to THIS
+        # user in group chats they're in, written by the group-side enricher.
+        # 1:1 only; group turns must never read this (or any personal state).
+        if not is_group:
+            try:
+                from hal_orchestrator.services.group_observations import (
+                    recent_for_member,
+                )
+
+                obs = await recent_for_member(session, silo)
+                if obs:
+                    system_prompt += (
+                        "\n\n## From this user's group chats (recent, observed in "
+                        "groups they're in — usable context, but don't quote "
+                        "other members)\n"
+                        + "\n".join(
+                            f"- [{o.created_at.astimezone(USER_TZ):%b %-d}"
+                            f"{', ' + o.group_name if o.group_name else ''}] {o.content}"
+                            for o in obs
+                        )
+                    )
+            except Exception:
+                log.exception("message.group_obs_failed", silo=silo)
+
         # T0.5: auto-recall semantically relevant memories for THIS message so the
         # signals attach themselves, instead of relying on the model to call recall.
         # Keyed by silo: groups recall only the group's own shared memories.
@@ -359,6 +389,7 @@ def build_message_router() -> APIRouter:
             user_parts.append(
                 {"inlineData": {"mimeType": img.mime_type, "data": img.data}}
             )
+        pre_turn_len = len(history)  # for internal turns: persist-from-here marker
         history.append({"role": "user", "parts": user_parts})
 
         # Build tool context. ctx.phone is the SILO key — in groups, tools that
@@ -471,6 +502,13 @@ def build_message_router() -> APIRouter:
             except Exception:
                 pass
 
+        if gemini_failed and body.internal:
+            # A failed heartbeat is invisible: no apology text, nothing
+            # persisted. The breaker still counted it above.
+            log.warning("message.internal_failed", silo=silo)
+            await session.commit()
+            return MessageResponse(reply="", tool_calls=total_tool_calls)
+
         if gemini_failed:
             # Failed turn: persist NOTHING model-visible — no dangling user
             # turn, no canned apology in history (those poisoned the
@@ -525,6 +563,50 @@ def build_message_router() -> APIRouter:
         # group should be silent, not a literal "..." bubble. History keeps the
         # real turn so HAL knows it stayed quiet.
         outbound_reply = "" if _is_quiet_sentinel(reply) else reply
+
+        if body.internal:
+            # Heartbeat turn. Silent → persist nothing (96 silent checks/day
+            # would drown the real conversation and the nightly grader).
+            # Alert → persist a compact stub + the alert so HAL remembers what
+            # it proactively said (that's also its dedup against re-alerting).
+            if outbound_reply:
+                await save_conversation(
+                    session,
+                    silo,
+                    clean_history[:pre_turn_len]
+                    + [
+                        {
+                            "role": "user",
+                            "parts": [{"text": f"[{stamp}] [heartbeat check — you noticed something and texted the user:]"}],
+                        },
+                        {"role": "model", "parts": [{"text": reply}]},
+                    ],
+                    max_turns=settings.max_conversation_turns,
+                )
+                try:
+                    from hal_orchestrator.services.history_search import archive_turn
+
+                    await archive_turn(session, silo, "assistant", reply)
+                    await _capture_turn(
+                        session, silo, sender_phone, "[heartbeat check]", reply,
+                        trajectory_steps, "ok",
+                    )
+                except Exception:
+                    log.exception("message.post_hooks_failed", silo=silo)
+            await session.commit()
+            log.info(
+                "message.heartbeat",
+                silo=silo,
+                alerted=bool(outbound_reply),
+                tool_calls=total_tool_calls,
+            )
+            return MessageResponse(
+                reply=outbound_reply,
+                tool_calls=total_tool_calls,
+                side_messages=[
+                    SideMessage(to=m["to"], text=m["text"]) for m in ctx.side_messages
+                ],
+            )
 
         # Save conversation
         await save_conversation(
