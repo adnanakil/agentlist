@@ -101,6 +101,53 @@ def _reset_failures(silo: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Runaway-loop handling — synthesize an answer instead of leaking an error
+# --------------------------------------------------------------------------- #
+
+# If the model calls the SAME tool this many times in one turn, it's almost
+# certainly stuck (e.g. re-running web_search on thin results forever). Stop and
+# answer from what's gathered rather than burning the whole iteration budget.
+REPEAT_TOOL_LIMIT = 8
+
+_FINALIZE_DIRECTIVE = (
+    "You've gathered enough and must answer NOW — do NOT call any more tools. "
+    "Give the user your best, concise answer using what you already found above. "
+    "If their request was ambiguous, briefly address the most likely meaning(s). "
+    "If you genuinely couldn't find it, say so in one line and suggest what would "
+    "help — but NEVER mention steps, iterations, tools, or internal limits."
+)
+
+
+async def _finalize_answer(
+    http_client, settings, history: list, system_prompt: str, silo: str
+) -> str:
+    """One tools-disabled call to turn a stalled/looping turn into a real
+    answer from what's already in `history`. Falls back to a graceful ask —
+    never the old 'too many steps' leak."""
+    from hal_orchestrator.services.gemini import call_gemini
+
+    try:
+        resp = await call_gemini(
+            client=http_client,
+            settings=settings,
+            history=history,
+            tools=None,  # force a text answer
+            system=system_prompt + "\n\n## FINALIZE NOW\n" + _FINALIZE_DIRECTIVE,
+        )
+        parts = (
+            (resp.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+            if resp
+            else []
+        )
+        text = "\n".join(p.get("text", "") for p in parts if "text" in p).strip()
+        if text:
+            return text
+    except Exception:
+        log.exception("message.finalize_failed", silo=silo)
+    return "I dug into that but couldn't pin it down — can you give me one more detail?"
+
+
+# --------------------------------------------------------------------------- #
 # Growth-loop capture (GROWTH.md Stage 1)
 # --------------------------------------------------------------------------- #
 
@@ -410,6 +457,8 @@ def build_message_router() -> APIRouter:
         total_tool_calls = 0
         trajectory_steps: list[dict] = []  # for auto-skill learning
         gemini_failed = False
+        tool_counts: dict[str, int] = {}  # per-tool repeat guard (runaway detection)
+        stalled = False  # ran out of iterations OR a tool looped — synthesize
 
         for iteration in range(settings.max_tool_iterations):
             response = await call_gemini(
@@ -453,6 +502,7 @@ def build_message_router() -> APIRouter:
                     tool_name = call["name"]
                     tool_args = call.get("args", {})
                     total_tool_calls += 1
+                    tool_counts[tool_name] = tool_counts.get(tool_name, 0) + 1
                     trajectory_steps.append(
                         {"tool": tool_name, "args": list(tool_args.keys())[:8]}
                     )
@@ -477,6 +527,16 @@ def build_message_router() -> APIRouter:
 
                 # Add tool responses to history
                 history.append({"role": "user", "parts": func_responses})
+
+                # Runaway guard: one tool hammered repeatedly without converging
+                # → stop and synthesize from what we have (don't burn the budget).
+                if max(tool_counts.values()) >= REPEAT_TOOL_LIMIT:
+                    looped = max(tool_counts, key=tool_counts.get)
+                    log.warning(
+                        "message.tool_loop", silo=silo, tool=looped, count=tool_counts[looped]
+                    )
+                    stalled = True
+                    break
                 continue
 
             # No function calls — extract final text
@@ -490,17 +550,32 @@ def build_message_router() -> APIRouter:
             _reset_failures(silo)
             break
         else:
-            # Exhausted iterations — capability gap; log for the nightly reflection.
-            # (Not a model failure: the model responded, so the breaker resets.)
-            reply = "I ran into too many steps processing that. Can you try rephrasing?"
-            history.append({"role": "model", "parts": [{"text": reply}]})
-            _reset_failures(silo)
+            # Exhausted iterations without a final text answer.
+            stalled = True
+
+        if stalled and not gemini_failed:
+            _reset_failures(silo)  # model responded; not a failure-breaker case
             try:
                 from hal_orchestrator.services.friction import KIND_STUCK, log_friction
 
                 log_friction(session, silo, KIND_STUCK, user_text[:200])
             except Exception:
                 pass
+            if body.internal:
+                # A stalled heartbeat stays SILENT — never synthesize a
+                # user-facing alert out of an internal anticipation check that
+                # happened to run long.
+                log.warning("message.internal_stalled", silo=silo)
+                await session.commit()
+                return MessageResponse(reply="", tool_calls=total_tool_calls)
+            # The model kept calling tools (looped on one, or hit the cap) but
+            # never wrote an answer. Instead of leaking "too many steps", make
+            # ONE tools-disabled call to synthesize a real answer from what it
+            # already gathered.
+            reply = await _finalize_answer(
+                http_client, settings, history, system_prompt, silo
+            )
+            history.append({"role": "model", "parts": [{"text": reply}]})
 
         if gemini_failed and body.internal:
             # A failed heartbeat is invisible: no apology text, nothing
