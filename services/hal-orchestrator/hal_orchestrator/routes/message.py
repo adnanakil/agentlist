@@ -710,21 +710,24 @@ def build_message_router() -> APIRouter:
             except Exception:
                 log.exception("message.critic_gate_failed", silo=silo)
 
-        # Strip inlineData (base64 images) from history before persisting
-        # to avoid bloating the database. Replace with a text placeholder.
+        # Sanitize history before persisting: replace inlineData (base64 images)
+        # with a placeholder, and drop raw Claude blocks (`_claude_block`) — they
+        # bloat the DB and carry thinking signatures that must not be replayed in
+        # a later request's context. A pure-thinking part becomes empty and is
+        # dropped; a functionCall part keeps its functionCall (re-loaded text-only).
         clean_history = []
         for entry in history:
-            parts = entry.get("parts", [])
-            has_inline = any("inlineData" in p for p in parts)
-            if not has_inline:
-                clean_history.append(entry)
-            else:
-                new_parts = []
-                for p in parts:
-                    if "inlineData" in p:
-                        new_parts.append({"text": "[image]"})
-                    else:
-                        new_parts.append(p)
+            new_parts = []
+            for p in entry.get("parts", []):
+                if "inlineData" in p:
+                    new_parts.append({"text": "[image]"})
+                elif "_claude_block" in p:
+                    stripped = {k: v for k, v in p.items() if k != "_claude_block"}
+                    if stripped:
+                        new_parts.append(stripped)
+                else:
+                    new_parts.append(p)
+            if new_parts:
                 clean_history.append({"role": entry["role"], "parts": new_parts})
 
         # Collapse the "stay quiet" sentinel to an empty reply so the bridge

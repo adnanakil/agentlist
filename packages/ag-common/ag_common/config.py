@@ -47,6 +47,9 @@ class WebConfig(BaseConfig):
 
 class HalOrchestratorConfig(BaseConfig):
     gemini_api_key: str = ""
+    # Anthropic key — set to run the main loop on a claude-* model (the call
+    # layer routes any model id starting with "claude" through the Claude shim).
+    anthropic_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash"
     gemini_flash_model: str = "gemini-3.5-flash"
     # Thinking level for Gemini 3.5+ models. Valid: LOW, MEDIUM, HIGH, or empty

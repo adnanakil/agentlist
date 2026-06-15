@@ -37,6 +37,18 @@ async def call_gemini(
     one call — used by the watch poll to force a cheap shallow check.
     """
     model = model or settings.gemini_model
+
+    # Provider dispatch: a claude-* model id runs through the Anthropic shim,
+    # which translates this Gemini-shaped request and returns a Gemini-shaped
+    # response — so every call site stays provider-agnostic.
+    if model.startswith("claude"):
+        from hal_orchestrator.services.claude_provider import call_claude
+
+        return await call_claude(
+            client, settings, history, tools, system, model,
+            max_retries, max_output_tokens, thinking_level,
+        )
+
     url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={settings.gemini_api_key}"
 
     generation_config: dict = {
