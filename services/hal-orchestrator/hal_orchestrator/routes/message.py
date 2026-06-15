@@ -188,7 +188,13 @@ async def _run_async_critic(
                     session, silo, KIND_CRITIC_CATCH, "; ".join(crit["issues"])[:400]
                 )
             if crit.get("caught"):
-                followup = "Quick fix on that — I had the timing off:\n\n" + new_reply
+                summary = (crit.get("summary") or "").strip()
+                lead = (
+                    f"Quick fix — {summary[0].lower()}{summary[1:]}:"
+                    if summary
+                    else "Quick fix on that — I had the timing off:"
+                )
+                followup = lead + "\n\n" + new_reply
                 await state.outbox.put({"to": delivery_to, "text": followup})
                 # Reflect the correction in saved history so HAL's next turn
                 # reasons from the corrected plan, not the flawed one.

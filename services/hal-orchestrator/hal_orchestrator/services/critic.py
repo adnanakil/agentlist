@@ -58,18 +58,30 @@ def should_critique(
     return False
 
 
-CRITIC_SYSTEM = """You are HAL's plan checker — a SKEPTICAL second pair of eyes on a reply HAL is about to send by text. You get the user's request, the facts HAL gathered, and the proposed reply. Assume it has at least one real flaw; look hard before clearing it. Do NOT rubber-stamp and do NOT nitpick tone.
+CRITIC_SYSTEM = """You are HAL's plan checker — a skeptical second pair of eyes on a reply HAL already SENT by text. If (and only if) you find a SUBSTANTIVE flaw, HAL will send a follow-up correction. Most well-formed plans have NO substantive flaw — clearing one is the common, correct outcome. A needless "correction" that re-sends a near-identical plan is a BAD outcome you must avoid.
 
-Check, in order:
-1. GOAL & REQUIRED STATE. What is the user actually trying to achieve? For each part of the plan, what condition does that part need to succeed? An activity you attend needs the attendee engaged/awake; a person's OWN appointment (facial, haircut, workout, meal) needs any dependent — a child — settled/asleep so they're hands-free; an outdoor item needs acceptable weather AT THAT TIME. Does the plan SATISFY those states or CONTRADICT them? (Classic contradiction: child asleep during the thing they came to experience, or awake/needing care during the parent's own appointment.)
-2. CONSTRAINTS THAT DON'T BIND. For every limit the plan leans on (weather, hours, closures, traffic), check the gathered facts: does it actually apply in the RELEVANT window? Flag a daily/aggregate figure used to block or reshape a plan that only spans part of the day — e.g. a daily "% chance of rain" driven by an overnight band when the outing is midday.
-3. HIDDEN TENSION. The single hardest trade-off in the request — does the reply resolve it, or hide it behind a confident timeline? If hidden, surface it.
-4. EARNED CONFIDENCE. Is the reply most emphatic exactly where it's weakest?
+A flaw is SUBSTANTIVE only if fixing it changes at least one of:
+- an actual CLOCK TIME in the schedule, or
+- a required STATE assignment (someone/something needs to be awake vs asleep, dry vs not, open vs closed — and the plan has it backwards), or
+- a CONSTRAINT that doesn't actually bind (e.g. a daily "% chance of rain" used to reshape a midday plan when the gathered hourly data shows rain only overnight), or
+- a place/fact that the gathered facts show is WRONG (closed at that time, wrong location, etc.).
+
+Check for those, in order: (1) required-state contradictions — child asleep during the thing they came to experience, or awake/needing care during the parent's own appointment; (2) constraints that don't bind in the relevant window; (3) a hidden critical tension; (4) a flat factual error vs the gathered facts.
+
+Do NOT flag, and do NOT rewrite, for ANY of these — they are NOT substantive:
+- renumbering or relabeling items (e.g. "Nap 1" vs "Nap 2", "first" vs "next"),
+- wording, phrasing, tone, emojis, ordering of equivalent lines, or formatting,
+- anything that leaves all the clock times, the awake/asleep assignments, and the named places UNCHANGED.
+If your "fix" would produce essentially the same schedule with the same states, the plan is NOT flawed — set flawed=false.
 
 Output STRICT JSON only:
-{"flawed": <bool>, "issues": [<short specific problem>, ...], "revised_reply": "<full corrected reply text, or empty string if no change needed>"}
+{"flawed": <bool>, "issues": [<short specific problem>, ...], "change_summary": "<one short phrase naming what materially changed, e.g. 'moved nap to cover the facial' — empty if not flawed>", "revised_reply": "<full corrected reply, or empty string if not flawed>"}
 
-Set flawed=true ONLY for substantive errors in 1-3 (not tone, not polish). When you revise: fix ONLY the flawed parts, keep HAL's voice, and preserve every real detail — times, place names, links, prices — that wasn't wrong. Keep it iMessage-style (no markdown)."""
+When you revise: change ONLY the flawed parts, keep HAL's voice, and preserve every correct detail — times, place names, links, prices. iMessage-style, no markdown."""
+
+# A revised reply this textually close to the original is cosmetic, not a real
+# fix — never send it as a "correction" (backstop behind the prompt rules).
+_COSMETIC_SIMILARITY = 0.90
 
 
 def _gathered_facts(history: list) -> list[str]:
@@ -142,6 +154,7 @@ async def critique_and_revise(
     obj = _parse_json("\n".join(p.get("text", "") for p in parts if "text" in p))
 
     issues = [str(i)[:200] for i in (obj.get("issues") or [])][:5]
+    summary = (obj.get("change_summary") or "").strip()[:200]
     if not obj.get("flawed"):
         return reply, {"caught": False, "issues": issues}
     revised = (obj.get("revised_reply") or "").strip()
@@ -149,5 +162,14 @@ async def critique_and_revise(
         # Flagged but no usable rewrite — keep the original, but the issues
         # still feed the growth loop via the caller's friction log.
         return reply, {"caught": False, "issues": issues}
-    log.info("critic.revised", silo=silo, issues=issues)
-    return revised, {"caught": True, "issues": issues}
+    # Cosmetic backstop: if the "fix" is nearly identical to the original (e.g.
+    # renumbered naps, reworded line), it's not worth a follow-up — sending it
+    # reads as "nothing changed". Suppress it.
+    import difflib
+
+    similarity = difflib.SequenceMatcher(None, reply.strip(), revised).ratio()
+    if similarity >= _COSMETIC_SIMILARITY:
+        log.info("critic.cosmetic_suppressed", silo=silo, similarity=round(similarity, 3))
+        return reply, {"caught": False, "issues": issues, "cosmetic": True}
+    log.info("critic.revised", silo=silo, issues=issues, similarity=round(similarity, 3))
+    return revised, {"caught": True, "issues": issues, "summary": summary}

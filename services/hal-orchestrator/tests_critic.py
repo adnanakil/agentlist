@@ -77,7 +77,7 @@ async def run():
     orig = critic.call_gemini
 
     async def fake_caught(*a, **k):
-        return stub_resp('{"flawed": true, "issues": ["baby asleep during museum"], "revised_reply": "FIXED PLAN: baby awake at museum, asleep during facial."}')
+        return stub_resp('{"flawed": true, "issues": ["baby asleep during museum"], "change_summary": "kept him awake for the museum, asleep for the facial", "revised_reply": "Totally different corrected plan: keep him awake for the museum, then time his nap to land during your 2pm facial so you are hands-free. Leave at 9, museum 10-12, nap 1-2 during the facial."}')
 
     async def fake_clean(*a, **k):
         return stub_resp('{"flawed": false, "issues": [], "revised_reply": ""}')
@@ -85,14 +85,40 @@ async def run():
     async def fake_flagged_norewrite(*a, **k):
         return stub_resp('{"flawed": true, "issues": ["confidence too high"], "revised_reply": ""}')
 
+    # The bug from the field: critic "fixes" by renumbering naps — near-identical
+    # text. Must be suppressed (cosmetic), not sent as a "Quick fix".
+    _orig_plan = (
+        "To keep him awake for his 1:00 PM appointment, get his first nap out of "
+        "the way beforehand.\n11:32 AM - Nap 1 (45 mins)\n12:17 PM - Wake up\n"
+        "12:25 PM - Feed\n1:00 PM - Appointment\n2:24 PM - Nap 2 (45 mins)\n3:15 PM - Feed"
+    )
+    _cosmetic_revision = _orig_plan.replace("first nap", "next nap").replace(
+        "Nap 1", "Nap 2"
+    ).replace("Nap 2 (45 mins)\n3:15", "Nap 3 (45 mins)\n3:15")
+
+    async def fake_cosmetic(*a, **k):
+        import json as _j
+        return stub_resp(_j.dumps({
+            "flawed": True,
+            "issues": ["nap numbering"],
+            "change_summary": "renumbered the naps",
+            "revised_reply": _cosmetic_revision,
+        }))
+
     async def fake_none(*a, **k):
         return None
 
     try:
         critic.call_gemini = fake_caught
         reply, rep = await critic.critique_and_revise(None, _S(), [], "plan", "ORIG PLAN", "+1")
-        check("caught -> revised reply used", reply.startswith("FIXED PLAN") and rep["caught"] is True)
+        check("caught -> revised reply used", reply.startswith("Totally different") and rep["caught"] is True)
         check("caught -> issues surfaced", rep["issues"] == ["baby asleep during museum"])
+        check("caught -> change summary surfaced", rep.get("summary", "").startswith("kept him awake"))
+
+        critic.call_gemini = fake_cosmetic
+        reply, rep = await critic.critique_and_revise(None, _S(), [], "plan", _orig_plan, "+1")
+        check("cosmetic renumber -> SUPPRESSED (not caught)", rep["caught"] is False and rep.get("cosmetic") is True)
+        check("cosmetic renumber -> original kept", reply == _orig_plan)
 
         critic.call_gemini = fake_clean
         reply, rep = await critic.critique_and_revise(None, _S(), [], "plan", "ORIG PLAN", "+1")
