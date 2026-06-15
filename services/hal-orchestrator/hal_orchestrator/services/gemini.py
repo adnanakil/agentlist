@@ -74,7 +74,25 @@ async def call_gemini(
             )
 
             if resp.status_code == 200:
-                return resp.json()
+                data = resp.json()
+                # Surface silent truncation. On thinking models, reasoning
+                # tokens are deducted from maxOutputTokens, so a too-low cap
+                # can cut the visible answer off mid-sentence (finishReason
+                # MAX_TOKENS) after the model "thought" away the budget.
+                try:
+                    fr = (data.get("candidates") or [{}])[0].get("finishReason")
+                    if fr and fr not in ("STOP", "TOOL_CALLS", None):
+                        log.warning(
+                            "gemini.finish_reason",
+                            reason=fr,
+                            model=model,
+                            max_output_tokens=(
+                                max_output_tokens or settings.gemini_max_output_tokens
+                            ),
+                        )
+                except Exception:
+                    pass
+                return data
 
             if resp.status_code in RETRYABLE_STATUSES and attempt < max_retries - 1:
                 delay = backoff_delays[min(attempt, len(backoff_delays) - 1)]

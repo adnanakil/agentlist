@@ -126,7 +126,8 @@ async def critique_and_revise(
         [{"role": "user", "parts": [{"text": json.dumps(payload, indent=1)}]}],
         system=CRITIC_SYSTEM,
         model=settings.gemini_model,  # pro — subtle reasoning errors need it
-        max_output_tokens=2048,
+        # Inherit the generous default — at thinking HIGH, a low cap truncates
+        # the revised reply the same way it truncated the original.
     )
     if not resp:
         return reply, {"caught": False}

@@ -61,7 +61,13 @@ class HalOrchestratorConfig(BaseConfig):
     max_conversation_turns: int = 40
     gemini_timeout_seconds: int = 60
     gemini_temperature: float = 0.7
-    gemini_max_output_tokens: int = 2048
+    # Shared budget for THINKING + visible output on Gemini thinking models.
+    # Must be generous: with thinking_level HIGH, reasoning alone can exhaust a
+    # small cap and truncate the answer mid-sentence (finishReason MAX_TOKENS).
+    # It's a ceiling, not a target — you're billed for tokens actually used, so
+    # a higher cap just prevents premature cutoff, it doesn't cost more on short
+    # replies.
+    gemini_max_output_tokens: int = 8192
     reminder_check_interval_seconds: int = 30
     gemini_image_model: str = "gemini-2.5-flash-image"
     # Cheap shallow model for watch polls (WATCH_FEATURE_SPEC.md). Forced to
