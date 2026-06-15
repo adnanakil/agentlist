@@ -126,8 +126,12 @@ async def critique_and_revise(
         [{"role": "user", "parts": [{"text": json.dumps(payload, indent=1)}]}],
         system=CRITIC_SYSTEM,
         model=settings.gemini_model,  # pro — subtle reasoning errors need it
-        # Inherit the generous default — at thinking HIGH, a low cap truncates
-        # the revised reply the same way it truncated the original.
+        # MEDIUM, not the global HIGH: a 4-point checklist doesn't need deep
+        # thinking, and at HIGH the reasoning tokens exhaust the whole budget
+        # and truncate the critic's own JSON (finishReason MAX_TOKENS), so its
+        # output gets discarded and the call is wasted. MEDIUM leaves ample
+        # room for the verdict + a full revised reply.
+        thinking_level="MEDIUM",
     )
     if not resp:
         return reply, {"caught": False}
