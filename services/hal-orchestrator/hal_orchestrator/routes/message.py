@@ -616,6 +616,48 @@ def build_message_router() -> APIRouter:
                 ],
             )
 
+        # Layer 2 hardening: self-critique on plan/recommendation turns. One
+        # gated, no-tools call re-reads the request + gathered facts + the
+        # proposed reply from a fresh skeptical frame and revises substantive
+        # reasoning errors (wrong required-state, a non-binding constraint, a
+        # hidden tension). Skips failed/stalled/internal/quiet turns; bounded by
+        # the gate so most messages never trigger it. Best-effort.
+        if (
+            settings.critic_enabled
+            and not gemini_failed
+            and not stalled
+            and not body.internal
+            and reply
+            and not _is_quiet_sentinel(reply)
+        ):
+            try:
+                from hal_orchestrator.services.critic import (
+                    critique_and_revise,
+                    should_critique,
+                )
+
+                if should_critique(user_text, reply, total_tool_calls, is_group):
+                    new_reply, crit = await critique_and_revise(
+                        http_client, settings, history, user_text, reply, silo
+                    )
+                    if crit.get("issues"):
+                        from hal_orchestrator.services.friction import (
+                            KIND_CRITIC_CATCH,
+                            log_friction,
+                        )
+
+                        log_friction(
+                            session, silo, KIND_CRITIC_CATCH,
+                            "; ".join(crit["issues"])[:400],
+                        )
+                    if crit.get("caught"):
+                        reply = new_reply
+                        if history and history[-1].get("role") == "model":
+                            history[-1] = {"role": "model", "parts": [{"text": reply}]}
+                        log.info("message.critic_revised", silo=silo)
+            except Exception:
+                log.exception("message.critic_failed", silo=silo)
+
         # Strip inlineData (base64 images) from history before persisting
         # to avoid bloating the database. Replace with a text placeholder.
         clean_history = []

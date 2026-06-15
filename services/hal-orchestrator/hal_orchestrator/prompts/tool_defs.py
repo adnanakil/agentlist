@@ -149,10 +149,14 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "get_weather",
                 "description": (
-                    "Get current conditions + a short daily forecast (°F) for a "
+                    "Get current conditions + a short forecast (°F) for a "
                     "location. Call this ONLY when the task is weather-relevant — "
                     "planning an outing, what to wear, a stroller walk, whether to "
-                    "stay in. Don't call it otherwise. Defaults to New York, NY."
+                    "stay in. Don't call it otherwise. Defaults to New York, NY. "
+                    "Returns a daily summary AND an hourly 'Rain timing' line — "
+                    "for a plan, reason from the rain timing for the ACTUAL hours, "
+                    "not the daily % (which is a whole-day max often driven by "
+                    "overnight rain)."
                 ),
                 "parameters": {
                     "type": "object",

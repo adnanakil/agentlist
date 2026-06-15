@@ -18,6 +18,7 @@ KIND_STUCK = "stuck"        # turn hit the iteration cap → capability gap
 KIND_TOOL_ERROR = "tool_error"
 KIND_REFUSAL = "capability_refusal"  # HAL told the user it can't do something
 KIND_MODEL_FAILURE = "model_failure"  # Gemini failure / circuit breaker
+KIND_CRITIC_CATCH = "critic_catch"  # self-critique caught a flawed plan/rec
 
 
 def log_friction(session: AsyncSession, phone: str, kind: str, detail: str = "") -> None:

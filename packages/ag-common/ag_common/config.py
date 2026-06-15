@@ -70,6 +70,9 @@ class HalOrchestratorConfig(BaseConfig):
     gemini_watch_model: str = "gemini-3.1-flash-lite"
     watch_check_interval_seconds: int = 60
     watch_max_per_silo: int = 3
+    # Self-critique pass on plan/recommendation turns (hardening "Layer 2").
+    # One extra no-tools model call on gated turns only; kill with =false.
+    critic_enabled: bool = True
     browser_service_url: str = ""
     # Skills curator settings. interval=0 disables; default weekly.
     curator_check_interval_seconds: int = 60 * 30  # how often loop wakes

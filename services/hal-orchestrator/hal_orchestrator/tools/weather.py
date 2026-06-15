@@ -37,6 +37,69 @@ def _code(c) -> str:
         return "unknown"
 
 
+# An hour counts as "wet" at/above this precip probability (or real accumulation).
+_WET_PROB = 40
+_WET_MM = 0.2
+_RAIN_HORIZON_HOURS = 48
+
+
+def _fmt_hour(iso: str) -> str:
+    """'2026-06-15T14:00' -> 'Tue 2pm' (local; the API is queried in ET)."""
+    from datetime import datetime
+
+    try:
+        dt = datetime.fromisoformat(iso)
+    except ValueError:
+        return iso
+    h = dt.hour
+    ampm = "am" if h < 12 else "pm"
+    h12 = h % 12 or 12
+    return f"{dt.strftime('%a')} {h12}{ampm}"
+
+
+def _rain_windows(hourly: dict) -> str | None:
+    """Compact summary of WHEN it rains over the next ~48h: contiguous wet-hour
+    windows with peak probability. Returns None if hourly data is unavailable,
+    a 'dry' line if there are no wet hours, else the windows."""
+    times = hourly.get("time") or []
+    probs = hourly.get("precipitation_probability") or []
+    amts = hourly.get("precipitation") or []
+    if not times or not probs:
+        return None
+
+    n = min(len(times), len(probs), _RAIN_HORIZON_HOURS)
+    windows: list[tuple[int, int, int]] = []  # (start_idx, end_idx, peak_prob)
+    i = 0
+    while i < n:
+        p = probs[i] or 0
+        a = amts[i] if i < len(amts) and amts[i] is not None else 0
+        if p >= _WET_PROB or a >= _WET_MM:
+            j = i
+            peak = p
+            while j + 1 < n:
+                np = probs[j + 1] or 0
+                na = amts[j + 1] if (j + 1) < len(amts) and amts[j + 1] is not None else 0
+                if np >= _WET_PROB or na >= _WET_MM:
+                    peak = max(peak, np)
+                    j += 1
+                else:
+                    break
+            windows.append((i, j, peak))
+            i = j + 1
+        else:
+            i += 1
+
+    if not windows:
+        return f"no significant rain in the next {n}h — dry through your plan."
+
+    parts = []
+    for start, end, peak in windows[:5]:
+        # end is the last wet hour; the band runs to the start of the next hour.
+        end_iso = times[end + 1] if end + 1 < len(times) else times[end]
+        parts.append(f"{_fmt_hour(times[start])}–{_fmt_hour(end_iso)} (~{peak}%)")
+    return "; ".join(parts) + " — otherwise dry."
+
+
 async def tool_weather(args: dict, ctx: ToolContext) -> str:
     location = (args.get("location") or "New York, NY").strip()
     try:
@@ -64,6 +127,7 @@ async def tool_weather(args: dict, ctx: ToolContext) -> str:
                 "longitude": lon,
                 "current": "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation",
                 "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+                "hourly": "precipitation_probability,precipitation",
                 "temperature_unit": "fahrenheit",
                 "wind_speed_unit": "mph",
                 "timezone": "America/New_York",
@@ -87,7 +151,18 @@ async def tool_weather(args: dict, ctx: ToolContext) -> str:
             lines.append(
                 f"{label}: {_code(daily['weather_code'][i])}, "
                 f"{round(daily['temperature_2m_min'][i])}–{round(daily['temperature_2m_max'][i])}°F, "
-                f"{daily['precipitation_probability_max'][i]}% chance precip."
+                f"{daily['precipitation_probability_max'][i]}% chance precip (daily max)."
+            )
+
+        # WHEN it rains — the daily % above is a whole-day max and is often
+        # driven by an overnight band that doesn't touch a daytime plan. The
+        # hourly windows below are what to reason from for a specific outing.
+        rain = _rain_windows(data.get("hourly", {}))
+        if rain is not None:
+            lines.append("")
+            lines.append(
+                "Rain timing (reason from THESE for a plan, not the daily %): "
+                + rain
             )
         return "\n".join(lines)
     except Exception as exc:
