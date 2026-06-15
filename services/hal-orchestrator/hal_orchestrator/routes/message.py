@@ -101,6 +101,29 @@ def _reset_failures(silo: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# iMessage markdown normalization — iMessage shows markdown syntax literally.
+# --------------------------------------------------------------------------- #
+
+import re as _md_re
+
+_MD_BOLD = _md_re.compile(r"\*\*(.+?)\*\*", _md_re.DOTALL)
+# *italic* — word-boundary guards so "3 * 4" (multiplication) is left alone.
+_MD_ITALIC = _md_re.compile(r"(?<![\w*])\*(?=\S)(.+?)(?<=\S)\*(?![\w*])", _md_re.DOTALL)
+_MD_HEADER = _md_re.compile(r"^\s{0,3}#{1,6}\s+", _md_re.MULTILINE)
+_MD_CODE = _md_re.compile(r"`([^`]+)`")
+
+
+def _strip_markdown(text: str) -> str:
+    if not text or ("*" not in text and "#" not in text and "`" not in text):
+        return text
+    text = _MD_BOLD.sub(r"\1", text)
+    text = _MD_ITALIC.sub(r"\1", text)
+    text = _MD_HEADER.sub("", text)
+    text = _MD_CODE.sub(r"\1", text)
+    return text
+
+
+# --------------------------------------------------------------------------- #
 # Runaway-loop handling — synthesize an answer instead of leaking an error
 # --------------------------------------------------------------------------- #
 
@@ -194,7 +217,8 @@ async def _run_async_critic(
                     if summary
                     else "Quick fix on that — I had the timing off:"
                 )
-                followup = lead + "\n\n" + new_reply
+                followup = _strip_markdown(lead + "\n\n" + new_reply)
+                new_reply = _strip_markdown(new_reply)
                 await state.outbox.put({"to": delivery_to, "text": followup})
                 # Reflect the correction in saved history so HAL's next turn
                 # reasons from the corrected plan, not the flawed one.
@@ -684,6 +708,17 @@ def build_message_router() -> APIRouter:
                     SideMessage(to=m["to"], text=m["text"]) for m in ctx.side_messages
                 ],
             )
+
+        # Normalize markdown out of the final reply — iMessage renders **bold**,
+        # ## headers, and `code` literally as ugly symbols. The prompt asks for
+        # no markdown, but some models (Claude especially) still emit it; strip
+        # deterministically so it's never user-visible. Keep history consistent.
+        if reply and not gemini_failed:
+            stripped = _strip_markdown(reply)
+            if stripped != reply:
+                reply = stripped
+                if history and history[-1].get("role") == "model":
+                    history[-1] = {"role": "model", "parts": [{"text": reply}]}
 
         # Layer 2 hardening: self-critique on plan/recommendation turns, run
         # ASYNCHRONOUSLY — the reply ships immediately; the critic re-checks it
