@@ -147,6 +147,69 @@ async def _finalize_answer(
     return "I dug into that but couldn't pin it down — can you give me one more detail?"
 
 
+async def _run_async_critic(
+    settings,
+    http_client,
+    silo: str,
+    delivery_to: str,
+    history_snapshot: list,
+    user_text: str,
+    reply: str,
+) -> None:
+    """Background self-critique of a just-sent plan/recommendation. The reply is
+    already delivered; if the critic finds a SUBSTANTIVE flaw, send a follow-up
+    correction and update the saved conversation so HAL's context reflects it.
+    Fire-and-forget and fully self-contained — it can never affect or delay the
+    original reply. Issues (even without a rewrite) feed the nightly growth loop
+    via friction."""
+    import hal_orchestrator.state as state
+    from ag_db.session import get_session
+    from hal_orchestrator.services.critic import critique_and_revise
+
+    try:
+        new_reply, crit = await critique_and_revise(
+            http_client, settings, history_snapshot, user_text, reply, silo
+        )
+    except Exception:
+        log.exception("async_critic.critique_failed", silo=silo)
+        return
+    if not crit.get("issues") and not crit.get("caught"):
+        return  # clean plan — stay silent
+
+    async for session in get_session():
+        try:
+            if crit.get("issues"):
+                from hal_orchestrator.services.friction import (
+                    KIND_CRITIC_CATCH,
+                    log_friction,
+                )
+
+                log_friction(
+                    session, silo, KIND_CRITIC_CATCH, "; ".join(crit["issues"])[:400]
+                )
+            if crit.get("caught"):
+                followup = "Quick fix on that — I had the timing off:\n\n" + new_reply
+                await state.outbox.put({"to": delivery_to, "text": followup})
+                # Reflect the correction in saved history so HAL's next turn
+                # reasons from the corrected plan, not the flawed one.
+                from hal_orchestrator.services.conversation import (
+                    load_conversation,
+                    save_conversation,
+                )
+
+                hist = await load_conversation(session, silo)
+                if hist and hist[-1].get("role") == "model":
+                    hist[-1] = {"role": "model", "parts": [{"text": new_reply}]}
+                    await save_conversation(
+                        session, silo, hist, max_turns=settings.max_conversation_turns
+                    )
+                log.info("async_critic.corrected", silo=silo)
+            await session.commit()
+        except Exception:
+            log.exception("async_critic.persist_failed", silo=silo)
+        break
+
+
 # --------------------------------------------------------------------------- #
 # Growth-loop capture (GROWTH.md Stage 1)
 # --------------------------------------------------------------------------- #
@@ -616,12 +679,14 @@ def build_message_router() -> APIRouter:
                 ],
             )
 
-        # Layer 2 hardening: self-critique on plan/recommendation turns. One
-        # gated, no-tools call re-reads the request + gathered facts + the
-        # proposed reply from a fresh skeptical frame and revises substantive
-        # reasoning errors (wrong required-state, a non-binding constraint, a
-        # hidden tension). Skips failed/stalled/internal/quiet turns; bounded by
-        # the gate so most messages never trigger it. Best-effort.
+        # Layer 2 hardening: self-critique on plan/recommendation turns, run
+        # ASYNCHRONOUSLY — the reply ships immediately; the critic re-checks it
+        # in the background and only sends a FOLLOW-UP correction if it finds a
+        # substantive flaw (wrong required-state, a non-binding constraint, a
+        # hidden tension). Decide here, where history still has the gathered
+        # facts, snapshot it, and schedule the task after the save below.
+        do_async_critique = False
+        critic_history_snapshot: list = []
         if (
             settings.critic_enabled
             and not gemini_failed
@@ -631,32 +696,13 @@ def build_message_router() -> APIRouter:
             and not _is_quiet_sentinel(reply)
         ):
             try:
-                from hal_orchestrator.services.critic import (
-                    critique_and_revise,
-                    should_critique,
-                )
+                from hal_orchestrator.services.critic import should_critique
 
                 if should_critique(user_text, reply, total_tool_calls, is_group):
-                    new_reply, crit = await critique_and_revise(
-                        http_client, settings, history, user_text, reply, silo
-                    )
-                    if crit.get("issues"):
-                        from hal_orchestrator.services.friction import (
-                            KIND_CRITIC_CATCH,
-                            log_friction,
-                        )
-
-                        log_friction(
-                            session, silo, KIND_CRITIC_CATCH,
-                            "; ".join(crit["issues"])[:400],
-                        )
-                    if crit.get("caught"):
-                        reply = new_reply
-                        if history and history[-1].get("role") == "model":
-                            history[-1] = {"role": "model", "parts": [{"text": reply}]}
-                        log.info("message.critic_revised", silo=silo)
+                    do_async_critique = True
+                    critic_history_snapshot = list(history)
             except Exception:
-                log.exception("message.critic_failed", silo=silo)
+                log.exception("message.critic_gate_failed", silo=silo)
 
         # Strip inlineData (base64 images) from history before persisting
         # to avoid bloating the database. Replace with a text placeholder.
@@ -755,6 +801,20 @@ def build_message_router() -> APIRouter:
             log.exception("message.post_hooks_failed", silo=silo)
 
         await session.commit()
+
+        # Now that the original reply is saved, fire the background critic. It
+        # runs after this response returns (the user already has the plan), and
+        # only speaks up via the outbox if it finds a real flaw.
+        if do_async_critique:
+            import asyncio
+
+            delivery_to = chat_id if (is_group and chat_id) else silo
+            asyncio.create_task(
+                _run_async_critic(
+                    settings, http_client, silo, delivery_to,
+                    critic_history_snapshot, user_text, reply,
+                )
+            )
 
         log.info(
             "message.reply",
