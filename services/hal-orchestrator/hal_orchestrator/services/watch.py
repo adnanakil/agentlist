@@ -293,6 +293,10 @@ async def _check_and_run(
                 msg = w.notify + (f"\n{obs}" if obs else "")
                 await state.outbox.put({"to": to, "text": msg})
                 w.active = False
+                # Record the observation that TRIGGERED the fire (not just the
+                # last miss), so the row reflects why it fired.
+                if obs:
+                    w.last_observation = obs[:500]
                 log.info("watch.fired", id=str(w.id), to=to, condition=w.condition[:50])
             elif verdict.get("terminal"):
                 w.active = False
