@@ -46,8 +46,17 @@ check("empty -> None", _extract_json("") is None)
 print("sports_score parsing:")
 
 
-def espn_event(away, home, away_score, home_score, state, detail):
+from zoneinfo import ZoneInfo as _ZI
+
+_ET = _ZI("America/New_York")
+# Default games to "today" so they're treated as live; pass days_ago>0 for stale.
+_TODAY_ET = datetime.now(_ET)
+
+
+def espn_event(away, home, away_score, home_score, state, detail, days_ago=0):
+    day = _TODAY_ET - timedelta(days=days_ago)
     return {
+        "date": day.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
         "competitions": [
             {
                 "competitors": [
@@ -102,13 +111,22 @@ async def run_sports():
     check("pre game shows not started", "not started" in out3, out3)
 
     out4 = await tool_sports_score({"league": "nba"}, ctx)
-    check("no team → all 3 games", out4.count("\n") == 2, out4)
+    check("no team → all 3 today games", out4.count("\n") == 2, out4)
 
     out5 = await tool_sports_score({"league": "nba", "team": "Lakers"}, ctx)
-    check("no match → message", "No NBA game found" in out5, out5)
+    check("no match → message", "No NBA game today" in out5, out5)
 
     out6 = await tool_sports_score({"league": "quidditch"}, ctx)
     check("unknown league", out6.startswith("Unknown league"), out6)
+
+    # The reported bug: a stale Final from a previous day must NOT read as live.
+    stale = FakeCtx({"events": [
+        espn_event("New York Knicks", "San Antonio Spurs", "94", "90", "post", "Final", days_ago=2),
+    ]})
+    out7 = await tool_sports_score({"league": "nba"}, stale)
+    check("stale game -> 'no games today' (not presented as live)", out7.startswith("No NBA games today"), out7)
+    check("stale game -> most-recent result is DATED", "Most recent" in out7 and "beat" in out7, out7)
+    check("stale game -> no 'in progress'/'tonight' framing", "in progress" not in out7 and "FINAL" not in out7, out7)
 
 
 asyncio.run(run_sports())
