@@ -140,13 +140,16 @@ async def _model_json(
     system: str,
     payload: dict,
 ) -> dict:
-    """One pro-model call with a JSON payload → parsed JSON dict ({} on fail)."""
+    """One JSON-payload model call → parsed JSON dict ({} on fail). Runs on the
+    cheap BACKGROUND model — nightly grading/synthesis is always-on infra and
+    shouldn't ride the (possibly premium) main loop's cost. gemini-3.5-flash is
+    capable enough for grading; revisit if grade quality drops."""
     resp = await call_gemini(
         http,
         settings,
         [{"role": "user", "parts": [{"text": json.dumps(payload, indent=1)}]}],
         system=system,
-        model=settings.gemini_model,  # PRO — flash ignores grading instructions
+        model=settings.gemini_background_model,
         max_output_tokens=8192,
     )
     if not resp:

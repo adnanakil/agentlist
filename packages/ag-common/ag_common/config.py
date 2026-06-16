@@ -50,8 +50,13 @@ class HalOrchestratorConfig(BaseConfig):
     # Anthropic key — set to run the main loop on a claude-* model (the call
     # layer routes any model id starting with "claude" through the Claude shim).
     anthropic_api_key: str = ""
-    gemini_model: str = "gemini-3.5-flash"
-    gemini_flash_model: str = "gemini-3.5-flash"
+    gemini_model: str = "gemini-3.5-flash"  # MAIN user-facing agent loop
+    gemini_flash_model: str = "gemini-3.5-flash"  # in-process specialist sub-agents
+    # Always-on BACKGROUND machinery (heartbeat, nightly grading, self-critique)
+    # — kept on a cheap model independent of the main loop, so a premium main
+    # model (e.g. Claude Opus) only fires on real user messages, not the 24/7
+    # heartbeat/grading/critic that otherwise dominate spend.
+    gemini_background_model: str = "gemini-3.5-flash"
     # Thinking level for Gemini 3.5+ models. Valid: LOW, MEDIUM, HIGH, or empty
     # to disable. Empty/"NONE" → no thinkingConfig sent. Default MEDIUM gives a
     # nice quality boost without the latency of HIGH.

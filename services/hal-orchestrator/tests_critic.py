@@ -138,6 +138,7 @@ async def run():
 
 class _S:
     gemini_model = "x"
+    gemini_background_model = "x"  # critic runs on the background model
 
 
 asyncio.run(run())

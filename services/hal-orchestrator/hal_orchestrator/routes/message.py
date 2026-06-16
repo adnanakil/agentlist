@@ -238,6 +238,11 @@ class MessageRequest(BaseModel):
     # outcome persists NOTHING (no history, no archive, no turn capture); an
     # alert persists a compact stub instead of the synthetic prompt.
     internal: bool = False
+    # Per-call model override for the main loop (None → settings.gemini_model).
+    # Lets a background turn (heartbeat) run on a cheap model while real user
+    # messages stay on the configured main model.
+    model: str | None = None
+    thinking_level: str | None = None
 
 
 class SideMessage(BaseModel):
@@ -490,6 +495,8 @@ def build_message_router() -> APIRouter:
                 history=history,
                 tools=MAIN_TOOLS,
                 system=system_prompt,
+                model=body.model,  # None → settings.gemini_model (main loop)
+                thinking_level=body.thinking_level,
             )
 
             candidates = (response or {}).get("candidates", [])

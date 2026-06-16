@@ -130,6 +130,10 @@ async def _beat(
         "text": HEARTBEAT_PROMPT,
         "is_group": is_group,
         "internal": True,
+        # Always-on every 15 min — run on the cheap background model at LOW
+        # thinking so it never rides the (possibly premium) main loop's cost.
+        "model": settings.gemini_background_model,
+        "thinking_level": "LOW",
     }
     if is_group:
         payload["chat_id"] = silo
