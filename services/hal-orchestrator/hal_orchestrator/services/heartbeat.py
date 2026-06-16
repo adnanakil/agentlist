@@ -38,38 +38,36 @@ HEARTBEAT_PROMPT = """\
 [HEARTBEAT — automated check-in. The user did NOT text you and will never see \
 this prompt; they only see your reply if you send one.]
 
-Quietly consider: is this user about to do something, go somewhere, or \
-expecting something in the next ~2 hours? Look at the recent conversation, \
-your memory/profile context, and google_calendar (list today's next events). \
-Only if something IS coming up, check whether the real world still \
-cooperates:
-- A departure, outing, or reservation → travel_time from their home base \
-(live traffic; consider walking if close) and get_weather. Would they need to \
-leave earlier, bring an umbrella, or change plans?
-- An expected delivery, confirmation, or reply → google_gmail for a matching \
-NEW email since they last mentioned it. Only REAL-WORLD things the user is \
-waiting on (a package, a reservation confirmation, an on-sale time, a reply \
-from a person). Machine/service notifications — deploy or server alerts, CI, \
-monitoring, app emails — are NOT real-world events; never relay those, they \
-see them in their own tooling.
-- Outdoor plans → get_weather for rain or extremes around that time.
+I've ALREADY pulled the current time and the user's upcoming calendar for you \
+(see "Gathered for you" below). Reason over THAT plus the recent conversation \
+— don't re-fetch the time or calendar, and don't just relist their schedule.
 
-Text the user ONLY if you found something genuinely actionable or worth \
-knowing that they likely don't know yet (leave 15 min early — traffic; rain \
-right when they planned to walk; the package they were waiting for just got \
-delivered). ONE short message, lead with the thing itself.
+Your job: is the user about to do something, go somewhere, or expecting \
+something in the next ~2 hours (from the calendar below or something they \
+mentioned in chat)? If YES — and ONLY then — check whether the real world \
+still cooperates in a way they likely don't know yet:
+- A departure / outing / reservation coming up → travel_time from their home \
+base (live traffic; walking if close) + get_weather for that time. Do they \
+need to leave earlier, bring an umbrella, change plans?
+- Something they're waiting on (a package, a reservation confirmation, an \
+on-sale time, a reply from a specific person they mentioned) → google_gmail \
+for a NEW matching email. NOT machine/service notifications (deploys, CI, \
+monitoring, app emails) — never relay those.
+- An outdoor plan → get_weather for rain/extremes around that time.
 
-Never alert about baby feed/nap/bedtime timing — the baby system has its own \
-auto-reminders and nudges; a heartbeat repeating them is noise. And before \
-claiming something hasn't happened yet ("first feed of the day", "no reply \
-yet"), verify against the actual logged events/emails — never assert an \
-absence you didn't check.
+Text the user ONLY if you found something genuinely actionable they likely \
+don't know yet (leave 15 min early — traffic; rain right when they planned to \
+be out; the package just arrived). ONE short message, lead with the thing.
 
-Otherwise reply with exactly "..." — nothing imminent, conditions fine, \
-nothing new, a needed tool/integration isn't available, or you already told \
-them (check your own recent messages — never repeat an alert). Most \
-heartbeats MUST be silent. Never use a heartbeat to ask the user a question, \
-request Google access, make small talk, or report tool problems."""
+Never alert about baby feed/nap/bedtime timing — the baby system handles that. \
+Before claiming an absence ("no reply yet"), verify it against the actual \
+emails/events — never assert something you didn't check. Don't repeat an alert \
+you already sent (check your own recent messages).
+
+Otherwise reply with EXACTLY "..." — nothing imminent in the next ~2h, \
+conditions fine, nothing new, or you already told them. Most heartbeats MUST \
+be silent. Never use a heartbeat to ask a question, request Google access, \
+make small talk, or report tool problems."""
 
 
 def in_active_hours(now_local: datetime, settings: HalOrchestratorConfig) -> bool:
@@ -116,6 +114,32 @@ async def _active_silos(settings: HalOrchestratorConfig) -> list[str]:
     return []
 
 
+async def _gather_context(
+    settings: HalOrchestratorConfig, http: httpx.AsyncClient, silo: str
+) -> str:
+    """Pre-fetch the facts the heartbeat must reason over — current time +
+    upcoming calendar — so the cheap background model doesn't have to *decide*
+    to call them. (flash-LOW won't, which made every heartbeat a 0-tool no-op.)
+    The model is then handed real anticipation material and only has to check
+    weather/traffic/email for whatever's actually coming up."""
+    from hal_orchestrator.tools.registry import ToolContext, execute_tool
+
+    lines: list[str] = []
+    async for session in db_session.get_session():
+        ctx = ToolContext(phone=silo, session=session, settings=settings, http_client=http)
+        try:
+            lines.append("Current time — " + str(await execute_tool("current_time", {}, ctx)))
+        except Exception:
+            log.exception("heartbeat.gather_time_failed", silo=silo)
+        try:
+            cal = str(await execute_tool("google_calendar", {"action": "list_events"}, ctx))
+            lines.append("Upcoming calendar:\n" + cal)
+        except Exception:
+            log.exception("heartbeat.gather_cal_failed", silo=silo)
+        break
+    return "\n\n".join(lines)
+
+
 async def _beat(
     settings: HalOrchestratorConfig, http: httpx.AsyncClient, silo: str
 ) -> None:
@@ -125,15 +149,24 @@ async def _beat(
 
     port = os.environ.get("PORT", "8005")
     is_group = is_group_id(silo)
+
+    # Hand the model real anticipation material up front (the cheap model won't
+    # go fetch it on its own).
+    prompt = HEARTBEAT_PROMPT
+    context = await _gather_context(settings, http, silo)
+    if context:
+        prompt += "\n\n## Gathered for you (reason over this — don't re-fetch):\n" + context
+
     payload: dict = {
         "phone": silo,
-        "text": HEARTBEAT_PROMPT,
+        "text": prompt,
         "is_group": is_group,
         "internal": True,
-        # Always-on every 15 min — run on the cheap background model at LOW
-        # thinking so it never rides the (possibly premium) main loop's cost.
+        # Cheap background model, but MEDIUM (not LOW) thinking: LOW one-shot
+        # "..." with zero tool calls, defeating the whole check. With the facts
+        # pre-gathered, MEDIUM only has to reason + check weather/traffic.
         "model": settings.gemini_background_model,
-        "thinking_level": "LOW",
+        "thinking_level": "MEDIUM",
     }
     if is_group:
         payload["chat_id"] = silo
