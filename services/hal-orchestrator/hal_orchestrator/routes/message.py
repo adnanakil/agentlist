@@ -680,7 +680,7 @@ def build_message_router() -> APIRouter:
 
                 if should_critique(user_text, reply, total_tool_calls, is_group):
                     new_reply, crit = await critique_and_revise(
-                        http_client, settings, history, user_text, reply, silo
+                        ctx, history, user_text, reply
                     )
                     if crit.get("issues"):
                         from hal_orchestrator.services.friction import (

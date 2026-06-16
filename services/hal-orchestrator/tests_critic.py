@@ -108,29 +108,30 @@ async def run():
     async def fake_none(*a, **k):
         return None
 
+    ctx = _Ctx()
     try:
         critic.call_gemini = fake_caught
-        reply, rep = await critic.critique_and_revise(None, _S(), [], "plan", "ORIG PLAN", "+1")
+        reply, rep = await critic.critique_and_revise(ctx, [], "plan", "ORIG PLAN")
         check("caught -> revised reply used", reply.startswith("Totally different") and rep["caught"] is True)
         check("caught -> issues surfaced", rep["issues"] == ["baby asleep during museum"])
         check("caught -> change summary surfaced", rep.get("summary", "").startswith("kept him awake"))
 
         critic.call_gemini = fake_cosmetic
-        reply, rep = await critic.critique_and_revise(None, _S(), [], "plan", _orig_plan, "+1")
+        reply, rep = await critic.critique_and_revise(ctx, [], "plan", _orig_plan)
         check("cosmetic renumber -> SUPPRESSED (not caught)", rep["caught"] is False and rep.get("cosmetic") is True)
         check("cosmetic renumber -> original kept", reply == _orig_plan)
 
         critic.call_gemini = fake_clean
-        reply, rep = await critic.critique_and_revise(None, _S(), [], "plan", "ORIG PLAN", "+1")
+        reply, rep = await critic.critique_and_revise(ctx, [], "plan", "ORIG PLAN")
         check("clean -> original kept", reply == "ORIG PLAN" and rep["caught"] is False)
 
         critic.call_gemini = fake_flagged_norewrite
-        reply, rep = await critic.critique_and_revise(None, _S(), [], "plan", "ORIG PLAN", "+1")
+        reply, rep = await critic.critique_and_revise(ctx, [], "plan", "ORIG PLAN")
         check("flagged but no rewrite -> keep original, issues still surfaced",
               reply == "ORIG PLAN" and rep["caught"] is False and rep["issues"] == ["confidence too high"])
 
         critic.call_gemini = fake_none
-        reply, rep = await critic.critique_and_revise(None, _S(), [], "plan", "ORIG PLAN", "+1")
+        reply, rep = await critic.critique_and_revise(ctx, [], "plan", "ORIG PLAN")
         check("model failure -> safe passthrough", reply == "ORIG PLAN" and rep["caught"] is False)
     finally:
         critic.call_gemini = orig
@@ -139,6 +140,14 @@ async def run():
 class _S:
     gemini_model = "x"
     gemini_background_model = "x"  # critic runs on the background model
+
+
+class _Ctx:
+    """Minimal ToolContext stand-in — the stubbed call_gemini returns a verdict
+    with no tool calls, so the verification loop never executes a tool."""
+    phone = "+1"
+    settings = _S()
+    http_client = None
 
 
 asyncio.run(run())

@@ -58,26 +58,29 @@ def should_critique(
     return False
 
 
-CRITIC_SYSTEM = """You are HAL's plan checker — a skeptical second pair of eyes on a reply HAL already SENT by text. If (and only if) you find a SUBSTANTIVE flaw, HAL will send a follow-up correction. Most well-formed plans have NO substantive flaw — clearing one is the common, correct outcome. A needless "correction" that re-sends a near-identical plan is a BAD outcome you must avoid.
+CRITIC_TOOLS = [
+    "current_time", "google_calendar", "google_gmail",
+    "travel_time", "web_search", "web_fetch", "resy",
+]
+CRITIC_MAX_ITERS = 6  # tool-call rounds before forcing a verdict
 
-A flaw is SUBSTANTIVE only if fixing it changes at least one of:
-- an actual CLOCK TIME in the schedule, or
-- a required STATE assignment (someone/something needs to be awake vs asleep, dry vs not, open vs closed — and the plan has it backwards), or
-- a CONSTRAINT that doesn't actually bind (e.g. a daily "% chance of rain" used to reshape a midday plan when the gathered hourly data shows rain only overnight), or
-- a place/fact that the gathered facts show is WRONG (closed at that time, wrong location, etc.).
+CRITIC_SYSTEM = """You are HAL's plan VERIFIER. Before HAL sends a plan/recommendation, you surface its load-bearing ASSUMPTIONS and actually VERIFY the checkable ones with tools. You have READ-ONLY access to the user's calendar and email, the web, maps/travel time, restaurant availability, and the clock. Most well-formed plans are fine — but a plan built on an UNVERIFIED assumption is the failure you exist to catch.
 
-Check for those, in order: (1) required-state contradictions — child asleep during the thing they came to experience, or awake/needing care during the parent's own appointment; (2) constraints that don't bind in the relevant window; (3) a hidden critical tension; (4) a flat factual error vs the gathered facts.
+STEP 1 — ASSUMPTIONS. List what the plan silently assumes. The most dangerous and most common: WHEN is this happening? A plan that assumes an event/trip/reservation/flight/appointment is happening TODAY or right now — when it could be a future date — is the classic failure. Other assumptions: the place is open at that time; the travel time; availability; who's going; the weather.
 
-Do NOT flag, and do NOT rewrite, for ANY of these — they are NOT substantive:
-- renumbering or relabeling items (e.g. "Nap 1" vs "Nap 2", "first" vs "next"),
-- wording, phrasing, tone, emojis, ordering of equivalent lines, or formatting,
-- anything that leaves all the clock times, the awake/asleep assignments, and the named places UNCHANGED.
-If your "fix" would produce essentially the same schedule with the same states, the plan is NOT flawed — set flawed=false.
+STEP 2 — VERIFY with tools. For each checkable assumption, CHECK it — never trust the plan's implicit guess:
+- Timing of a KNOWN event (a trip, an Airbnb, a reservation, a flight, an appointment): call current_time for today's date, THEN search the user's email (google_gmail — try queries like "airbnb", "reservation", "confirmation", the place name) and calendar (google_calendar) to find the booking's ACTUAL date. NEVER assume the event is today just because the user asked today.
+- Places / hours / open-now: web_search. Restaurants: resy.
+- Travel time: travel_time.
+(google_calendar/google_gmail work only in 1:1 chats; if a tool says it's unavailable, note that and verify what you can.)
 
-Output STRICT JSON only:
-{"flawed": <bool>, "issues": [<short specific problem>, ...], "change_summary": "<one short phrase naming what materially changed, e.g. 'moved nap to cover the facial' — empty if not flawed>", "revised_reply": "<full corrected reply, or empty string if not flawed>"}
+STEP 3 — VERDICT. A flaw is SUBSTANTIVE when a VERIFIED fact changes the plan: the real date is different, a place is closed then, the travel time is off, a required state is backwards (e.g. a child asleep during the thing they came to see), or a constraint doesn't actually bind. If a load-bearing assumption turns out FALSE (e.g. the trip is next week, not today), the plan IS flawed — revise it. If you now know the corrected key fact but can't fully rebuild the plan (e.g. you know the real date but not that day's schedule), correct the fact and say what's needed: e.g. "Heads up — your Accord trip is next Saturday, not today. Want me to time the departure for that morning instead?"
 
-When you revise: change ONLY the flawed parts, keep HAL's voice, and preserve every correct detail — times, place names, links, prices. iMessage-style, no markdown."""
+Do NOT flag cosmetic things: renumbering, wording, tone, emojis, formatting, or anything that leaves the times/dates/places/states unchanged. If your "fix" leaves the plan materially the same, set flawed=false.
+
+When you've finished verifying, reply with STRICT JSON only (no tool call):
+{"flawed": <bool>, "issues": [<short specific problem with what you VERIFIED>, ...], "change_summary": "<one short phrase, e.g. 'trip is next Sat, not today' — empty if not flawed>", "revised_reply": "<full corrected reply, or empty if not flawed>"}
+When you revise: keep HAL's voice + every correct detail; iMessage-style, no markdown."""
 
 # A revised reply this textually close to the original is cosmetic, not a real
 # fix — never send it as a "correction" (backstop behind the prompt rules).
@@ -117,39 +120,69 @@ def _parse_json(text: str) -> dict:
 
 
 async def critique_and_revise(
-    http: httpx.AsyncClient,
-    settings: HalOrchestratorConfig,
+    ctx,
     history: list,
     user_text: str,
     reply: str,
-    silo: str,
 ) -> tuple[str, dict]:
-    """Return (final_reply, report). report['caught'] is True iff the critic
-    found a substantive flaw AND produced a different, usable revision."""
+    """Verify the plan's assumptions with READ-ONLY tools, then return
+    (final_reply, report). report['caught'] is True iff a substantive flaw was
+    found AND a different, usable revision produced. `ctx` is the live
+    ToolContext (silo, session, http, settings) so the critic can check the
+    user's calendar/email/the web. Runs on the cheap background model."""
+    from hal_orchestrator.prompts.tool_defs import get_agent_tools
+    from hal_orchestrator.tools.registry import execute_tool
+
+    silo = ctx.phone
+    settings = ctx.settings
+    http = ctx.http_client
+
     payload = {
         "request": (user_text or "")[:1500],
         "facts_gathered": _gathered_facts(history),
         "proposed_reply": reply[:3000],
     }
-    log.info("critic.run", silo=silo)  # visible even when it clears the plan
-    resp = await call_gemini(
-        http,
-        settings,
-        [{"role": "user", "parts": [{"text": json.dumps(payload, indent=1)}]}],
-        system=CRITIC_SYSTEM,
-        # Background model (cheap flash), NOT the main loop — the critic is
-        # always-on infra; it shouldn't ride a premium main model's cost.
-        model=settings.gemini_background_model,
-        # MEDIUM keeps the verdict + full revised reply within budget.
-        thinking_level="MEDIUM",
-    )
-    if not resp:
-        return reply, {"caught": False}
-    try:
-        parts = resp["candidates"][0]["content"].get("parts", [])
-    except (KeyError, IndexError):
-        return reply, {"caught": False}
-    obj = _parse_json("\n".join(p.get("text", "") for p in parts if "text" in p))
+    log.info("critic.run", silo=silo)
+    tools = get_agent_tools(CRITIC_TOOLS)
+    critic_history: list = [
+        {"role": "user", "parts": [{"text": json.dumps(payload, indent=1)}]}
+    ]
+
+    obj: dict = {}
+    for _ in range(CRITIC_MAX_ITERS):
+        resp = await call_gemini(
+            http,
+            settings,
+            critic_history,
+            tools=tools,
+            system=CRITIC_SYSTEM,
+            # Background model (cheap flash) — always-on infra; strong at tool
+            # use, so it can actually go check email/calendar.
+            model=settings.gemini_background_model,
+            thinking_level="MEDIUM",
+        )
+        if not resp:
+            return reply, {"caught": False}
+        parts = (resp.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+        func_calls = [p for p in parts if "functionCall" in p]
+        if func_calls:
+            critic_history.append({"role": "model", "parts": parts})
+            responses = []
+            for fc in func_calls:
+                call = fc["functionCall"]
+                out = await execute_tool(call["name"], call.get("args", {}), ctx)
+                responses.append(
+                    {"functionResponse": {"name": call["name"], "response": {"content": out}}}
+                )
+            critic_history.append({"role": "user", "parts": responses})
+            log.info(
+                "critic.verifying",
+                silo=silo,
+                tools=[fc["functionCall"]["name"] for fc in func_calls],
+            )
+            continue
+        obj = _parse_json("\n".join(p.get("text", "") for p in parts if "text" in p))
+        break
 
     issues = [str(i)[:200] for i in (obj.get("issues") or [])][:5]
     summary = (obj.get("change_summary") or "").strip()[:200]
