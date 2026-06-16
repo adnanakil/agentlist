@@ -130,7 +130,10 @@ def _strip_markdown(text: str) -> str:
 # If the model calls the SAME tool this many times in one turn, it's almost
 # certainly stuck (e.g. re-running web_search on thin results forever). Stop and
 # answer from what's gathered rather than burning the whole iteration budget.
-REPEAT_TOOL_LIMIT = 8
+# Tuned up from 8: legitimately search-heavy requests (find 3 date-night spots →
+# one resy/web call per venue) need more same-tool calls and were tripping a
+# false runaway; 12 still catches a true loop before the 15-iteration cap.
+REPEAT_TOOL_LIMIT = 12
 
 _FINALIZE_DIRECTIVE = (
     "You've gathered enough and must answer NOW — do NOT call any more tools. "
