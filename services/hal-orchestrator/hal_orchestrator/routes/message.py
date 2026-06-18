@@ -461,8 +461,26 @@ def build_message_router() -> APIRouter:
         # see elapsed gaps (e.g. last msg 6pm yesterday -> this one 9am today),
         # instead of inferring AM/PM from wording. user_text stays raw above for
         # retrieval/logging; only the stored/sent turn is stamped.
+        # Hand the model an EXPLICIT elapsed-gap cue: it's unreliable at
+        # subtracting two bracket timestamps but great at using "~19h ago". Real
+        # wall-clock from the archive, only when the gap is notable (>=2.5h), and
+        # only for real user turns. This is what makes HAL re-orient after an
+        # overnight/multi-day pause instead of replying as if nothing elapsed.
+        gap_note = ""
+        if not body.internal:
+            from hal_orchestrator.services.history_search import (
+                minutes_since_last_message,
+            )
+            gap_min = await minutes_since_last_message(session, silo)
+            if gap_min is not None and gap_min >= 150:
+                hrs = gap_min / 60
+                gap_note = (
+                    f" · ~{round(hrs)}h since the last message"
+                    if hrs < 36
+                    else f" · ~{round(hrs / 24)}d since the last message"
+                )
         stamp = datetime.now(USER_TZ).strftime("%a %b %-d %-I:%M %p")
-        user_parts: list[dict] = [{"text": f"[{stamp}] {user_text}"}]
+        user_parts: list[dict] = [{"text": f"[{stamp}{gap_note}] {user_text}"}]
         for img in body.images:
             user_parts.append(
                 {"inlineData": {"mimeType": img.mime_type, "data": img.data}}

@@ -8,7 +8,7 @@ own history; a group only its own).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy import and_, func, select
@@ -31,6 +31,22 @@ async def archive_turn(session: AsyncSession, phone: str, role: str, content: st
         HalMessage(phone=phone, role=role, content=content[:MAX_CONTENT_CHARS])
     )
     await session.flush()
+
+
+async def minutes_since_last_message(session: AsyncSession, phone: str) -> float | None:
+    """Wall-clock minutes since the most recent archived turn in this silo, from
+    hal_messages.created_at (real per-turn timestamps — robust vs. background
+    summary/enrichment writes that would bump the conversation row's updated_at).
+    None when there's no prior message. Lets the route hand the model an explicit
+    elapsed-gap cue instead of hoping it subtracts bracket timestamps itself."""
+    last = (
+        await session.execute(
+            select(func.max(HalMessage.created_at)).where(HalMessage.phone == phone)
+        )
+    ).scalar_one_or_none()
+    if last is None:
+        return None
+    return (datetime.now(timezone.utc) - last).total_seconds() / 60.0
 
 
 async def search_history(
