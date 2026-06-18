@@ -38,9 +38,10 @@ HEARTBEAT_PROMPT = """\
 [HEARTBEAT — automated check-in. The user did NOT text you and will never see \
 this prompt; they only see your reply if you send one.]
 
-I've ALREADY pulled the current time and the user's upcoming calendar for you \
-(see "Gathered for you" below). Reason over THAT plus the recent conversation \
-— don't re-fetch the time or calendar, and don't just relist their schedule.
+I've ALREADY pulled the current time, the user's upcoming calendar, AND their \
+recent unread email for you (see "Gathered for you" below). Reason over THAT \
+plus the recent conversation — don't re-fetch them, and don't just relist their \
+schedule or inbox.
 
 Your job: is the user about to do something, go somewhere, or expecting \
 something in the next ~2 hours (from the calendar below or something they \
@@ -49,10 +50,12 @@ still cooperates in a way they likely don't know yet:
 - A departure / outing / reservation coming up → travel_time from their home \
 base (live traffic; walking if close) + get_weather for that time. Do they \
 need to leave earlier, bring an umbrella, change plans?
-- Something they're waiting on (a package, a reservation confirmation, an \
-on-sale time, a reply from a specific person they mentioned) → google_gmail \
-for a NEW matching email. NOT machine/service notifications (deploys, CI, \
-monitoring, app emails) — never relay those.
+- Scan the recent unread email below for a REAL-WORLD thing worth flagging: a \
+package/delivery, an order or reservation confirmation, an on-sale notice, or a \
+reply from an actual person. Flag it once, leading with the thing ("your \
+projector was delivered", "the Airbnb host replied"). IGNORE machine/service/\
+newsletter noise — deploys, CI, monitoring, marketing, app/automated emails — \
+never relay those; they aren't events the user needs from you.
 - An outdoor plan → get_weather for rain/extremes around that time.
 
 Text the user ONLY if you found something genuinely actionable they likely \
@@ -136,6 +139,20 @@ async def _gather_context(
             lines.append("Upcoming calendar:\n" + cal)
         except Exception:
             log.exception("heartbeat.gather_cal_failed", silo=silo)
+        try:
+            # Recent UNREAD email — so the cheap model SEES new deliveries /
+            # replies / confirmations without having to decide to look (it won't
+            # for an old order not in recent chat — that's how the projector
+            # delivery slipped through). Unread+recent naturally dedups: once the
+            # user reads it, it stops resurfacing.
+            mail = str(await execute_tool(
+                "google_gmail",
+                {"action": "list_emails", "query": "is:unread newer_than:1d", "max_results": 8},
+                ctx,
+            ))
+            lines.append("Recent unread email:\n" + mail)
+        except Exception:
+            log.exception("heartbeat.gather_mail_failed", silo=silo)
         break
     return "\n\n".join(lines)
 
