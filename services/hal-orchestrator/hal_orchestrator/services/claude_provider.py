@@ -154,6 +154,16 @@ def _effort_from_level(level: str | None) -> str | None:
     }.get(lvl)
 
 
+def _supports_adaptive_thinking(model: str) -> bool:
+    """Adaptive thinking (`thinking:{type:"adaptive"}` + `output_config.effort`)
+    is an Opus/Sonnet-4.6+ / Fable / Mythos feature. Haiku 4.5 REJECTS it with a
+    400 ("adaptive thinking is not supported on this model"), which nulls the
+    whole response — so a cheap Haiku background model would silently return
+    empty. Gate the param by family so Haiku (and any future non-thinking model)
+    runs thinking-less instead of erroring."""
+    return "haiku" not in (model or "").lower()
+
+
 # --------------------------------------------------------------------------- #
 # Anthropic → Gemini
 # --------------------------------------------------------------------------- #
@@ -217,16 +227,20 @@ async def call_claude(
         "model": model,
         "max_tokens": max_output_tokens or 16000,
         "messages": _to_anthropic_messages(history),
-        "thinking": {"type": "adaptive"},
     }
+    # Adaptive thinking + effort only on models that support it (Opus/Sonnet
+    # 4.6+/Fable). Haiku 4.5 400s on `thinking:adaptive` → null response, so it
+    # runs thinking-less. (Lets a cheap Haiku carry the background machinery.)
+    if _supports_adaptive_thinking(model):
+        body["thinking"] = {"type": "adaptive"}
+        effort = _effort_from_level(thinking_level or settings.gemini_thinking_level)
+        if effort:
+            body["output_config"] = {"effort": effort}
     if system:
         body["system"] = system
     anthropic_tools = _to_anthropic_tools(tools)
     if anthropic_tools:
         body["tools"] = anthropic_tools
-    effort = _effort_from_level(thinking_level or settings.gemini_thinking_level)
-    if effort:
-        body["output_config"] = {"effort": effort}
 
     headers = {
         "x-api-key": settings.anthropic_api_key,

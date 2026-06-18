@@ -43,34 +43,39 @@ recent unread email for you (see "Gathered for you" below). Reason over THAT \
 plus the recent conversation — don't re-fetch them, and don't just relist their \
 schedule or inbox.
 
-Your job: is the user about to do something, go somewhere, or expecting \
-something in the next ~2 hours (from the calendar below or something they \
-mentioned in chat)? If YES — and ONLY then — check whether the real world \
-still cooperates in a way they likely don't know yet:
-- A departure / outing / reservation coming up → travel_time from their home \
-base (live traffic; walking if close) + get_weather for that time. Do they \
-need to leave earlier, bring an umbrella, change plans?
-- Scan the recent unread email below for a REAL-WORLD thing worth flagging: a \
-package/delivery, an order or reservation confirmation, an on-sale notice, or a \
-reply from an actual person. Flag it once, leading with the thing ("your \
-projector was delivered", "the Airbnb host replied"). IGNORE machine/service/\
-newsletter noise — deploys, CI, monitoring, marketing, app/automated emails — \
-never relay those; they aren't events the user needs from you.
-- An outdoor plan → get_weather for rain/extremes around that time.
+You have TWO independent checks — do BOTH every time:
 
-Text the user ONLY if you found something genuinely actionable they likely \
-don't know yet (leave 15 min early — traffic; rain right when they planned to \
-be out; the package just arrived). ONE short message, lead with the thing.
+CHECK 1 — UPCOMING PLANS. Is the user about to do/go/attend something in the \
+next ~2 hours (from the calendar or something they mentioned in chat)? If so, \
+check whether the world still cooperates: travel_time from their home base \
+(live traffic; walking if close) + get_weather for that time. Flag it if they'd \
+want to leave earlier, bring an umbrella, or change plans.
+
+CHECK 2 — THEIR INBOX (INDEPENDENT of CHECK 1 — a delivery or a reply is worth a \
+heads-up on its own, even with nothing upcoming). Scan the recent unread email \
+below for a NEW real-world thing they'd want to know NOW: a package/delivery \
+("your projector was delivered"), a reply from an actual person, an order / \
+reservation / on-sale confirmation. If you see one the user likely hasn't seen, \
+you MUST flag it — surfacing a delivery or a real reply is the single most \
+useful thing a heartbeat does, and it is NOT a "stay silent" case; do not \
+default to "..." when there's a real inbox item below. IGNORE only machine/\
+service/newsletter noise — deploys, CI, monitoring, marketing, automated app \
+emails — those are never events the user needs from you.
+
+Text the user if EITHER check found something genuinely worth knowing they \
+likely don't already know (leave 15 min early — traffic; rain right when they \
+planned to be out; the package they were waiting for just arrived; a real person \
+replied). ONE short message, lead with the thing.
 
 Never alert about baby feed/nap/bedtime timing — the baby system handles that. \
 Before claiming an absence ("no reply yet"), verify it against the actual \
 emails/events — never assert something you didn't check. Don't repeat an alert \
 you already sent (check your own recent messages).
 
-Otherwise reply with EXACTLY "..." — nothing imminent in the next ~2h, \
-conditions fine, nothing new, or you already told them. Most heartbeats MUST \
-be silent. Never use a heartbeat to ask a question, request Google access, \
-make small talk, or report tool problems."""
+Otherwise reply with EXACTLY "..." — nothing upcoming in the next ~2h, \
+conditions fine, nothing new in the inbox worth flagging, or you already told \
+them. Most heartbeats MUST be silent. Never use a heartbeat to ask a question, \
+request Google access, make small talk, or report tool problems."""
 
 
 def in_active_hours(now_local: datetime, settings: HalOrchestratorConfig) -> bool:
@@ -179,9 +184,9 @@ async def _beat(
         "text": prompt,
         "is_group": is_group,
         "internal": True,
-        # Cheap background model, but MEDIUM (not LOW) thinking: LOW one-shot
-        # "..." with zero tool calls, defeating the whole check. With the facts
-        # pre-gathered, MEDIUM only has to reason + check weather/traffic.
+        # Background model (whatever's funded — see gemini_background_model).
+        # MEDIUM is the verified-good level for the Gemini/Opus path; ignored on
+        # a Haiku background model (the Claude shim runs Haiku thinking-less).
         "model": settings.gemini_background_model,
         "thinking_level": "MEDIUM",
     }
