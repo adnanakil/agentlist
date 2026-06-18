@@ -809,6 +809,19 @@ def build_message_router() -> APIRouter:
             await archive_turn(session, silo, "user", user_text)
             if outbound_reply:
                 await archive_turn(session, silo, "assistant", reply)
+                # HAL just actively participated in a GROUP → watch it for 24h so
+                # follow-ups that don't tag "Hal" (an answer to its own question,
+                # a "ping Seth next time he's at work" instruction) still reach it.
+                # Refreshes on each engagement; lapses back to tag-only when the
+                # thread goes quiet. Never downgrades a permanently-watched group.
+                if is_group and chat_id:
+                    from hal_orchestrator.services.watched import add_watched
+
+                    await add_watched(
+                        session, chat_id,
+                        note="auto: HAL active in this thread",
+                        ttl_hours=24,
+                    )
             if total_tool_calls >= CAPTURE_MIN_TOOL_CALLS and outbound_reply:
                 await capture_trajectory(
                     session, silo, user_text, trajectory_steps, reply

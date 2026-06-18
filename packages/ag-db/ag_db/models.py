@@ -566,6 +566,10 @@ class HalWatchedGroup(Base):
     chat_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # NULL = permanent (manually watched). A timestamp = auto-watch (HAL was
+    # actively coordinating in this group); reads ignore it once past, so the
+    # group lapses back to tag-only unless HAL engages again and refreshes it.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (Index("ix_hal_watched_groups_chat_id", "chat_id"),)
 
