@@ -223,10 +223,11 @@ async def call_claude(
         log.error("claude.no_api_key")
         return None
 
+    messages = _to_anthropic_messages(history)
     body: dict = {
         "model": model,
         "max_tokens": max_output_tokens or 16000,
-        "messages": _to_anthropic_messages(history),
+        "messages": messages,
     }
     # Adaptive thinking + effort only on models that support it (Opus/Sonnet
     # 4.6+/Fable). Haiku 4.5 400s on `thinking:adaptive` → null response, so it
@@ -236,11 +237,28 @@ async def call_claude(
         effort = _effort_from_level(thinking_level or settings.gemini_thinking_level)
         if effort:
             body["output_config"] = {"effort": effort}
+    # --- Prompt caching (cost) ------------------------------------------------
+    # HAL re-sends a large fixed prefix on every tool round: a ~6k-token static
+    # system prompt (+ profile/playbook/summary) and ~12k tokens of history.
+    # Without cache_control each round re-pays full input price for all of it; a
+    # heavy 22-round turn pays it 22×. Mark the stable regions so rounds 2..N
+    # (and bursts within the 5-min TTL) read the prefix at 0.1× instead.
     if system:
-        body["system"] = system
+        # Pass system as a block list (not a bare string) so we can attach
+        # cache_control. Caches tools+system together (tools precede system).
+        body["system"] = [
+            {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+        ]
     anthropic_tools = _to_anthropic_tools(tools)
     if anthropic_tools:
         body["tools"] = anthropic_tools
+    # Cache the history prefix too: mark the last content block of the last
+    # message. As the agentic loop appends rounds, Anthropic extends the cache
+    # incrementally — read the cached prefix, write only the new tail.
+    if messages and isinstance(messages[-1].get("content"), list) and messages[-1]["content"]:
+        tail = messages[-1]["content"][-1]
+        if isinstance(tail, dict):
+            tail["cache_control"] = {"type": "ephemeral"}
 
     headers = {
         "x-api-key": settings.anthropic_api_key,
@@ -254,7 +272,18 @@ async def call_claude(
         try:
             resp = await client.post(ANTHROPIC_URL, headers=headers, json=body, timeout=timeout)
             if resp.status_code == 200:
-                return _to_gemini_response(resp.json())
+                data = resp.json()
+                u = data.get("usage") or {}
+                # cache_read >> cache_write across a turn = caching is working.
+                log.info(
+                    "claude.usage",
+                    model=model,
+                    input=u.get("input_tokens"),
+                    cache_write=u.get("cache_creation_input_tokens"),
+                    cache_read=u.get("cache_read_input_tokens"),
+                    output=u.get("output_tokens"),
+                )
+                return _to_gemini_response(data)
             if resp.status_code in _RETRYABLE and attempt < max_retries - 1:
                 delay = _BACKOFF[min(attempt, len(_BACKOFF) - 1)]
                 log.warning("claude.retryable", status=resp.status_code, attempt=attempt + 1)
