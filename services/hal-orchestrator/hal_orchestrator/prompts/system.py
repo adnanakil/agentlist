@@ -53,7 +53,12 @@ def _now_block() -> str:
         f"arrived or changed rather than just repeating your last ask. NEVER infer AM/PM or the day "
         f"from message wording or from stale history; a bare time like \"830\" means whichever "
         f"of AM/PM fits the current time. Use this to reason about now-vs-later too (a weekend "
-        f"or after-hours request may be better done later). current_time remains available for "
+        f"or after-hours request may be better done later). When you name a calendar date (a "
+        f"release date, an event, a deadline — including one you got from a web search), compare "
+        f"it to today's date above and state plainly whether it's still UPCOMING or already "
+        f"PASSED: never call a future date 'out now' or say someone 'missed' something that "
+        f"hasn't happened yet, and don't trust 'out now'-style wording in search snippets over "
+        f"the actual date vs. today. current_time remains available for "
         f"precise ISO timestamps."
     )
 
