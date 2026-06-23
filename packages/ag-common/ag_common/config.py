@@ -51,6 +51,15 @@ class HalOrchestratorConfig(BaseConfig):
     # layer routes any model id starting with "claude" through the Claude shim).
     anthropic_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash"  # MAIN user-facing agent loop
+    # Resilience: if the MAIN loop's model fails (Anthropic 529 Overloaded, a
+    # depleted-credits error, timeouts), try these models in order before giving
+    # up — so one provider/model being down doesn't take HAL down. Comma-
+    # separated, tried left to right. ONLY the main loop fails over (never the
+    # cheap background model). claude-* entries run through the Anthropic shim,
+    # gemini-* through the native path. Sonnet first = same-provider cover for an
+    # Opus-only overload (no Gemini credits needed); Gemini = cross-provider
+    # cover for an all-Anthropic outage (needs the Gemini key funded to fire).
+    model_fallbacks: str = "claude-sonnet-4-6,gemini-3.1-pro-preview"
     gemini_flash_model: str = "gemini-3.5-flash"  # in-process specialist sub-agents
     # Always-on BACKGROUND machinery (heartbeat, nightly grading, self-critique)
     # — kept on a cheap model independent of the main loop, so a premium main

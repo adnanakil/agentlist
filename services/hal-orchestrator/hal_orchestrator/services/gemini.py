@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import httpx
 import structlog
@@ -16,6 +17,62 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 # Retryable HTTP status codes
 RETRYABLE_STATUSES = {429, 500, 502, 503}
 
+# --- Main-loop provider failover -------------------------------------------- #
+# If the MAIN model (settings.gemini_model) fails, fall over through
+# settings.model_fallbacks so one provider/model being down (Anthropic 529
+# Overloaded, depleted credits) doesn't take HAL down. After the primary fails
+# hard we skip it for a short cooldown so a sustained outage doesn't re-pay its
+# retry tax every round. Module-global = process-wide (a provider outage hits
+# every silo, so sharing the breaker is correct).
+_primary_cooldown_until = 0.0
+_PRIMARY_COOLDOWN_S = 90.0
+
+
+def _fallback_chain(settings: HalOrchestratorConfig) -> list[str]:
+    return [m.strip() for m in (settings.model_fallbacks or "").split(",") if m.strip()]
+
+
+def _strip_claude_blocks(history: list[dict]) -> list[dict]:
+    """Drop Claude-only raw blocks (`_claude_block` — thinking/tool_use with the
+    primary model's signatures) so a DIFFERENT model can consume a history
+    carrying primary-model turns (mid-turn failover). Native Gemini can't read
+    them; a different Claude model would silently ignore them but still bill the
+    tokens. Pure-thinking parts vanish; functionCall/text keep visible content."""
+    out: list[dict] = []
+    for turn in history:
+        parts = []
+        for p in turn.get("parts", []):
+            if "_claude_block" in p:
+                clean = {k: v for k, v in p.items() if k != "_claude_block"}
+                if clean:
+                    parts.append(clean)
+            else:
+                parts.append(p)
+        if parts:
+            out.append({"role": turn.get("role"), "parts": parts})
+    return out
+
+
+async def _dispatch_model(
+    client, settings, history, tools, system, model,
+    max_retries, max_output_tokens, thinking_level, *, is_primary: bool,
+) -> dict | None:
+    """Run one request on one model: claude-* via the Anthropic shim, else the
+    native Gemini path. A non-primary model gets the primary's raw Claude blocks
+    stripped (they're model-specific)."""
+    if model.startswith("claude"):
+        from hal_orchestrator.services.claude_provider import call_claude
+
+        hist = history if is_primary else _strip_claude_blocks(history)
+        return await call_claude(
+            client, settings, hist, tools, system, model,
+            max_retries, max_output_tokens, thinking_level,
+        )
+    return await _call_gemini_native(
+        client, settings, _strip_claude_blocks(history), tools, system, model,
+        max_retries, max_output_tokens, thinking_level,
+    )
+
 
 async def call_gemini(
     client: httpx.AsyncClient,
@@ -28,27 +85,67 @@ async def call_gemini(
     max_output_tokens: int | None = None,
     thinking_level: str | None = None,
 ) -> dict | None:
-    """Call Gemini API with tool definitions and conversation history.
+    """Call the model with tool defs + history; parsed response or None.
 
-    Returns the parsed JSON response, or None on failure. Pass
-    `max_output_tokens` to override the default cap for calls that produce a lot
-    (e.g. the nightly reflection's multi-skill + feature JSON). Pass
-    `thinking_level` (e.g. "MINIMAL") to override the global thinking level for
-    one call — used by the watch poll to force a cheap shallow check.
+    The MAIN loop (settings.gemini_model) fails over through
+    settings.model_fallbacks on failure so a single provider outage doesn't take
+    HAL down. The cheap background model (any explicit non-main `model`) is
+    called as-is — no failover, so it never escalates onto a premium fallback.
+    `max_output_tokens` / `thinking_level` override the defaults for one call.
     """
-    model = model or settings.gemini_model
+    global _primary_cooldown_until
 
-    # Provider dispatch: a claude-* model id runs through the Anthropic shim,
-    # which translates this Gemini-shaped request and returns a Gemini-shaped
-    # response — so every call site stays provider-agnostic.
-    if model.startswith("claude"):
-        from hal_orchestrator.services.claude_provider import call_claude
+    primary = model or settings.gemini_model
+    fallbacks = (
+        [m for m in _fallback_chain(settings) if m != primary]
+        if primary == settings.gemini_model
+        else []
+    )
 
-        return await call_claude(
-            client, settings, history, tools, system, model,
-            max_retries, max_output_tokens, thinking_level,
+    if not fallbacks:
+        return await _dispatch_model(
+            client, settings, history, tools, system, primary,
+            max_retries, max_output_tokens, thinking_level, is_primary=True,
         )
 
+    # Skip the primary during its post-failure cooldown (don't re-pay the retry
+    # tax every round of a sustained outage); re-probe once the cooldown lapses.
+    skip_primary = time.monotonic() < _primary_cooldown_until
+    chain = fallbacks if skip_primary else [primary, *fallbacks]
+    if skip_primary:
+        log.info("model.primary_cooldown", primary=primary, using=chain[0])
+
+    for m in chain:
+        resp = await _dispatch_model(
+            client, settings, history, tools, system, m,
+            max_retries, max_output_tokens, thinking_level, is_primary=(m == primary),
+        )
+        if resp is not None:
+            if m == primary:
+                _primary_cooldown_until = 0.0  # healthy again
+            else:
+                log.warning("model.failover_used", primary=primary, used=m)
+            return resp
+        if m == primary:
+            _primary_cooldown_until = time.monotonic() + _PRIMARY_COOLDOWN_S
+            log.error("model.primary_failed", primary=primary, fallbacks=fallbacks)
+
+    log.error("model.all_failed", tried=chain)
+    return None
+
+
+async def _call_gemini_native(
+    client: httpx.AsyncClient,
+    settings: HalOrchestratorConfig,
+    history: list[dict],
+    tools: list[dict] | None,
+    system: str | None,
+    model: str,
+    max_retries: int,
+    max_output_tokens: int | None,
+    thinking_level: str | None,
+) -> dict | None:
+    """Native Gemini generateContent call with retry/backoff."""
     url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={settings.gemini_api_key}"
 
     generation_config: dict = {
