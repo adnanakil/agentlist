@@ -40,3 +40,6 @@ Thumbs.db
 
 # uv
 uv.lock
+
+# eval sidecar snapshots (may contain real conversation data)
+scripts/.eval_snap_*.json
