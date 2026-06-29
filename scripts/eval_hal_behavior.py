@@ -29,6 +29,11 @@ Two harnesses:
               asserts SILENCE ("...") — i.e. it must not re-send what it just
               said. Also a clean-context heartbeat that must SURFACE a planted
               real inbox item (anti-over-suppression).
+              Plus a trip/inbox anticipation set (hb-trip-*, hb-email-reply,
+              hb-inbox-noise, hb-delivery, hb-shipped-later): an imminent flight
+              and a real reply/delivery must SURFACE — and mention the RIGHT
+              referent (verified via per-scenario must_mention keywords) — while
+              marketing/CI/monitoring noise and a far-off trip must stay SILENT.
 
 SAFE: snapshots the silo's conversation + profile, restores before every
 scenario and at the end, deletes every row created during the run. The silo's
@@ -47,7 +52,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import asyncpg
@@ -146,6 +151,25 @@ _PRIOR_ANTHROPIC_TOPUP = [
     {"role": "user", "parts": [{"text": "I topped up already, so don't keep treating it as open."}]},
 ]
 
+# ---- Trip / inbox anticipation seeds (theme: trip, email, delivery, noise) ---
+def _at(minutes: int) -> str:
+    """A local wall-clock string `minutes` from now — keeps calendar events
+    inside the heartbeat's 'next ~2h' window no matter when the suite runs."""
+    return (datetime.now(ET) + timedelta(minutes=minutes)).strftime("%-I:%M %p")
+
+_SEED_TRIP = [
+    {"role": "user", "parts": [{"text": "flying to SF tonight for a couple days"}]},
+    {"role": "model", "parts": [{"text": "Have a great trip! Shout if you need anything en route."}]},
+]
+_SEED_TRIP_FAR = [
+    {"role": "user", "parts": [{"text": "booked the SF trip — not til next Thursday though"}]},
+    {"role": "model", "parts": [{"text": "Nice, plenty of runway. I'll keep half an eye on it as it gets closer."}]},
+]
+_SEED_NEUTRAL = [
+    {"role": "user", "parts": [{"text": "ok cool, ttyl"}]},
+    {"role": "model", "parts": [{"text": "👍"}]},
+]
+
 HEARTBEAT = [
     # class 1: it ALREADY sent the matchday/travel alert -> must stay silent
     ("hb-repeat", [_PRIOR_USER, _PRIOR_MATCH_ALERT],
@@ -176,13 +200,62 @@ HEARTBEAT = [
      f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n(nothing in the next 2 hours)\n\n"
      "Recent unread email:\n- FIFA: 'Omar (oaakil@gmail.com) accepted and downloaded "
      "the tickets you sent' (new, 4 min ago)\n- Zillow (digest)\n- Nextdoor (digest)",
-     "alert"),
+     "alert", ["omar", "ticket", "accepted", "downloaded"]),
     # class 1 (escalation): already nudged about the pool deadline TWICE -> the
     # repeat cap should muzzle a 3rd reminder for the same event.
     ("hb-escalate", _PRIOR_POOL_REMINDERS,
      f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n"
      "- 12:00 PM World Cup pool picks due (send Isabelle 8 picks)\n\n"
      "Recent unread email:\n- The Information (newsletter)\n- Nextdoor (digest)",
+     "silent"),
+
+    # ----- trip / inbox theme: surface real signal, ignore machine noise -----
+    # TRIP: boarding within the hour -> nudge to head for the airport (CHECK 1).
+    ("hb-trip-flight", _SEED_TRIP,
+     f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n"
+     f"- {_at(95)} Flight UA567 JFK→SFO (boarding {_at(65)})\n\n"
+     f"Recent unread email:\n"
+     f"- United: 'UA567 is on time — gate B22, boarding {_at(65)}' (new, 10 min ago)\n"
+     f"- LinkedIn (weekly digest)\n- Medium Daily Digest (newsletter)",
+     "alert", ["airport", "jfk", "leave", "head out", "traffic", "boarding", "gate"]),
+    # TRIP far off + quiet inbox -> do NOT manufacture a nudge for next week.
+    ("hb-trip-faraway", _SEED_TRIP_FAR,
+     f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n(nothing in the next 2 hours)\n\n"
+     f"Recent unread email:\n- Delta (fare-sale marketing)\n"
+     f"- Tripadvisor ('things to do in San Francisco' digest)\n"
+     f"- Airbnb ('stays you might like' marketing)",
+     "silent"),
+    # REAL email: a person replied about a concrete plan -> surface it (CHECK 2).
+    ("hb-email-reply", _SEED_NEUTRAL,
+     f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n(nothing in the next 2 hours)\n\n"
+     f"Recent unread email:\n"
+     f"- Marcus Lee <marcus@gmail.com>: 'Re: dinner Friday — yes! 7:30 works, Lilia?' (new, 6 min ago)\n"
+     f"- Slack (3 unread in #general)\n- Notion (weekly digest)",
+     "alert", ["marcus", "dinner", "friday", "7:30", "lilia"]),
+    # NOISY inbox: deploys / CI / monitoring / receipts / marketing -> stay silent.
+    ("hb-inbox-noise", _SEED_NEUTRAL,
+     f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n(nothing in the next 2 hours)\n\n"
+     f"Recent unread email:\n"
+     f"- GitHub: 'Deploy succeeded — web-production (#4821)'\n"
+     f"- Datadog: 'Monitor recovered: api p95 latency back to normal'\n"
+     f"- Stripe: 'Your monthly receipt is ready'\n"
+     f"- Amazon: 'How did we do? Rate your recent purchase'\n"
+     f"- J.Crew: '40% off everything — ends tonight' (marketing)",
+     "silent"),
+    # DELIVERY just dropped -> the single most useful heartbeat: surface it.
+    ("hb-delivery", _SEED_NEUTRAL,
+     f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n(nothing in the next 2 hours)\n\n"
+     f"Recent unread email:\n"
+     f"- Amazon: 'Delivered: your package was left at the front door' (new, 8 min ago)\n"
+     f"- USPS Informed Delivery (daily mail-scan digest)\n- Verizon ('your bill is ready')",
+     "alert", ["deliver", "package", "front door", "arrived", "porch", "dropped"]),
+    # SHIPPED, arriving in days -> informational, not a 'now' event; don't interrupt.
+    # (judgment case: a heartbeat's worth is NOW things, not future arrivals.)
+    ("hb-shipped-later", _SEED_NEUTRAL,
+     f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n(nothing in the next 2 hours)\n\n"
+     f"Recent unread email:\n"
+     f"- Nike: 'Your order has shipped — arriving Thu' (new, 20 min ago)\n"
+     f"- Substack (weekly roundup)\n- Robinhood (market recap)",
      "silent"),
 ]
 
@@ -234,14 +307,26 @@ SNAP = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                     ".eval_snap_" + re.sub(r"\D", "", SILO) + ".json")
 
 
+# Distinctive phrases from every synthetic seed — if a short live buffer carries
+# any of these, it's a leftover from a crashed run, not real conversation.
+_SEED_FINGERPRINTS = (
+    "leave Chelsea by 3:30pm",                  # matchday alert seed
+    "noon World Cup pool deadline",             # pool-reminder seed
+    "ran out of usage credits",                 # anthropic-topup seed
+    "flying to SF tonight",                     # trip seed
+    "booked the SF trip",                       # far-trip seed
+    "ok cool, ttyl",                            # neutral seed
+)
+
+
 def _looks_seeded(hist) -> bool:
     """True if the live buffer is a leftover heartbeat seed (a crashed run), so
     we never capture it as the snapshot. The real buffer has dozens of turns;
-    the seed is <=4 and carries the synthetic matchday-alert text."""
+    a seed is <=4 turns and carries one of the synthetic fingerprints above."""
     if not isinstance(hist, list) or len(hist) > 4:
         return False
     blob = json.dumps(hist)
-    return "MetLife" in blob and "leave Chelsea by 3:30pm" in blob
+    return any(fp in blob for fp in _SEED_FINGERPRINTS)
 
 
 def _pg_url() -> str:
@@ -389,7 +474,11 @@ async def main():
             if beats:
                 print("\n########## HEARTBEAT (internal turn; repetition + silence) ##########")
             from hal_orchestrator.services.heartbeat import HEARTBEAT_PROMPT
-            for sid, seed, gathered, expect in beats:
+            for scn in beats:
+                sid, seed, gathered, expect = scn[0], scn[1], scn[2], scn[3]
+                # Optional 5th element: keywords the alert MUST reference, so an
+                # "alert" scenario fails if HAL pipes up about the wrong thing.
+                must_mention = scn[4] if len(scn) > 4 else None
                 await restore_conv()
                 await seed_history(seed)
                 text = HEARTBEAT_PROMPT + "\n\n## Gathered for you (reason over this — don't re-fetch):\n" + gathered
@@ -403,10 +492,20 @@ async def main():
                     reply, tools = f"[ERROR {e}]", "?"
                 await restore_conv()  # un-seed right away — minimize the corruption window
                 quiet = _is_quiet(reply)
-                ok = (quiet if expect == "silent" else (not quiet and len(reply) > 10))
+                hit = (not must_mention) or any(k.lower() in reply.lower() for k in must_mention)
+                if expect == "silent":
+                    ok = quiet
+                    want = "stay silent (noise / nothing actionable now)"
+                else:
+                    ok = (not quiet) and len(reply) > 10 and hit
+                    want = ("surface — mention: " + ", ".join(must_mention)) if must_mention \
+                        else "surface the planted item"
+                note = ""
+                if expect != "silent" and not quiet and must_mention and not hit:
+                    note = "  ← alerted, but about the WRONG thing (missed expected refs)"
                 print(f"\n### [{sid}]  expect={expect}  tool_calls={tools}  "
-                      f"{'✅ PASS' if ok else '⚠️ FAIL'}\n"
-                      f"SEED:   HAL already said the matchday/travel alert\n"
+                      f"{'✅ PASS' if ok else '⚠️ FAIL'}{note}\n"
+                      f"WANT:   {want}\n"
                       f"REPLY:  {reply[:500] if reply else '(silent — empty)'}\n" + "-" * 78)
                 npass += ok
                 nfail += (not ok)
