@@ -206,9 +206,18 @@ def _is_quiet(text: str) -> bool:
 
 
 async def _run_once(settings: HalOrchestratorConfig, http: httpx.AsyncClient) -> None:
+    """Two phases, deliberately separated: (1) decide + DURABLY claim each slot
+    in a SHORT transaction, then (2) fire outside any DB session. Never hold a
+    session open across the (~30s) _fire HTTP call — that drops the connection,
+    the commit fails, the guard (last_brief) is lost, and the brief re-fires
+    every tick. Claiming the slot before firing also means a fire that errors
+    just skips today rather than retry-spamming."""
     from hal_orchestrator.prompts.system import USER_TZ
 
     now = datetime.now(timezone.utc)
+    actions: list[tuple[str, str, list, str]] = []  # (silo, mode, interests, location)
+
+    # --- Phase 1: claim slots (no HTTP inside this transaction) ---------------
     async for session in db_session.get_session():
         profiles = (await session.execute(select(HalUserProfile))).scalars().all()
         for profile in profiles:
@@ -221,58 +230,73 @@ async def _run_once(settings: HalOrchestratorConfig, http: httpx.AsyncClient) ->
             tz = ZoneInfo(tz_name) if tz_name else USER_TZ
             local = now.astimezone(tz)
             today = local.date().isoformat()
-            location = extra.get("home_location") or ""
-            interests = hp.get("interests") or DEFAULT_INTERESTS
             brief_hour = int(hp.get("hour", settings.helpful_brief_hour))
-            silo = profile.phone
+            interests = hp.get("interests") or DEFAULT_INTERESTS
+            location = extra.get("home_location") or ""
 
+            new_hp = dict(hp)
             # New local day: reset the opportunistic ping counter.
-            if hp.get("pings_date") != today:
-                hp["pings"], hp["pings_date"] = 0, today
+            if new_hp.get("pings_date") != today:
+                new_hp["pings"], new_hp["pings_date"] = 0, today
 
-            fired = False
-            try:
-                # --- Daily brief: once, at/after the chosen local hour ---------
-                if (
-                    local.hour >= brief_hour
-                    and local.hour < settings.helpful_active_hour_end
-                    and hp.get("last_brief") != today
-                ):
-                    hp["last_brief"] = today  # mark first — never double-brief
-                    reply = await _fire(
-                        settings, http, silo, mode="brief",
-                        interests=interests, location=location,
-                    )
-                    if reply:
-                        await _deliver(silo, reply)
-                        log.info("helpful.brief_sent", silo=silo, chars=len(reply))
-                    fired = True
+            mode: str | None = None
+            # Daily brief: ONCE, inside a morning window only (never the evening).
+            if (
+                brief_hour <= local.hour < brief_hour + settings.helpful_brief_window_hours
+                and new_hp.get("last_brief") != today
+            ):
+                new_hp["last_brief"] = today
+                mode = "brief"
+            # Opportunistic ping: brief done today, under cap, well-spaced.
+            elif (
+                new_hp.get("last_brief") == today
+                and brief_hour <= local.hour < settings.helpful_active_hour_end
+                and int(new_hp.get("pings", 0)) < settings.helpful_max_pings_per_day
+                and _gap_ok(new_hp.get("last_check"), now, settings.helpful_ping_min_gap_hours)
+            ):
+                new_hp["last_check"] = now.isoformat()  # spacing gate claimed now
+                mode = "ping"
 
-                # --- Opportunistic ping: brief done, under cap, well-spaced ----
-                elif (
-                    hp.get("last_brief") == today
-                    and brief_hour <= local.hour < settings.helpful_active_hour_end
-                    and int(hp.get("pings", 0)) < settings.helpful_max_pings_per_day
-                    and _gap_ok(hp.get("last_check"), now, settings.helpful_ping_min_gap_hours)
-                ):
-                    hp["last_check"] = now.isoformat()
-                    reply = await _fire(
-                        settings, http, silo, mode="ping",
-                        interests=interests, location=location,
-                    )
-                    if reply and not _is_quiet(reply):
-                        hp["pings"] = int(hp.get("pings", 0)) + 1
-                        await _deliver(silo, reply)
-                        log.info("helpful.ping_sent", silo=silo, n=hp["pings"])
-                    fired = True
-            except Exception:
-                log.exception("helpful.fire_failed", silo=silo, mode="brief/ping")
+            if new_hp != hp:
+                _save_state(profile, new_hp)
+            if mode:
+                actions.append((profile.phone, mode, interests, location))
+        await session.commit()  # guards durable BEFORE any fire
 
+    # --- Phase 2: fire + deliver (outside any DB transaction) -----------------
+    for silo, mode, interests, location in actions:
+        try:
+            reply = await _fire(
+                settings, http, silo, mode=mode, interests=interests, location=location
+            )
+        except Exception:
+            log.exception("helpful.fire_failed", silo=silo, mode=mode)
+            continue
+        if mode == "brief":
+            if reply:
+                await _deliver(silo, reply)
+                log.info("helpful.brief_sent", silo=silo, chars=len(reply))
+        elif reply and not _is_quiet(reply):  # ping
+            await _deliver(silo, reply)
+            await _bump_ping(silo)
+            log.info("helpful.ping_sent", silo=silo)
+
+
+async def _bump_ping(silo: str) -> None:
+    """Increment today's ping count in its own short transaction — only after a
+    ping actually went out (last_check was already claimed in phase 1)."""
+    async for session in db_session.get_session():
+        profile = (
+            await session.execute(
+                select(HalUserProfile).where(HalUserProfile.phone == silo)
+            )
+        ).scalar_one_or_none()
+        if profile is not None:
+            hp = dict((profile.extra_data or {}).get("helpful") or {})
+            hp["pings"] = int(hp.get("pings", 0)) + 1
             _save_state(profile, hp)
-            if fired:
-                # One action per profile per tick is plenty; persist promptly.
-                await session.commit()
-        await session.commit()
+            await session.commit()
+        break
 
 
 def _gap_ok(last_check_iso: str | None, now: datetime, min_gap_hours: int) -> bool:

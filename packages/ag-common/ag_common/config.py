@@ -136,6 +136,7 @@ class HalOrchestratorConfig(BaseConfig):
     helpful_model: str = ""                  # "" -> gemini_background_model
     helpful_check_interval_seconds: int = 300
     helpful_brief_hour: int = 8              # default local hour for the daily brief
+    helpful_brief_window_hours: int = 3      # fire the brief only within [hour, hour+N) — never the evening
     helpful_active_hour_end: int = 21        # no pings after this local hour
     helpful_max_pings_per_day: int = 2       # opportunistic same-day pings (excl. brief)
     helpful_ping_min_gap_hours: int = 3      # min spacing between opportunistic checks
