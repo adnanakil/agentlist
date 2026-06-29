@@ -1,0 +1,22 @@
+name: instacart-recipe
+version: "0.1.0"
+description: "Create Instacart recipe pages with ingredients and instructions. Returns a shareable URL where recipients can order all recipe ingredients directly on Instacart."
+runtime: python
+entrypoint: agent.py
+category: utilities
+tags: [instacart, recipe, cooking, food, ingredients]
+price_per_call_cents: 2
+required_consumer_credentials: [INSTACART_API_KEY]
+input_schema:
+  type: object
+  properties:
+    title:
+      type: string
+      description: "Recipe name (e.g. 'Chicken Parmesan', 'Homemade Pizza')"
+    ingredients:
+      type: string
+      description: "Comma-separated list of ingredients with quantities (e.g. '2 chicken breasts, 1 cup marinara sauce, 1 cup mozzarella')"
+    instructions:
+      type: string
+      description: "Brief cooking instructions"
+  required: [title, ingredients]

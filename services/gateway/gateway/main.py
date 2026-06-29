@@ -9,11 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ag_common.errors import AgentGateError, agentgate_error_handler
 from ag_db.session import create_engine_and_session
-
 from gateway.config import settings
 from gateway.deps import close_http_client, close_redis
 from gateway.middleware.auth import RequestIDMiddleware
-from gateway.routes import billing, discover, health, invoke
+from gateway.routes import billing, discover, health, invoke, mcp
 
 
 def _configure_structlog() -> None:
@@ -95,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(discover.router)
     app.include_router(invoke.router)
+    app.include_router(mcp.router)
     app.include_router(billing.router)
 
     return app

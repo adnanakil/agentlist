@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Submit Agent — Dispatch{% endblock %}
+{% block title %}Publish MCP Server — Dispatch{% endblock %}
 
 {% block nav_links %}
-<span style="color: #888;">{{ account.email }}</span>
+<span style="color: #6b7280;">{{ account.email }}</span>
 <a href="/dashboard">Dashboard</a>
 <a href="/logout" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Log Out</a>
 {% endblock %}
 
 {% block content %}
-<h1>Submit an Agent</h1>
-<p>Fill in the details below to list your agent on the marketplace.</p>
+<h1>Publish an MCP Server</h1>
+<p>Fill in the details below to list your MCP server on the marketplace.</p>
 
 {% if error %}
 <div class="error">{{ error }}</div>
@@ -21,7 +21,7 @@
         <h2 style="margin-bottom: 1.25rem;">Basic Info</h2>
 
         <div class="form-group">
-            <label for="slug">Slug <span style="color: #666; font-weight: 400;">(unique identifier, lowercase, hyphens only)</span></label>
+            <label for="slug">Slug <span style="color: #9ca3af; font-weight: 400;">(unique identifier, lowercase, hyphens only)</span></label>
             <input type="text" id="slug" name="slug" placeholder="my-agent" pattern="[a-z0-9\-]+" required value="{{ values.slug or '' }}">
         </div>
 
@@ -32,37 +32,52 @@
 
         <div class="form-group">
             <label for="description">Description</label>
-            <textarea id="description" name="description" rows="3" placeholder="What does this agent do?" required style="width: 100%; padding: 0.75rem 1rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 1rem; font-family: inherit; resize: vertical;">{{ values.description or '' }}</textarea>
+            <textarea id="description" name="description" rows="3" placeholder="What does this agent do?" required style="width: 100%; padding: 0.75rem 1rem; background: #ffffff; border: 1px solid #d1d5db; border-radius: 6px; color: #1f2937; font-size: 1rem; font-family: inherit; resize: vertical;">{{ values.description or '' }}</textarea>
         </div>
 
         <div class="form-group">
-            <label for="price">Price <span style="color: #666; font-weight: 400;">(cents per call)</span></label>
+            <label for="price">Default per-call price <span style="color: #9ca3af; font-weight: 400;">(cents)</span></label>
             <input type="number" id="price" name="price_per_call_cents" min="0" max="1000" placeholder="0" required value="{{ values.price_per_call_cents or '0' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="pricing_model">Pricing model</label>
+            <select id="pricing_model" name="pricing_model">
+                <option value="per_call" {% if not values.pricing_model or values.pricing_model == 'per_call' %}selected{% endif %}>Per-call metering</option>
+                <option value="subscription" {% if values.pricing_model == 'subscription' %}selected{% endif %}>Flat subscription</option>
+                <option value="freemium" {% if values.pricing_model == 'freemium' %}selected{% endif %}>Freemium with paid tools</option>
+                <option value="byo_creds" {% if values.pricing_model == 'byo_creds' %}selected{% endif %}>BYO credentials hosting</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="monthly_price_cents">Monthly price <span style="color: #9ca3af; font-weight: 400;">(cents, used for subscription/BYO)</span></label>
+            <input type="number" id="monthly_price_cents" name="monthly_price_cents" min="0" max="100000" placeholder="0" value="{{ values.monthly_price_cents or '0' }}">
         </div>
     </div>
 
     <div class="card">
         <h2 style="margin-bottom: 1.25rem;">Hosting</h2>
         <p style="font-size: 0.9rem; margin-bottom: 1.25rem;">
-            Choose how your agent runs. Hosted agents run on our infrastructure. External agents run on your own server &mdash; we just proxy requests to your endpoint.
+            Choose how your MCP server runs. Hosted servers run on our infrastructure. External servers run on your own HTTPS endpoint.
         </p>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
-            <label id="option-hosted" style="display: block; padding: 1rem 1.25rem; background: #1a1a1a; border: 2px solid #6ee7b7; border-radius: 8px; cursor: pointer; transition: border-color 0.2s;">
+            <label id="option-hosted" style="display: block; padding: 1rem 1.25rem; background: #ffffff; border: 2px solid #4f46e5; border-radius: 8px; cursor: pointer; transition: border-color 0.2s;">
                 <input type="radio" name="hosting_type" value="hosted" {% if not values.hosting_type or values.hosting_type == 'hosted' %}checked{% endif %} style="display: none;" onchange="toggleHosting()">
-                <div style="color: #fff; font-weight: 600; margin-bottom: 0.25rem;">Hosted</div>
-                <div style="font-size: 0.8rem; color: #888;">We run your Python code. Upload your agent source and we handle the rest.</div>
+                <div style="color: #111827; font-weight: 600; margin-bottom: 0.25rem;">Hosted</div>
+                <div style="font-size: 0.8rem; color: #6b7280;">We run your Python MCP server source and handle routing, metering, and credentials.</div>
             </label>
-            <label id="option-external" style="display: block; padding: 1rem 1.25rem; background: #1a1a1a; border: 2px solid #333; border-radius: 8px; cursor: pointer; transition: border-color 0.2s;">
+            <label id="option-external" style="display: block; padding: 1rem 1.25rem; background: #ffffff; border: 2px solid #d1d5db; border-radius: 8px; cursor: pointer; transition: border-color 0.2s;">
                 <input type="radio" name="hosting_type" value="external" {% if values.hosting_type == 'external' %}checked{% endif %} style="display: none;" onchange="toggleHosting()">
-                <div style="color: #fff; font-weight: 600; margin-bottom: 0.25rem;">External Endpoint</div>
-                <div style="font-size: 0.8rem; color: #888;">You host it. We proxy requests to your HTTPS endpoint. Run anything &mdash; Chromium, GPU, etc.</div>
+                <div style="color: #111827; font-weight: 600; margin-bottom: 0.25rem;">External Endpoint</div>
+                <div style="font-size: 0.8rem; color: #6b7280;">You host it. We proxy MCP tool calls to your HTTPS endpoint.</div>
             </label>
         </div>
 
         <div id="section-hosted">
             <div class="form-group">
-                <label for="agent_code">Python Code</label>
+                <label for="agent_code">Python MCP Server Code</label>
                 <textarea id="agent_code" name="agent_code" rows="16" placeholder='from agentgate_sdk import AgentHandler, run_agent
 
 class MyAgent(AgentHandler):
@@ -71,27 +86,27 @@ class MyAgent(AgentHandler):
         return {"result": "hello"}
 
 if __name__ == "__main__":
-    run_agent(MyAgent())' style="width: 100%; padding: 0.75rem 1rem; background: #111; border: 1px solid #333; border-radius: 6px; color: #6ee7b7; font-size: 0.85rem; font-family: 'SF Mono', 'Fira Code', monospace; resize: vertical; line-height: 1.6; tab-size: 4;">{{ values.agent_code or '' }}</textarea>
+    run_agent(MyAgent())' style="width: 100%; padding: 0.75rem 1rem; background: #ffffff; border: 1px solid #d1d5db; border-radius: 6px; color: #4f46e5; font-size: 0.85rem; font-family: 'SF Mono', 'Fira Code', monospace; resize: vertical; line-height: 1.6; tab-size: 4;">{{ values.agent_code or '' }}</textarea>
             </div>
         </div>
 
         <div id="section-external" style="display: none;">
             <div class="form-group">
-                <label for="endpoint_url">Endpoint URL <span style="color: #666; font-weight: 400;">(HTTPS required)</span></label>
+                <label for="endpoint_url">Endpoint URL <span style="color: #9ca3af; font-weight: 400;">(HTTPS required)</span></label>
                 <input type="url" id="endpoint_url" name="endpoint_url" placeholder="https://your-server.com/api/agent" value="{{ values.endpoint_url or '' }}">
             </div>
-            <div style="background: #111; border: 1px solid #222; border-radius: 6px; padding: 1rem 1.25rem; font-size: 0.85rem;">
-                <div style="color: #fff; font-weight: 600; margin-bottom: 0.5rem;">Endpoint Contract</div>
-                <p style="color: #888; margin-bottom: 0.5rem;">Your endpoint must accept a POST with this JSON body:</p>
-                <pre style="background: #0a0a0a; border: 1px solid #222; border-radius: 4px; padding: 0.75rem; color: #6ee7b7; font-size: 0.8rem; margin-bottom: 0.75rem;">{"input": {"message": "hello", ...}}</pre>
-                <p style="color: #888; margin-bottom: 0.5rem;">And return JSON:</p>
-                <pre style="background: #0a0a0a; border: 1px solid #222; border-radius: 4px; padding: 0.75rem; color: #6ee7b7; font-size: 0.8rem; margin-bottom: 0;">{"output": {"result": "world", ...}}</pre>
+            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 1rem 1.25rem; font-size: 0.85rem;">
+                <div style="color: #111827; font-weight: 600; margin-bottom: 0.5rem;">Endpoint Contract</div>
+                <p style="color: #6b7280; margin-bottom: 0.5rem;">Your endpoint must accept a POST with this JSON body:</p>
+                <pre style="background: rgba(243, 244, 246, 0.7); backdrop-filter: blur(4px); border: 1px solid #e5e7eb; border-radius: 9999px; padding: 0.75rem; color: #4f46e5; font-size: 0.8rem; margin-bottom: 0.75rem;">{"input": {"message": "hello", ...}}</pre>
+                <p style="color: #6b7280; margin-bottom: 0.5rem;">And return JSON:</p>
+                <pre style="background: rgba(243, 244, 246, 0.7); backdrop-filter: blur(4px); border: 1px solid #e5e7eb; border-radius: 9999px; padding: 0.75rem; color: #4f46e5; font-size: 0.8rem; margin-bottom: 0;">{"output": {"result": "world", ...}}</pre>
             </div>
         </div>
     </div>
 
     <div class="card">
-        <h2 style="margin-bottom: 1.25rem;">Credentials <span style="color: #666; font-weight: 400; font-size: 0.9rem;">(optional)</span></h2>
+        <h2 style="margin-bottom: 1.25rem;">Credentials <span style="color: #9ca3af; font-weight: 400; font-size: 0.9rem;">(optional)</span></h2>
         <p style="font-size: 0.9rem; margin-bottom: 1rem;">
             If your agent needs API keys or secrets, add them here. They'll be encrypted and available
             as environment variables at runtime (e.g. <code>os.environ["GEMINI_API_KEY"]</code>).
@@ -102,20 +117,43 @@ if __name__ == "__main__":
             <!-- Dynamic credential rows added by JS -->
         </div>
 
-        <button type="button" onclick="addCredentialRow()" style="background: none; border: 1px dashed #333; color: #6ee7b7; padding: 0.6rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-top: 0.5rem;">
+        <button type="button" onclick="addCredentialRow()" style="background: none; border: 1px dashed #d1d5db; color: #4f46e5; padding: 0.6rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; width: 100%; margin-top: 0.5rem;">
             + Add Credential
         </button>
     </div>
 
     <div class="card">
-        <h2 style="margin-bottom: 1.25rem;">Required Consumer Credentials <span style="color: #666; font-weight: 400; font-size: 0.9rem;">(optional)</span></h2>
+        <h2 style="margin-bottom: 1.25rem;">MCP Tools</h2>
+        <p style="font-size: 0.9rem; margin-bottom: 1rem;">
+            Define the tools exposed to Claude, Cursor, and other MCP clients. If left blank, the marketplace exposes one <code>invoke</code> tool using the input schema below.
+        </p>
+        <div class="form-group">
+            <label for="tool_schema">Tool schema JSON <span style="color: #9ca3af; font-weight: 400;">(array)</span></label>
+            <textarea id="tool_schema" name="tool_schema" rows="9" placeholder='[
+  {
+    "name": "search",
+    "description": "Search the upstream API.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {"type": "string"}
+      },
+      "required": ["query"]
+    }
+  }
+]' style="width: 100%; padding: 0.75rem 1rem; background: #ffffff; border: 1px solid #d1d5db; border-radius: 6px; color: #1f2937; font-size: 0.85rem; font-family: 'SF Mono', 'Fira Code', monospace; resize: vertical; line-height: 1.6;">{{ values.tool_schema or '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom: 1.25rem;">Required Consumer Credentials <span style="color: #9ca3af; font-weight: 400; font-size: 0.9rem;">(optional)</span></h2>
         <p style="font-size: 0.9rem; margin-bottom: 1rem;">
             If your agent needs the consumer's own API keys (e.g. their Instacart or Anthropic key), list them here.
             Consumers will be prompted to store these credentials before invoking your agent.
             At runtime they'll be available as <code>CONSUMER_CRED_{NAME}</code>.
         </p>
         <div class="form-group">
-            <label for="required_consumer_credentials">Credential Names <span style="color: #666; font-weight: 400;">(comma-separated, e.g. INSTACART_API_KEY, ANTHROPIC_API_KEY)</span></label>
+            <label for="required_consumer_credentials">Credential Names <span style="color: #9ca3af; font-weight: 400;">(comma-separated, e.g. INSTACART_API_KEY, ANTHROPIC_API_KEY)</span></label>
             <input type="text" id="required_consumer_credentials" name="required_consumer_credentials" placeholder="INSTACART_API_KEY" value="{{ values.required_consumer_credentials or '' }}" style="text-transform: uppercase;">
         </div>
     </div>
@@ -127,20 +165,20 @@ if __name__ == "__main__":
         </p>
 
         <div class="form-group">
-            <label for="input_schema">JSON Schema <span style="color: #666; font-weight: 400;">(optional)</span></label>
+            <label for="input_schema">JSON Schema <span style="color: #9ca3af; font-weight: 400;">(optional)</span></label>
             <textarea id="input_schema" name="input_schema" rows="6" placeholder='{
   "type": "object",
   "properties": {
     "message": {"type": "string", "description": "Input message"}
   },
   "required": ["message"]
-}' style="width: 100%; padding: 0.75rem 1rem; background: #111; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 0.85rem; font-family: 'SF Mono', 'Fira Code', monospace; resize: vertical; line-height: 1.6;">{{ values.input_schema or '' }}</textarea>
+}' style="width: 100%; padding: 0.75rem 1rem; background: #ffffff; border: 1px solid #d1d5db; border-radius: 6px; color: #1f2937; font-size: 0.85rem; font-family: 'SF Mono', 'Fira Code', monospace; resize: vertical; line-height: 1.6;">{{ values.input_schema or '' }}</textarea>
         </div>
     </div>
 
     <div style="display: flex; gap: 1rem; align-items: center;">
-        <button type="submit" class="btn" style="padding: 0.85rem 2.5rem;">Submit Agent</button>
-        <a href="/dashboard" style="color: #888;">Cancel</a>
+        <button type="submit" class="btn" style="padding: 0.85rem 2.5rem;">Publish Server</button>
+        <a href="/dashboard" style="color: #6b7280;">Cancel</a>
     </div>
 </form>
 {% endblock %}
@@ -167,8 +205,8 @@ function toggleHosting() {
     const isExternal = document.querySelector('input[name="hosting_type"][value="external"]').checked;
     document.getElementById('section-hosted').style.display = isExternal ? 'none' : 'block';
     document.getElementById('section-external').style.display = isExternal ? 'block' : 'none';
-    document.getElementById('option-hosted').style.borderColor = isExternal ? '#333' : '#6ee7b7';
-    document.getElementById('option-external').style.borderColor = isExternal ? '#6ee7b7' : '#333';
+    document.getElementById('option-hosted').style.borderColor = isExternal ? '#d1d5db' : '#4f46e5';
+    document.getElementById('option-external').style.borderColor = isExternal ? '#4f46e5' : '#d1d5db';
 }
 // Initialize on load
 toggleHosting();
@@ -187,7 +225,7 @@ function addCredentialRow() {
             <label style="font-size: 0.8rem;">Value</label>
             <input type="password" name="cred_value" placeholder="sk-...">
         </div>
-        <button type="button" onclick="this.parentElement.remove()" style="background: none; border: 1px solid #333; color: #f87171; padding: 0.65rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; margin-bottom: 0;">Remove</button>
+        <button type="button" onclick="this.parentElement.remove()" style="background: none; border: 1px solid #d1d5db; color: #b91c1c; padding: 0.65rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; margin-bottom: 0;">Remove</button>
     `;
     list.appendChild(row);
 }

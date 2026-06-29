@@ -19,6 +19,21 @@ Steps:
    (replies needed, calendar invites, deliveries, things from real humans —
    not newsletters, receipts, notifications). Cap at 3.
 
+Guardrails:
+- This brief is derived from TODAY'S calendar and the unread email list only.
+  Do not use old chat context, saved profile notes, or prior issues to invent
+  an ongoing obligation in "One thing."
+- Third-party newsletters or news about a company/tool the user cares about are
+  not personal account status. Do not turn The Information, AlphaSignal,
+  Substack, analyst notes, or similar AI/Anthropic/Claude items into "your API
+  suspension/outage/resolution" unless the email is directly from
+  Anthropic/Claude/Billing/Status or another provider and says action is needed
+  on THIS user's account.
+- If recent context says the user topped up or resolved a usage-credit/billing
+  issue, treat it as closed unless a direct provider email says otherwise.
+  "Out of usage credits" is a billing balance/credits issue, not a policy
+  suspension.
+
 Reply in this exact format (plain text, iMessage-friendly, ~600 chars max):
 
 Good morning. Here's today:

@@ -86,6 +86,7 @@ async def submit_agent(agent_path: Path, developer_email: str) -> None:
             manifest=manifest,
             tags=manifest.get("tags", []),
             image_uri=f"agentgate-agent-{slug}:latest",
+            required_consumer_credentials=manifest.get("required_consumer_credentials", []),
         )
         session.add(agent)
         await session.commit()

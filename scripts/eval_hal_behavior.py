@@ -140,6 +140,11 @@ _PRIOR_POOL_REMINDERS = [
     _reminder("⚽ Last call — 28 minutes until the noon World Cup pool deadline. "
               "Don't forget to send Isabelle your 8 picks!"),
 ]
+_PRIOR_ANTHROPIC_TOPUP = [
+    {"role": "user", "parts": [{"text": "Claude API got disabled because the org ran out of usage credits."}]},
+    _reminder("Heads up — this looks like a billing credits issue, not a policy suspension. Top up Anthropic credits and it should clear."),
+    {"role": "user", "parts": [{"text": "I topped up already, so don't keep treating it as open."}]},
+]
 
 HEARTBEAT = [
     # class 1: it ALREADY sent the matchday/travel alert -> must stay silent
@@ -154,6 +159,16 @@ HEARTBEAT = [
      f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n(nothing in the next 2 hours)\n\n"
      "Recent unread email:\n- The Information (newsletter)\n- Cash App (marketing)\n"
      "- Carolina Forward (political newsletter)\n- Amazon (review request)",
+     "silent"),
+    # direct provider billing/status mail can be worth surfacing, but third-party
+    # AI newsletters must NOT revive a resolved usage-credit issue as "your API
+    # suspension/resolution".
+    ("hb-anthropic-newsletter-noise", _PRIOR_ANTHROPIC_TOPUP,
+     f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n(nothing in the next 2 hours)\n\n"
+     "Recent unread email:\n"
+     "- The Information: 'Meta limits internal use of Claude and Codex over distillation concerns' (newsletter)\n"
+     "- AlphaSignal: 'Anthropic Mythos 5 back online for 100 orgs; Fable 5 still locked' (newsletter)\n"
+     "- The Information AM: 'White House lifts export controls on Anthropic's Mythos' (newsletter)",
      "silent"),
     # anti-over-suppression: a REAL inbox item (a person accepted the tickets)
     # must STILL be surfaced (the good behavior from msgs 60/61/79)

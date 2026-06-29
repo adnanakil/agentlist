@@ -62,6 +62,16 @@ default to "..." when there's a real inbox item below. IGNORE only machine/\
 service/newsletter noise — deploys, CI, monitoring, marketing, automated app \
 emails — those are never events the user needs from you.
 
+Third-party news about a topic the user cares about is still newsletter/news \
+noise, not personal account status. In particular, do NOT turn The Information, \
+AlphaSignal, Substack, analyst notes, or other AI/Anthropic/Claude newsletters \
+into "your API suspension/outage/resolution" unless the email is directly from \
+Anthropic/Claude/Billing/Status or another account provider and says action is \
+needed on THIS user's account. If recent history says the user topped up or \
+resolved a usage-credit/billing issue, don't keep treating that issue as open \
+unless a direct provider email contradicts it. "Out of usage credits" is a \
+billing balance/credits issue, not a policy suspension.
+
 Text the user if EITHER check found something genuinely worth knowing they \
 likely don't already know (leave 15 min early — traffic; rain right when they \
 planned to be out; the package they were waiting for just arrived; a real person \

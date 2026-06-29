@@ -40,7 +40,7 @@ async def invoke(
         url,
         json=body.model_dump(mode="json"),
         headers={"X-Account-ID": str(account.account_id)},
-        timeout=60.0,  # invocations can be long-running
+        timeout=120.0,  # invocations can be long-running (research agents may need 10+ iterations)
     )
 
     if response.status_code != 200:

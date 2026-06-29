@@ -48,6 +48,13 @@ LEAGUES = {
     "mls": "soccer/usa.1",
     "ucl": "soccer/uefa.champions",
     "champions-league": "soccer/uefa.champions",
+    # International tournaments — ESPN keys them separately from club leagues, so
+    # a World Cup match (e.g. the 2026 tournament) won't show up under epl/etc.
+    "worldcup": "soccer/fifa.world",
+    "world-cup": "soccer/fifa.world",
+    "fifa-world-cup": "soccer/fifa.world",
+    "wc": "soccer/fifa.world",
+    "fifa": "soccer/fifa.world",
 }
 
 
@@ -61,7 +68,8 @@ def _abbr(c: dict) -> str:
 
 
 async def tool_sports_score(args: dict, ctx: ToolContext) -> str:
-    league = (args.get("league") or "nba").strip().lower()
+    # Normalize "world cup" -> "world-cup" etc. so multi-word leagues resolve.
+    league = (args.get("league") or "nba").strip().lower().replace(" ", "-")
     team = (args.get("team") or "").strip().lower()
     path = LEAGUES.get(league) or (league if "/" in league else None)
     if not path:

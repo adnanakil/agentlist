@@ -1,0 +1,19 @@
+name: instacart-list
+version: "0.1.0"
+description: "Create Instacart shopping lists from a list of grocery items. Returns a shareable URL where recipients can view and order the items directly on Instacart."
+runtime: python
+entrypoint: agent.py
+category: utilities
+tags: [instacart, grocery, shopping, food, list]
+price_per_call_cents: 2
+required_consumer_credentials: [INSTACART_API_KEY]
+input_schema:
+  type: object
+  properties:
+    title:
+      type: string
+      description: "Name for the shopping list (e.g. 'Weekly Groceries', 'Party Supplies')"
+    items:
+      type: string
+      description: "Comma-separated list of items with optional quantities (e.g. '2 gallons milk, 1 dozen eggs, sourdough bread, 3 avocados')"
+  required: [items]

@@ -21,8 +21,12 @@ from ag_common.models import (
 from ag_db.models import Agent, Category
 from ag_db.session import get_session
 
-from registry.services.embedding import generate_embedding
-from registry.services.matching import get_agent_by_id, get_agent_by_slug, search_agents
+from registry.services.matching import (
+    get_agent_by_id,
+    get_agent_by_slug,
+    list_active_agents,
+    search_agents,
+)
 from registry.services.validation import validate_manifest
 
 log = structlog.get_logger()
@@ -67,7 +71,6 @@ class UpdateAgentRequest(BaseModel):
 
 
 def _agent_to_summary(agent: Agent, score: float | None = None) -> AgentSummary:
-    """Convert an Agent ORM instance to an AgentSummary Pydantic model."""
     return AgentSummary(
         id=agent.id,
         slug=agent.slug,
@@ -76,6 +79,8 @@ def _agent_to_summary(agent: Agent, score: float | None = None) -> AgentSummary:
         category=agent.category.slug if agent.category else "",
         price_per_call_cents=agent.price_per_call_cents,
         tags=agent.tags or [],
+        input_schema=agent.input_schema or {},
+        required_consumer_credentials=agent.required_consumer_credentials or [],
         total_invocations=agent.total_invocations,
         success_rate=agent.success_rate,
         avg_latency_ms=agent.avg_latency_ms,
@@ -84,7 +89,6 @@ def _agent_to_summary(agent: Agent, score: float | None = None) -> AgentSummary:
 
 
 def _agent_to_detail(agent: Agent) -> AgentDetail:
-    """Convert an Agent ORM instance to an AgentDetail Pydantic model."""
     return AgentDetail(
         id=agent.id,
         slug=agent.slug,
@@ -99,12 +103,12 @@ def _agent_to_detail(agent: Agent) -> AgentDetail:
         version=agent.version,
         runtime=AgentRuntime(agent.runtime),
         input_schema=agent.input_schema or {},
+        required_consumer_credentials=agent.required_consumer_credentials or [],
         created_at=agent.created_at,
     )
 
 
 async def _resolve_category(session: AsyncSession, category_slug: str | None) -> UUID | None:
-    """Look up a category by slug and return its id, or None."""
     if not category_slug:
         return None
     result = await session.execute(
@@ -124,15 +128,9 @@ async def _resolve_category(session: AsyncSession, category_slug: str | None) ->
 @router.post("/internal/agents", response_model=AgentDetail, status_code=201)
 async def create_agent(
     body: CreateAgentRequest,
-    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> AgentDetail:
-    """Create a new agent in the registry.
-
-    Validates the manifest, generates a description embedding, resolves the
-    category, and persists the Agent row.
-    """
-    # Validate manifest
+    """Create a new agent in the registry."""
     manifest_errors = validate_manifest(body.manifest)
     if manifest_errors:
         raise ValidationError(
@@ -140,14 +138,8 @@ async def create_agent(
             details={"errors": manifest_errors},
         )
 
-    # Generate description embedding
-    openai_client = request.app.state.openai_client
-    embedding = await generate_embedding(body.description, openai_client)
-
-    # Resolve category
     category_id = await _resolve_category(session, body.category_slug)
 
-    # Create agent row
     agent = Agent(
         developer_id=body.developer_id,
         category_id=category_id,
@@ -160,7 +152,6 @@ async def create_agent(
         price_per_call_cents=body.price_per_call_cents,
         input_schema=body.input_schema,
         manifest=body.manifest,
-        description_embedding=embedding,
         tags=body.tags,
     )
 
@@ -177,7 +168,6 @@ async def get_agent(
     agent_id: UUID,
     session: AsyncSession = Depends(get_session),
 ) -> AgentDetail:
-    """Retrieve a single agent by its UUID."""
     agent = await get_agent_by_id(session, agent_id)
     if agent is None:
         raise NotFoundError(f"Agent '{agent_id}' not found")
@@ -188,21 +178,14 @@ async def get_agent(
 async def update_agent(
     agent_id: UUID,
     body: UpdateAgentRequest,
-    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> AgentDetail:
-    """Update an existing agent's fields.
-
-    Supports partial updates. If the description changes, a new embedding is
-    generated. If a new manifest is provided, it is validated before persisting.
-    """
     agent = await get_agent_by_id(session, agent_id)
     if agent is None:
         raise NotFoundError(f"Agent '{agent_id}' not found")
 
     update_data = body.model_dump(exclude_unset=True)
 
-    # Validate manifest if provided
     if "manifest" in update_data and update_data["manifest"] is not None:
         manifest_errors = validate_manifest(update_data["manifest"])
         if manifest_errors:
@@ -211,13 +194,6 @@ async def update_agent(
                 details={"errors": manifest_errors},
             )
 
-    # Re-generate embedding if description changed
-    if "description" in update_data and update_data["description"] is not None:
-        openai_client = request.app.state.openai_client
-        embedding = await generate_embedding(update_data["description"], openai_client)
-        agent.description_embedding = embedding
-
-    # Apply all provided fields
     for field, value in update_data.items():
         if value is not None and hasattr(agent, field):
             setattr(agent, field, value)
@@ -232,41 +208,34 @@ async def update_agent(
 @router.post("/internal/discover", response_model=DiscoverResponse)
 async def discover_agents(
     body: DiscoverRequest,
-    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> DiscoverResponse:
-    """Semantic search for agents.
-
-    Generates an embedding from the query, runs a composite-ranked search
-    against the agents table, and returns matching AgentSummary objects.
-    """
-    openai_client = request.app.state.openai_client
-    query_embedding = await generate_embedding(body.query, openai_client)
-
-    results = await search_agents(
-        session=session,
-        query_embedding=query_embedding,
-        category_slug=body.category,
-        max_price_cents=body.max_price_cents,
-        limit=body.limit,
-    )
+    """Keyword search for agents."""
+    if body.query.strip():
+        results = await search_agents(
+            session=session,
+            query=body.query,
+            category_slug=body.category,
+            max_price_cents=body.max_price_cents,
+            limit=body.limit,
+        )
+    else:
+        results = await list_active_agents(
+            session=session,
+            category_slug=body.category,
+            max_price_cents=body.max_price_cents,
+            limit=body.limit,
+        )
 
     agents = [
         _agent_to_summary(row["agent"], score=row["score"])
         for row in results
     ]
 
-    log.info(
-        "discover.search",
-        query=body.query,
-        category=body.category,
-        results=len(agents),
-    )
-
+    log.info("discover.search", query=body.query, category=body.category, results=len(agents))
     return DiscoverResponse(agents=agents, total=len(agents))
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
-    """Health check endpoint."""
     return HealthResponse(status="ok", service="registry", version="0.1.0")

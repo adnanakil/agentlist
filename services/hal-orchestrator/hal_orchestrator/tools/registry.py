@@ -93,7 +93,7 @@ async def execute_tool(
         return tool_stub(name)
 
     handlers = {
-        "current_time": lambda: tool_current_time(),
+        "current_time": lambda: tool_current_time(ctx),
         "web_search": lambda: tool_web_search(args, ctx),
         "web_fetch": lambda: tool_web_fetch(args, ctx),
         "get_weather": lambda: tool_weather(args, ctx),

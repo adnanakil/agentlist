@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ag_db.models import AgentCredential
+from ag_db.models import AgentCredential, ConsumerCredential
 
 log = structlog.get_logger()
 
@@ -80,6 +80,35 @@ async def get_agent_credentials(
             )
             # Skip credentials that cannot be decrypted rather than
             # aborting the entire invocation.
+            continue
+
+    return decrypted
+
+
+async def get_consumer_credentials(
+    session: AsyncSession,
+    account_id: UUID,
+    encryption_key: str,
+) -> dict[str, str]:
+    """Load and decrypt all credentials for a given consumer account.
+
+    Returns a dict with keys prefixed by ``CONSUMER_CRED_``.
+    """
+    stmt = select(ConsumerCredential).where(ConsumerCredential.account_id == account_id)
+    result = await session.execute(stmt)
+    credentials = result.scalars().all()
+
+    decrypted: dict[str, str] = {}
+    for cred in credentials:
+        try:
+            value = decrypt_credential(cred.encrypted_value, encryption_key)
+            decrypted[f"CONSUMER_CRED_{cred.service_name}"] = value
+        except ValueError:
+            log.error(
+                "consumer_credential.decrypt_failed",
+                account_id=str(account_id),
+                service_name=cred.service_name,
+            )
             continue
 
     return decrypted

@@ -1,0 +1,13 @@
+{
+  "name": "browser-agent",
+  "version": "0.1.0",
+  "description": "Browser agent — Playwright + Chromium for web content extraction",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "playwright": "^1.40.0"
+  }
+}

@@ -8,11 +8,60 @@
 {% endblock %}
 
 {% block content %}
-<div style="text-align: center; padding: 2rem 0;">
-    <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">Meet <span style="color: #6ee7b7;">HAL</span></h1>
-    <p style="font-size: 1.2rem; max-width: 500px; margin: 0 auto 2rem;">
-        Your AI assistant, right in iMessage. Research, reminders, groceries, reservations — just text.
+<div style="text-align: center; padding: 2rem 0; position: relative;">
+    <div style="position: absolute; top: -30px; left: 50%; transform: translateX(-50%); width: 250px; height: 250px; background: radial-gradient(circle, rgba(79,70,229,0.1) 0%, rgba(255,255,255,0) 70%); border-radius: 50%; z-index: -1;"></div>
+    <h1 style="font-size: 3.5rem; margin-bottom: 0.5rem; letter-spacing: -0.04em; font-weight: 800;">Meet <span style="background: linear-gradient(135deg, #111827 0%, #4f46e5 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">HAL</span></h1>
+    <p style="font-size: 1.25rem; max-width: 520px; margin: 0 auto 2rem; color: #4b5563; line-height: 1.6;">
+        HAL is your personal delegator right in iMessage. Text him a request, and he'll find the right specialist agents from our marketplace to get it done.
     </p>
+
+    <!-- Phone Mockup -->
+    <div style="max-width: 320px; margin: 0 auto 4rem; position: relative;">
+        <!-- Phone Frame -->
+        <div style="background: #000; padding: 12px; border-radius: 44px; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.15), 0 0 0 1px #222; position: relative; overflow: hidden; height: 580px;">
+            <!-- Screen Content -->
+            <div style="background: #fff; height: 100%; border-radius: 34px; overflow-y: auto; display: flex; flex-direction: column; padding: 20px 14px; position: relative;">
+                <!-- Mock Notch -->
+                <div style="position: sticky; top: -20px; left: 50%; transform: translateX(-50%); width: 120px; height: 30px; background: #000; border-bottom-left-radius: 18px; border-bottom-right-radius: 18px; z-index: 10; margin-top: -20px;"></div>
+                
+                <!-- Chat Header -->
+                <div style="text-align: center; margin-bottom: 24px; margin-top: 15px;">
+                    <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%); border-radius: 50%; margin: 0 auto 4px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 1.2rem;">H</div>
+                    <div style="font-size: 0.75rem; font-weight: 600; color: #111827;">HAL</div>
+                </div>
+
+                <!-- Messages -->
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <!-- User Message -->
+                    <div style="align-self: flex-end; max-width: 85%; background: #007aff; color: white; padding: 8px 14px; border-radius: 18px 18px 4px 18px; font-size: 0.85rem; line-height: 1.4;">
+                        Summarize my recent emails and schedule a meeting for 3 PM on my calendar.
+                    </div>
+                    
+                    <!-- HAL Bubbles -->
+                    <div style="align-self: flex-start; max-width: 85%; background: #e9e9eb; color: #111827; padding: 8px 14px; border-radius: 18px 18px 18px 4px; font-size: 0.85rem; line-height: 1.4;">
+                        On it. Searching for specialist agents...
+                    </div>
+
+                    <div style="align-self: flex-start; max-width: 85%; background: #e9e9eb; color: #111827; padding: 8px 14px; border-radius: 18px 18px 18px 4px; font-size: 0.85rem; line-height: 1.4; display: flex; align-items: center; gap: 6px;">
+                        <div style="width: 6px; height: 6px; background: #4f46e5; border-radius: 50%;"></div>
+                        <span>Found <strong style="font-weight: 600;">Email-Reader</strong> and <strong style="font-weight: 600;">GCal-Manager</strong>. Executing...</span>
+                    </div>
+
+                    <div style="align-self: flex-start; max-width: 85%; background: #e9e9eb; color: #111827; padding: 8px 14px; border-radius: 18px 18px 18px 4px; font-size: 0.85rem; line-height: 1.4;">
+                        Done! 3 new emails summarized. Meeting confirmed for 3:00 PM today. Anything else?
+                    </div>
+                </div>
+
+                <!-- Fake Input -->
+                <div style="margin-top: auto; padding-top: 15px; border-top: 1px solid #f2f2f2; display: flex; gap: 8px; align-items: center;">
+                    <div style="width: 24px; height: 24px; background: #e9e9eb; border-radius: 50%;"></div>
+                    <div style="flex: 1; height: 32px; background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 0 12px; font-size: 0.8rem; color: #9ca3af; display: flex; align-items: center;">iMessage</div>
+                </div>
+            </div>
+        </div>
+        <!-- Decorative Reflection -->
+        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 50%); border-radius: 44px; pointer-events: none; z-index: 20;"></div>
+    </div>
 </div>
 
 <div class="card" style="max-width: 440px; margin: 0 auto;">
@@ -33,27 +82,46 @@
         </button>
     </form>
 
-    <p style="margin-top: 1rem; text-align: center; font-size: 0.8rem; color: #666;">
+    <p style="margin-top: 1rem; text-align: center; font-size: 0.8rem; color: #9ca3af;">
         We'll send a verification code via SMS. Standard rates apply.
     </p>
 </div>
 
-<div style="max-width: 600px; margin: 3rem auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-    <div class="card" style="margin-bottom: 0;">
-        <h2 style="font-size: 1.1rem;">Research</h2>
-        <p style="font-size: 0.9rem; margin-bottom: 0;">Ask anything — HAL searches the web and gives you concise answers.</p>
-    </div>
-    <div class="card" style="margin-bottom: 0;">
-        <h2 style="font-size: 1.1rem;">Reminders</h2>
-        <p style="font-size: 0.9rem; margin-bottom: 0;">"Remind me to call the dentist at 3pm" — HAL texts you on time.</p>
-    </div>
-    <div class="card" style="margin-bottom: 0;">
-        <h2 style="font-size: 1.1rem;">Calendar</h2>
-        <p style="font-size: 0.9rem; margin-bottom: 0;">Connect Google Calendar — HAL manages events and checks your schedule.</p>
-    </div>
-    <div class="card" style="margin-bottom: 0;">
-        <h2 style="font-size: 1.1rem;">Browse</h2>
-        <p style="font-size: 0.9rem; margin-bottom: 0;">HAL can navigate the web for you — order groceries, book restaurants, and more.</p>
+<div style="max-width: 720px; margin: 4rem auto 0;">
+    <h2 style="text-align: center; font-size: 1.75rem; margin-bottom: 2rem; font-weight: 700; letter-spacing: -0.02em;">How HAL works</h2>
+    
+    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div class="card" style="margin-bottom: 0; padding: 1.5rem 2rem; display: flex; align-items: flex-start; gap: 1.25rem;">
+            <div style="width: 36px; height: 36px; background: #e0e7ff; color: #4f46e5; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; flex-shrink: 0; box-shadow: 0 4px 6px rgba(79,70,229,0.1);">1</div>
+            <div>
+                <h3 style="font-size: 1.2rem; color: #111827; margin-bottom: 0.25rem; font-weight: 700;">You send a request</h3>
+                <p style="font-size: 0.95rem; margin-bottom: 0; line-height: 1.5;">Text HAL anything. For example: <em>"Summarize my recent emails and schedule a meeting for 3 PM on my calendar."</em></p>
+            </div>
+        </div>
+        
+        <div class="card" style="margin-bottom: 0; padding: 1.5rem 2rem; display: flex; align-items: flex-start; gap: 1.25rem;">
+            <div style="width: 36px; height: 36px; background: #e0e7ff; color: #4f46e5; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; flex-shrink: 0; box-shadow: 0 4px 6px rgba(79,70,229,0.1);">2</div>
+            <div>
+                <h3 style="font-size: 1.2rem; color: #111827; margin-bottom: 0.25rem; font-weight: 700;">HAL discovers specialists</h3>
+                <p style="font-size: 0.95rem; margin-bottom: 0; line-height: 1.5;">He automatically searches the Dispatch marketplace to find the exact agents needed—like an <strong style="color: #4f46e5; font-weight: 600;">Email Reader</strong> and a <strong style="color: #4f46e5; font-weight: 600;">Calendar Manager</strong>.</p>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 0; padding: 1.5rem 2rem; display: flex; align-items: flex-start; gap: 1.25rem;">
+            <div style="width: 36px; height: 36px; background: #e0e7ff; color: #4f46e5; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; flex-shrink: 0; box-shadow: 0 4px 6px rgba(79,70,229,0.1);">3</div>
+            <div>
+                <h3 style="font-size: 1.2rem; color: #111827; margin-bottom: 0.25rem; font-weight: 700;">Agents execute in parallel</h3>
+                <p style="font-size: 0.95rem; margin-bottom: 0; line-height: 1.5;">HAL securely passes instructions to the specialist agents. They interact with your APIs, fetch data, and perform the actions on your behalf.</p>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 0; padding: 1.5rem 2rem; display: flex; align-items: flex-start; gap: 1.25rem;">
+            <div style="width: 36px; height: 36px; background: #e0e7ff; color: #4f46e5; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; flex-shrink: 0; box-shadow: 0 4px 6px rgba(79,70,229,0.1);">4</div>
+            <div>
+                <h3 style="font-size: 1.2rem; color: #111827; margin-bottom: 0.25rem; font-weight: 700;">You get the results</h3>
+                <p style="font-size: 0.95rem; margin-bottom: 0; line-height: 1.5;">HAL compiles the final responses and texts you back right in iMessage with the completed summary and meeting confirmation.</p>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

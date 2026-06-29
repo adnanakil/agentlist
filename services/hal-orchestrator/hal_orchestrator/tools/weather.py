@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import structlog
 
+from hal_orchestrator.prompts.system import resolve_tz
+from hal_orchestrator.services.profiles import get_profile
 from hal_orchestrator.tools.registry import ToolContext
 
 log = structlog.get_logger()
@@ -107,6 +109,11 @@ async def tool_weather(args: dict, ctx: ToolContext) -> str:
     except (TypeError, ValueError):
         days = 3
 
+    # Align the hourly/daily forecast buckets to the user's local time (1:1 only;
+    # a group has no single user, so fall back to the default tz).
+    profile = await get_profile(ctx.session, ctx.phone) if not ctx.is_group else None
+    tz = resolve_tz(profile)
+
     try:
         geo = await ctx.http_client.get(
             GEOCODE_URL, params={"name": location, "count": 1}, timeout=15
@@ -130,7 +137,7 @@ async def tool_weather(args: dict, ctx: ToolContext) -> str:
                 "hourly": "precipitation_probability,precipitation",
                 "temperature_unit": "fahrenheit",
                 "wind_speed_unit": "mph",
-                "timezone": "America/New_York",
+                "timezone": tz.key,
                 "forecast_days": days,
             },
             timeout=15,

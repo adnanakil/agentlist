@@ -50,6 +50,12 @@ class HalOrchestratorConfig(BaseConfig):
     # Anthropic key — set to run the main loop on a claude-* model (the call
     # layer routes any model id starting with "claude" through the Claude shim).
     anthropic_api_key: str = ""
+    # GLM (Z.ai) — set ANY task's model id to "glm-*" (e.g. GEMINI_MODEL or
+    # GEMINI_BACKGROUND_MODEL = glm-5.2) to route it through Z.ai's
+    # Anthropic-compatible endpoint via the GLM shim (services/glm_provider.py).
+    # Needs glm_api_key funded; the base URL rarely changes.
+    glm_api_key: str = ""
+    glm_base_url: str = "https://api.z.ai/api/anthropic"
     gemini_model: str = "gemini-3.5-flash"  # MAIN user-facing agent loop
     # Resilience: if the MAIN loop's model fails (Anthropic 529 Overloaded, a
     # depleted-credits error, timeouts), try these models in order before giving

@@ -1,0 +1,19 @@
+name: scholar
+version: "0.1.0"
+description: "Research any scientific, medical, or academic topic and get back cited findings from peer-reviewed sources. Searches the web for papers and articles from high-impact journals, then summarizes findings in plain English with full source citations."
+runtime: python
+entrypoint: agent.py
+category: research
+tags: [research, science, academic, papers, citations, medical]
+price_per_call_cents: 5
+required_consumer_credentials: [GOOGLE_API_KEY]
+input_schema:
+  type: object
+  properties:
+    query:
+      type: string
+      description: "The research question or topic to investigate (e.g. 'effects of intermittent fasting on longevity')"
+    max_sources:
+      type: integer
+      description: "Maximum number of sources to include (default: 5)"
+  required: [query]

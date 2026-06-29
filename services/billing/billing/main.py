@@ -55,6 +55,11 @@ def create_app() -> FastAPI:
     # Error handlers
     app.add_exception_handler(AgentGateError, agentgate_error_handler)
 
+    # Health check
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok", "service": "billing"}
+
     # Routers
     app.include_router(accounts_router)
     app.include_router(transactions_router)

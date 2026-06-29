@@ -1,0 +1,15 @@
+name: time-now
+version: "0.1.0"
+description: "Returns the current date and time in any timezone. Useful for testing external agent invocations."
+runtime: external
+entrypoint: agent.py
+category: utilities
+tags: [time, timezone, test, utility]
+price_per_call_cents: 1
+input_schema:
+  type: object
+  properties:
+    timezone:
+      type: string
+      description: "IANA timezone name (e.g. 'US/Eastern', 'Europe/London', 'Asia/Tokyo'). Defaults to UTC."
+  required: []

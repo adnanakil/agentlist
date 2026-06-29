@@ -11,8 +11,9 @@ from datetime import datetime, timedelta
 
 import structlog
 
-from hal_orchestrator.prompts.system import USER_TZ
+from hal_orchestrator.prompts.system import resolve_tz
 from hal_orchestrator.services import google as gsvc
+from hal_orchestrator.services.profiles import get_profile
 from hal_orchestrator.tools.registry import ToolContext
 
 log = structlog.get_logger()
@@ -92,7 +93,10 @@ async def tool_google_calendar(args: dict, ctx: ToolContext) -> str:
         return hint
 
     action = args.get("action", "list_events")
-    now = datetime.now(USER_TZ)
+    # 1:1 only here (groups already refused above) — use the user's own tz so the
+    # default calendar window is anchored to their local "now".
+    profile = await get_profile(ctx.session, ctx.phone)
+    now = datetime.now(resolve_tz(profile))
 
     if action in ("list_events", "search_events"):
         time_min = args.get("time_min") or _rfc3339(now)

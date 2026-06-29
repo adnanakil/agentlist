@@ -6,6 +6,8 @@ and returns the final text response.
 
 from __future__ import annotations
 
+import os
+import re
 from datetime import datetime
 
 import structlog
@@ -15,7 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.session import get_session
 
-from hal_orchestrator.prompts.system import SYSTEM_PROMPT, USER_TZ, build_user_context
+from hal_orchestrator.prompts.system import (
+    SYSTEM_PROMPT,
+    USER_TZ,
+    build_user_context,
+    resolve_tz,
+)
 from hal_orchestrator.state import get_http_client, get_settings
 from hal_orchestrator.prompts.tool_defs import MAIN_TOOLS
 from hal_orchestrator.services.conversation import (
@@ -25,7 +32,7 @@ from hal_orchestrator.services.conversation import (
 )
 from hal_orchestrator.services.gemini import call_gemini
 from hal_orchestrator.services.identity import is_group_id, normalize_handle
-from hal_orchestrator.services.profiles import get_profile
+from hal_orchestrator.services.profiles import get_profile, update_profile
 from hal_orchestrator.tools.registry import ToolContext, execute_tool
 
 log = structlog.get_logger()
@@ -37,6 +44,75 @@ def _is_quiet_sentinel(text: str) -> bool:
     empty outbound reply so the bridge sends nothing (it skips empty replies),
     instead of posting a literal '...' bubble in the group."""
     return text.strip().strip(".…·•- \t\n") == ""
+
+
+def _contains_quiet_sentinel(text: str) -> bool:
+    """For internal/heartbeat turns: True if the reply contains the ellipsis
+    silence sentinel as a STANDALONE element — leading ('… x'), a line that is
+    only dots/ellipsis, or a trailing bare '…' token. A chatty background model
+    (e.g. GLM) emits the '...' silence token but wraps it in explanation (before
+    it, after it, or on its own line: "... all newsletters", "nothing to
+    flag\\n\\n..."), which _is_quiet_sentinel (pure-sentinel only) misses, so the
+    whole ramble gets texted. A real proactive alert is a direct nudge with no
+    bare sentinel token. Inline ellipsis ('delayed at 9...') and '.NET update'
+    are NOT caught (the sentinel must be its own token)."""
+    s = text.strip()
+    if not s:
+        return False
+    if s[0] == "…" or s[:2] == "..":                 # leading sentinel: "… x" / ".. x"
+        return True
+    for line in s.splitlines():                       # a line that is ONLY dots/ellipsis
+        ls = line.strip()
+        if ls and not ls.strip(".… "):
+            return True
+    if not s.rsplit(None, 1)[-1].strip(".…"):          # trailing bare "…" token
+        return True
+    return False
+
+
+# How many times HAL may re-alert about substantively the SAME thing (within the
+# recent history window) before a heartbeat is muzzled. The 06-27 bug re-sent the
+# identical "leave by 3:30 for the 5pm match" ~24x; 06-28 sent ~7 World-Cup-pool
+# countdown reminders for one deadline. Cap lets a couple of escalating nudges
+# through, then goes quiet. Env-tunable; set very high to disable.
+HEARTBEAT_REPEAT_CAP = int(os.environ.get("HEARTBEAT_REPEAT_CAP", "2"))
+
+_STOP = frozenset(
+    "the a an to of for and or in on at is it you your i we be by with as that this "
+    "if so are was were will just got get up out now today day yet from has have had "
+    "not no but they them he she his her our about into over under than then".split()
+)
+
+
+def _alert_words(text: str) -> set[str]:
+    """Content words of an alert (lowercased, stopwords + pure-number tokens
+    dropped) for similarity. Dropping numbers makes a countdown collapse:
+    '1 hour left' and '28 min left' share the same content words."""
+    return {w for w in re.findall(r"[a-z]+", text.lower()) if w not in _STOP and len(w) > 1}
+
+
+def _is_repeat_alert(reply: str, history: list[dict], cap: int = HEARTBEAT_REPEAT_CAP,
+                     window: int = 30, thr: float = 0.5) -> bool:
+    """True if `reply` is substantively the (cap+1)-th time HAL has said this
+    among the last `window` model turns — i.e. it has already alerted ~cap times.
+    Jaccard over content words; >= thr counts as 'the same alert'. Two distinct
+    alerts that merely share a phrase stay under thr and both go out; a
+    countdown / re-nudge about one event piles up and gets muzzled past the cap.
+    Internal (heartbeat) turns only — never gates a real user reply."""
+    rw = _alert_words(reply)
+    if len(rw) < 5:
+        return False
+    similar = 0
+    for entry in reversed(history[-window:]):
+        if entry.get("role") != "model":
+            continue
+        prev = " ".join(p.get("text", "") for p in entry.get("parts", []) if p.get("text"))
+        pw = _alert_words(prev)
+        if pw and len(rw & pw) / len(rw | pw) >= thr:
+            similar += 1
+            if similar >= cap:
+                return True
+    return False
 
 
 # --------------------------------------------------------------------------- #
@@ -354,6 +430,9 @@ def build_message_router() -> APIRouter:
         # the sender's personal profile/memories — only their display name, so
         # nothing private can leak into a group reply.
         profile = await get_profile(session, silo)
+        # Resolve the user's own timezone (1:1 only — a group has no single tz)
+        # so the time block and message stamp read in their local time.
+        user_tz = resolve_tz(profile) if not is_group else USER_TZ
         sender_display = body.sender_name
         if is_group and sender_phone:
             sender_profile = await get_profile(session, sender_phone)
@@ -404,7 +483,7 @@ def build_message_router() -> APIRouter:
                         "groups they're in — usable context, but don't quote "
                         "other members)\n"
                         + "\n".join(
-                            f"- [{o.created_at.astimezone(USER_TZ):%b %-d}"
+                            f"- [{o.created_at.astimezone(user_tz):%b %-d}"
                             f"{', ' + o.group_name if o.group_name else ''}] {o.content}"
                             for o in obs
                         )
@@ -444,6 +523,19 @@ def build_message_router() -> APIRouter:
         # Load conversation history
         history = await load_conversation(session, silo)
 
+        # Onboarding stall nudge (1:1 only): if the user has sent a few messages
+        # and we still don't have their name, escalate — get the name in one line
+        # before diving in. Capped so a privacy-conscious user is never trapped in
+        # an endless greeting loop (after ~6 turns we stop nudging and just help).
+        if not is_group and not profile.get("onboarded") and not profile.get("name"):
+            prior_user_turns = sum(1 for t in history if t.get("role") == "user")
+            if 2 <= prior_user_turns < 6:
+                system_prompt += (
+                    "\n\n## Onboarding nudge\nYou still don't have this user's name "
+                    "after a few messages. Before diving into their request, warmly "
+                    "get their name in one line, then help."
+                )
+
         # Second echo guard: an inbound message that exactly repeats HAL's last
         # reply is the bridge re-ingesting our own send (mis-detected
         # is_from_me). Best-effort, 1:1-shaped; length floor avoids eating a
@@ -479,7 +571,7 @@ def build_message_router() -> APIRouter:
                     if hrs < 36
                     else f" · ~{round(hrs / 24)}d since the last message"
                 )
-        stamp = datetime.now(USER_TZ).strftime("%a %b %-d %-I:%M %p")
+        stamp = datetime.now(user_tz).strftime("%a %b %-d %-I:%M %p")
         user_parts: list[dict] = [{"text": f"[{stamp}{gap_note}] {user_text}"}]
         for img in body.images:
             user_parts.append(
@@ -747,6 +839,24 @@ def build_message_router() -> APIRouter:
         # real turn so HAL knows it stayed quiet.
         outbound_reply = "" if _is_quiet_sentinel(reply) else reply
 
+        # Heartbeat/internal turns: a chatty background model that LEADS with the
+        # "..." sentinel and then explains itself is still saying "nothing to
+        # flag" — suppress so it doesn't spam the user with non-alerts. Scoped to
+        # internal turns so watched-group "..." handling is unchanged.
+        if body.internal and outbound_reply and _contains_quiet_sentinel(reply):
+            log.info("message.heartbeat_sentinel_suppressed", silo=silo, reply=reply[:80])
+            outbound_reply = ""
+
+        # Anti-repeat: a heartbeat that re-alerts about something HAL already
+        # flagged ~HEARTBEAT_REPEAT_CAP times recently is muzzled (the 24x "leave
+        # by 3:30" / 7x pool-deadline spam). Scoped to internal turns so user
+        # replies are never gated; a couple of escalating nudges still get through.
+        if body.internal and outbound_reply and _is_repeat_alert(
+            reply, clean_history[:pre_turn_len]
+        ):
+            log.info("message.heartbeat_repeat_suppressed", silo=silo, reply=reply[:80])
+            outbound_reply = ""
+
         if body.internal:
             # Heartbeat turn. Silent → persist nothing (96 silent checks/day
             # would drown the real conversation and the nightly grader).
@@ -805,6 +915,15 @@ def build_message_router() -> APIRouter:
                 CAPTURE_MIN_TOOL_CALLS,
                 capture_trajectory,
             )
+
+            # Onboarding auto-complete backstop (1:1 only): once we have a name,
+            # mark the user onboarded even if the model forgot to flip it. Re-reads
+            # the row (the model may have saved the name during this turn).
+            # Idempotent — only writes when name present and not yet onboarded.
+            if not is_group and not body.internal:
+                fresh = await get_profile(session, silo)
+                if fresh.get("name") and not fresh.get("onboarded"):
+                    await update_profile(session, silo, onboarded=True)
 
             await archive_turn(session, silo, "user", user_text)
             if outbound_reply:

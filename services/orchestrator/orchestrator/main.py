@@ -40,8 +40,9 @@ from ag_common.models import (
 from ag_db.models import Agent, Invocation
 from ag_db.session import create_engine_and_session, get_session
 
-from orchestrator.runtime.docker_runtime import DockerRuntime
-from orchestrator.tasks.invoke import get_agent_credentials
+from orchestrator.runtime.external_runtime import ExternalRuntime
+from orchestrator.runtime.subprocess_runtime import SubprocessRuntime
+from orchestrator.tasks.invoke import get_agent_credentials, get_consumer_credentials
 
 # --------------------------------------------------------------------------- #
 # Logging
@@ -69,7 +70,8 @@ settings = OrchestratorConfig()
 # Shared objects
 # --------------------------------------------------------------------------- #
 
-runtime = DockerRuntime()
+subprocess_runtime = SubprocessRuntime()
+external_runtime = ExternalRuntime()
 http_client: httpx.AsyncClient | None = None
 
 
@@ -162,14 +164,16 @@ def _build_router() -> APIRouter:
             consumer_id=str(consumer_id),
         )
 
-        # 4. Place billing hold
-        hold_id = await _place_hold(
-            consumer_id=consumer_id,
-            amount_cents=agent.price_per_call_cents,
-            invocation_id=invocation.id,
-        )
-        invocation.hold_id = hold_id
-        await session.flush()
+        # 4. Place billing hold (skip for free agents)
+        hold_id: UUID | None = None
+        if agent.price_per_call_cents > 0:
+            hold_id = await _place_hold(
+                consumer_id=consumer_id,
+                amount_cents=agent.price_per_call_cents,
+                invocation_id=invocation.id,
+            )
+            invocation.hold_id = hold_id
+            await session.flush()
 
         # 5. Execute agent
         try:
@@ -181,14 +185,35 @@ def _build_router() -> APIRouter:
                 session, agent.id, settings.encryption_key
             )
 
-            result = await runtime.execute(
-                image_uri=agent.image_uri or f"agentgate/agent-{agent.slug}:latest",
-                input_data=body.input,
-                env_vars=credentials,
-                timeout_seconds=settings.agent_timeout_seconds,
-                memory_limit_mb=settings.agent_memory_limit_mb,
-                cpu_limit=settings.agent_cpu_limit,
+            # Decrypt consumer credentials (prefixed with CONSUMER_CRED_)
+            consumer_creds = await get_consumer_credentials(
+                session, consumer_id, settings.encryption_key
             )
+            credentials.update(consumer_creds)
+
+            if agent.endpoint_url:
+                # External agent — proxy to developer's endpoint
+                result = await external_runtime.execute(
+                    image_uri="",
+                    input_data=body.input,
+                    env_vars=credentials,
+                    timeout_seconds=settings.agent_timeout_seconds,
+                    memory_limit_mb=0,
+                    cpu_limit=0,
+                    endpoint_url=agent.endpoint_url,
+                )
+            else:
+                # Hosted agent — run locally
+                agent_code = (agent.manifest or {}).get("agent_code")
+                result = await subprocess_runtime.execute(
+                    image_uri=agent.image_uri or f"agentgate/agent-{agent.slug}:latest",
+                    input_data=body.input,
+                    env_vars=credentials,
+                    timeout_seconds=settings.agent_timeout_seconds,
+                    memory_limit_mb=settings.agent_memory_limit_mb,
+                    cpu_limit=settings.agent_cpu_limit,
+                    agent_code=agent_code,
+                )
         except Exception as exc:
             # Platform-level error (Docker unavailable, etc.)
             log.error(
@@ -201,7 +226,8 @@ def _build_router() -> APIRouter:
             invocation.error_message = f"Platform error: {exc}"
             invocation.completed_at = _utcnow()
             await session.commit()
-            await _release_hold(hold_id)
+            if hold_id:
+                await _release_hold(hold_id)
             raise AgentGateError(
                 message="Internal platform error during agent execution",
                 details={"invocation_id": str(invocation.id)},
@@ -215,7 +241,8 @@ def _build_router() -> APIRouter:
             invocation.error_message = "Agent execution timed out"
             invocation.completed_at = _utcnow()
             await session.commit()
-            await _release_hold(hold_id)
+            if hold_id:
+                await _release_hold(hold_id)
 
             log.warning(
                 "invoke.timeout",
@@ -236,7 +263,8 @@ def _build_router() -> APIRouter:
             invocation.error_message = result.error
             invocation.completed_at = _utcnow()
             await session.commit()
-            await _release_hold(hold_id)
+            if hold_id:
+                await _release_hold(hold_id)
 
             log.warning(
                 "invoke.failed",
@@ -258,7 +286,8 @@ def _build_router() -> APIRouter:
         invocation.completed_at = _utcnow()
         await session.commit()
 
-        await _settle_hold(hold_id, developer_account_id=agent.developer_id)
+        if hold_id:
+            await _settle_hold(hold_id, developer_account_id=agent.developer_id)
 
         log.info(
             "invoke.completed",
@@ -412,7 +441,7 @@ async def _place_hold(
         )
 
     data = resp.json()
-    return UUID(data["id"])
+    return UUID(data["hold_id"])
 
 
 async def _settle_hold(hold_id: UUID, developer_account_id: UUID) -> None:

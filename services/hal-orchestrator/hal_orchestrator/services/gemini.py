@@ -57,14 +57,23 @@ async def _dispatch_model(
     client, settings, history, tools, system, model,
     max_retries, max_output_tokens, thinking_level, *, is_primary: bool,
 ) -> dict | None:
-    """Run one request on one model: claude-* via the Anthropic shim, else the
-    native Gemini path. A non-primary model gets the primary's raw Claude blocks
-    stripped (they're model-specific)."""
+    """Run one request on one model: claude-* via the Anthropic shim, glm-* via
+    the Z.ai (Anthropic-compatible) shim, else the native Gemini path. A
+    non-primary model gets the primary's raw provider blocks stripped (they're
+    model-specific — a different model would mis-replay them)."""
     if model.startswith("claude"):
         from hal_orchestrator.services.claude_provider import call_claude
 
         hist = history if is_primary else _strip_claude_blocks(history)
         return await call_claude(
+            client, settings, hist, tools, system, model,
+            max_retries, max_output_tokens, thinking_level,
+        )
+    if model.startswith("glm"):
+        from hal_orchestrator.services.glm_provider import call_glm
+
+        hist = history if is_primary else _strip_claude_blocks(history)
+        return await call_glm(
             client, settings, hist, tools, system, model,
             max_retries, max_output_tokens, thinking_level,
         )

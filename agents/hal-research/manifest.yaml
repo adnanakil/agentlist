@@ -1,0 +1,21 @@
+name: hal-research
+version: "0.1.0"
+description: "Multi-step web research agent with Gemini tool-use loop. Searches DuckDuckGo, fetches pages, cross-references sources, and returns concise factual summaries."
+runtime: python
+entrypoint: agent.py
+category: research
+tags: [research, search, web, facts, news]
+price_per_call_cents: 0
+input_schema:
+  type: object
+  properties:
+    query:
+      type: string
+      description: "Research question or topic"
+    context:
+      type: string
+      description: "Additional context for the research"
+    max_sources:
+      type: integer
+      description: "Maximum number of sources to consult (default 5)"
+  required: [query]

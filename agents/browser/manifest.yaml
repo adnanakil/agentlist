@@ -1,0 +1,27 @@
+name: browser
+version: "0.1.0"
+description: "Browse the web with full Chromium. Extract content, transcripts, screenshots."
+runtime: nodejs
+entrypoint: server.js
+category: web
+tags: [browser, web, playwright, youtube, tiktok, transcript]
+price_per_call_cents: 10
+input_schema:
+  type: object
+  properties:
+    url:
+      type: string
+      description: "URL to navigate to"
+    action:
+      type: string
+      description: "extract, screenshot, click, type, evaluate, read, links"
+    selector:
+      type: string
+      description: "CSS selector (for click/type actions)"
+    text:
+      type: string
+      description: "Text to type (for type action)"
+    javascript:
+      type: string
+      description: "JS to run (for evaluate action)"
+  required: [url]

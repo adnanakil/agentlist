@@ -1,0 +1,33 @@
+name: zillow-research
+version: "0.1.0"
+description: "Search Zillow for listings matching your criteria, then get deep research on each — comparable sales, risk factors, and AI-powered valuation analysis. Supports searching by location/filters or analyzing a single listing URL directly."
+runtime: python
+entrypoint: server.py
+category: web
+tags: [zillow, real-estate, property, comps, valuation, housing]
+price_per_call_cents: 10
+input_schema:
+  type: object
+  properties:
+    location:
+      type: string
+      description: "City and state to search (e.g. 'Austin, TX')"
+    min_price:
+      type: integer
+      description: "Minimum listing price in dollars"
+    max_price:
+      type: integer
+      description: "Maximum listing price in dollars"
+    min_beds:
+      type: integer
+      description: "Minimum number of bedrooms"
+    home_type:
+      type: string
+      description: "Property type filter for broad city searches. One of: Houses, Apartments, Condos, Townhomes, Multi-family, Manufactured, LotsLand. Defaults to Houses."
+    listing_url:
+      type: string
+      description: "Direct Zillow listing URL — skip search and analyze this one listing"
+    snapshot_id:
+      type: string
+      description: "Resume a previously queued broad-city search. Pass the snapshot_id returned from a queued response."
+  required: []

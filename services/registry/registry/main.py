@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 import structlog
 import uvicorn
 from fastapi import FastAPI
-from openai import AsyncOpenAI
 
 from ag_common.config import RegistryConfig
 from ag_common.errors import AgentGateError, agentgate_error_handler
@@ -34,7 +33,6 @@ log = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Initialize DB engine and OpenAI client on startup; tear down on shutdown."""
     config = RegistryConfig()
 
     engine, session_factory = create_engine_and_session(
@@ -42,9 +40,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         echo=config.environment == "development",
     )
     app.state.session_factory = session_factory
-
-    openai_client = AsyncOpenAI(api_key=config.openai_api_key)
-    app.state.openai_client = openai_client
 
     log.info(
         "registry.startup",
@@ -55,23 +50,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     await engine.dispose()
-    await openai_client.close()
     log.info("registry.shutdown")
 
 
 def create_app() -> FastAPI:
-    """Build and return the Registry FastAPI application."""
     app = FastAPI(
         title="AgentGate Registry",
-        description="Internal agent catalog and semantic search service",
+        description="Internal agent catalog and keyword search service",
         version="0.1.0",
         lifespan=lifespan,
     )
 
-    # Error handlers
     app.add_exception_handler(AgentGateError, agentgate_error_handler)
-
-    # Routes
     app.include_router(agents_router)
 
     return app

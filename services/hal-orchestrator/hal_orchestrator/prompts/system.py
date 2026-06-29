@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-# User's home timezone. NYC for now; could move to the profile later.
+# Default timezone (fallback when a user's own tz is unknown). Per-user tz now
+# lives in the profile (extra_data["timezone"]); resolve_tz reads it.
 USER_TZ = ZoneInfo("America/New_York")
 
 LOCALE_BLOCK = (
@@ -14,9 +15,21 @@ LOCALE_BLOCK = (
 )
 
 
-def _now_block() -> str:
+def resolve_tz(profile: dict | None) -> ZoneInfo:
+    """The user's IANA timezone from their profile, or USER_TZ as the fallback."""
+    if profile:
+        name = profile.get("timezone")
+        if name:
+            try:
+                return ZoneInfo(str(name))
+            except Exception:
+                pass
+    return USER_TZ
+
+
+def _now_block(tz: ZoneInfo = USER_TZ) -> str:
     """Tiny always-on time block with derived flags (cheap, no tools/DB)."""
-    now = datetime.now(USER_TZ)
+    now = datetime.now(tz)
     now_str = now.strftime("%A, %B %-d, %Y at %-I:%M %p %Z")
 
     h = now.hour
@@ -41,7 +54,7 @@ def _now_block() -> str:
     holiday_str = f" Today is {holiday} (US holiday)." if holiday else ""
 
     return (
-        f"\n\n## Right Now\nIt is {now_str} in the user's local time (America/New_York) — "
+        f"\n\n## Right Now\nIt is {now_str} in the user's local time ({tz.key}) — "
         f"{', '.join(flags)}.{holiday_str}\nTrust THIS as the present moment — it OVERRIDES "
         f"any time-of-day implied by earlier messages in the conversation (those may be from "
         f"hours or days ago). Each user message is prefixed with its own local send time in "
@@ -399,6 +412,93 @@ message so you can help proactively. That makes restraint critical:
   "ALWAYS TL;DR Shared Links" rule. That overrides the silence default here."""
 
 
+def _onboarding_block(profile: dict | None) -> str | None:
+    """Step-aware onboarding guidance for a 1:1 user — or None when there's
+    nothing to do (already onboarded, or no profile yet).
+
+    The "step" is DERIVED from which fields are populated; there is no stored
+    step column. This is the conversational half of a belt-and-braces flow: a
+    code backstop in the message route flips `onboarded` once a name exists, so
+    here we just tell the model the ONE next thing to ask and never to re-ask
+    what's captured. Name is the only hard requirement; timezone/location are
+    best-effort and Google is optional.
+    """
+    if not profile or profile.get("onboarded"):
+        return None
+
+    have_name = bool(profile.get("name"))
+    have_tz = bool(profile.get("timezone"))
+    have_home = bool(profile.get("home_location"))
+    have_work = bool(profile.get("work_location"))
+    google_done = bool(profile.get("google_connected"))
+    google_offered = bool(profile.get("google_offered"))
+
+    captured: list[str] = []
+    if have_name:
+        captured.append(f"name={profile['name']}")
+    if have_tz:
+        captured.append(f"timezone={profile['timezone']}")
+    if have_home:
+        captured.append(f"home={profile['home_location']}")
+    if have_work:
+        captured.append(f"work={profile['work_location']}")
+    captured_line = (
+        "Already captured (NEVER ask for these again): " + ", ".join(captured) + ".\n"
+        if captured
+        else ""
+    )
+
+    # First unmet step wins — ONE ask per turn.
+    if not have_name:
+        step = (
+            "This is your FIRST contact with this user. In ONE short, warm line, "
+            "say who you are (a proactive assistant they can text for planning, "
+            "reminders, research and more — not a feature dump), then ask their "
+            "name. When they give it, save it with contacts(action=update, name=...)."
+        )
+    elif not have_tz:
+        step = (
+            "Ask what city or timezone they're in so your times and reminders are "
+            "right. Infer the IANA zone from a city/state (e.g. 'I'm in LA' -> "
+            "America/Los_Angeles) and save it with "
+            "contacts(action=update, timezone='America/Los_Angeles')."
+        )
+    elif not have_home:
+        step = (
+            "Ask where they live (neighborhood/city) so you can help with weather, "
+            "day plans and travel. Save it with "
+            "contacts(action=update, home_location=...)."
+        )
+    elif not have_work:
+        step = (
+            "Ask where they work or spend their days (or 'work from home'). Save it "
+            "with contacts(action=update, work_location=...)."
+        )
+    elif not google_done and not google_offered:
+        step = (
+            "The basics are captured. OPTIONALLY offer to connect their Google "
+            "(read-only calendar + email) so you can see their real schedule: call "
+            "google_auth(action=start), send the returned link on its own line, and "
+            "say it's optional and skippable. Then mark it offered so you don't ask "
+            "again with contacts(action=update, google_offered=true)."
+        )
+    else:
+        step = (
+            "Onboarding is complete. Mark it done with "
+            "contacts(action=update, onboarded=true) and just help them with "
+            "whatever they need — do NOT keep onboarding."
+        )
+
+    return (
+        "\n\n## Onboarding (in progress)\n"
+        "You're getting to know a new user. Keep it light and conversational — ask "
+        "for ONE thing at a time, woven into normal help, never as a form or "
+        "checklist. Save each fact the moment they give it. If they decline "
+        "something, don't push — note it and move on (only their name really "
+        "matters).\n" + captured_line + "Next: " + step
+    )
+
+
 def build_user_context(
     silo: str,
     profile: dict | None = None,
@@ -414,7 +514,9 @@ def build_user_context(
     group's shared notes plus the sender's display name — no personal
     profile/memory data, so nothing private can leak into a group reply.
     """
-    parts: list[str] = [_now_block(), LOCALE_BLOCK]
+    # Groups have no single user timezone — keep the default there.
+    tz = resolve_tz(profile) if not is_group else USER_TZ
+    parts: list[str] = [_now_block(tz), LOCALE_BLOCK]
 
     if is_group:
         parts.append(f"\n## Group Chat: {group_name or silo}")
@@ -445,11 +547,9 @@ def build_user_context(
                 "\n## Saved Profile (your living notes on this user — "
                 "update with the profile tool)\n" + profile["notes"]
             )
-        if not profile.get("onboarded"):
-            parts.append(
-                "This user hasn't been onboarded yet. "
-                "Introduce yourself briefly and ask their name."
-            )
+        onboarding = _onboarding_block(profile)
+        if onboarding:
+            parts.append(onboarding)
 
     parts.append(
         "\nThis is a PRIVATE 1:1 conversation. What you learn here (and store "

@@ -1,0 +1,30 @@
+name: place-finder
+version: "0.1.0"
+description: "Find restaurants, bars, cafes, and other places nearby using Google Places API. Returns ratings, reviews, price levels, hours, open/closed status, and Google Maps links. Supports text search and location-based nearby search."
+runtime: python
+entrypoint: agent.py
+category: web
+tags: [places, restaurants, bars, maps, location, google, nearby]
+price_per_call_cents: 3
+input_schema:
+  type: object
+  properties:
+    query:
+      type: string
+      description: "Search query (e.g. 'best sushi in Chelsea NYC') or comma-separated place types for nearby mode (e.g. 'restaurant,bar')"
+    mode:
+      type: string
+      description: "Search mode: 'text' (default) for keyword search, 'nearby' for type-based radius search"
+    latitude:
+      type: number
+      description: "Latitude for location bias or center point (default: 40.7454 — Manhattan)"
+    longitude:
+      type: number
+      description: "Longitude for location bias or center point (default: -74.0002 — Manhattan)"
+    radius:
+      type: number
+      description: "Search radius in meters (default: 1000)"
+    max_results:
+      type: integer
+      description: "Maximum number of results (default: 10, max: 20)"
+  required: [query]

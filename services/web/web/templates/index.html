@@ -1,288 +1,656 @@
 {% extends "base.html" %}
 
-{% block title %}Dispatch — Agent Marketplace{% endblock %}
+{% block title %}AgentGate — MCP Marketplace{% endblock %}
 
 {% block container_class %}wide{% endblock %}
 
 {% block content %}
-<div style="text-align: center; padding: 2rem 0 1.5rem;">
-    <h1 style="font-size: 2.5rem; line-height: 1.2;">Add this to your CLAUDE.md</h1>
-    <p style="font-size: 1.1rem; max-width: 640px; margin: 0.75rem auto 1.5rem;">
-        To give your agent access to all the subtask agents on Dispatch, copy this snippet into your project's <code>CLAUDE.md</code> file or your agent's system prompt.
-    </p>
-    <a href="/signup" class="btn" style="padding: 0.75rem 2rem; font-size: 1rem;">Sign up to get your API key</a>
+<style>
+    .hero {
+        padding: 4.5rem 0 3.5rem;
+        max-width: 560px;
+    }
+
+    .hero h1 {
+        font-size: clamp(2.5rem, 5vw, 3.5rem);
+        line-height: 1.05;
+        letter-spacing: -0.045em;
+        margin-bottom: 1rem;
+    }
+
+    .hero p {
+        font-size: 1.05rem;
+        line-height: 1.6;
+        color: var(--text-secondary);
+        margin-bottom: 2rem;
+    }
+
+    .hero-actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 3rem;
+    }
+
+    .hero-stats {
+        display: flex;
+        gap: 2.5rem;
+    }
+
+    .hero-stat-value {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: var(--text);
+        letter-spacing: -0.03em;
+    }
+
+    .hero-stat-label {
+        font-size: 0.7rem;
+        color: var(--text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        font-weight: 600;
+    }
+
+    /* ===== SPLIT CARDS ===== */
+    .split-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        margin-bottom: 4rem;
+    }
+
+    .feature-card {
+        display: block;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.75rem;
+        transition: border-color 0.15s;
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .feature-card:hover {
+        border-color: var(--border-hover);
+        color: inherit;
+    }
+
+    .feature-card h2 {
+        font-size: 1.15rem;
+        margin-bottom: 0.35rem;
+    }
+
+    .feature-card p {
+        font-size: 0.875rem;
+        margin-bottom: 1rem;
+        line-height: 1.6;
+    }
+
+    .feature-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .tag {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.68rem;
+        padding: 0.15rem 0.45rem;
+        border-radius: 4px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+    }
+
+    /* ===== INTEGRATE ===== */
+    .integrate-section {
+        padding-bottom: 4rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 4rem;
+    }
+
+    .integrate-header {
+        margin-bottom: 1.5rem;
+    }
+
+    .integrate-header h2 { margin-bottom: 0.2rem; }
+    .integrate-header p { margin-bottom: 0; }
+
+    .integrate-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
+
+    .integrate-option {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .integrate-option-header {
+        padding: 1rem 1.25rem 0.75rem;
+    }
+
+    .integrate-option-header .label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.68rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-tertiary);
+        margin-bottom: 0.35rem;
+    }
+
+    .integrate-option-header h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 0.2rem;
+    }
+
+    .integrate-option-header p {
+        font-size: 0.82rem;
+        margin-bottom: 0;
+    }
+
+    .steps-list {
+        padding: 0.75rem 1.25rem 1rem;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .steps-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6rem;
+        font-size: 0.82rem;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+
+    .step-num {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.68rem;
+        font-weight: 600;
+        color: var(--text-tertiary);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+
+    .terminal {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .terminal-bar {
+        display: flex;
+        align-items: center;
+        padding: 0.6rem 1rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .terminal-dots {
+        display: flex;
+        gap: 0.35rem;
+    }
+
+    .terminal-dots span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--border);
+    }
+
+    .terminal-title {
+        flex: 1;
+        text-align: center;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        color: var(--text-tertiary);
+    }
+
+    .terminal-body {
+        padding: 1.15rem 1.25rem;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.78rem;
+        line-height: 1.7;
+        color: var(--text-secondary);
+        white-space: pre-wrap;
+        word-break: break-word;
+        position: relative;
+    }
+
+    .terminal-body .h { color: var(--text); font-weight: 600; }
+    .terminal-body .dim { color: var(--text-tertiary); }
+
+    /* ===== AGENTS ===== */
+    .agents-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 0.6rem;
+        margin-bottom: 2.5rem;
+    }
+
+    .agent-card {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.1rem;
+        transition: border-color 0.15s;
+    }
+
+    .agent-card:hover { border-color: var(--border-hover); }
+
+    .agent-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.4rem;
+    }
+
+    .agent-name {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text);
+    }
+
+    .agent-price {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        color: var(--text-tertiary);
+    }
+
+    .agent-desc {
+        font-size: 0.82rem;
+        color: var(--text-secondary);
+        line-height: 1.5;
+        margin-bottom: 0.6rem;
+    }
+
+    .agent-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+    }
+
+    .agent-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 0.9rem;
+    }
+
+    .category-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-tertiary);
+        margin-bottom: 0.75rem;
+        margin-top: 2rem;
+    }
+
+    .cta-section {
+        text-align: center;
+        padding: 2.5rem 0 1rem;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 640px) {
+        .split-grid { grid-template-columns: 1fr; }
+        .integrate-options { grid-template-columns: 1fr; }
+        .hero h1 { font-size: 2.25rem; }
+        .hero-stats { gap: 1.5rem; }
+        .hero-actions { flex-direction: column; }
+        .agents-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+<!-- ===== HERO ===== -->
+<div class="hero">
+    <h1>The MCP marketplace</h1>
+    <p>Subscribe to hosted MCP servers for Claude, Cursor, and Claude Code through one endpoint, one key, and one bill.</p>
+    <div class="hero-actions">
+        <a href="/signup" class="btn">Get started</a>
+    </div>
+    <div class="hero-stats">
+        <div>
+            <div class="hero-stat-value">{{ agent_count }}</div>
+            <div class="hero-stat-label">MCP servers</div>
+        </div>
+        <div>
+            <div class="hero-stat-value">6</div>
+            <div class="hero-stat-label">Categories</div>
+        </div>
+        <div>
+            <div class="hero-stat-value">1</div>
+            <div class="hero-stat-label">API key</div>
+        </div>
+    </div>
 </div>
 
-<div style="position: relative; margin-bottom: 3rem;">
-    <div class="snippet-box" id="claude-snippet" style="font-size: 0.82rem; line-height: 1.7; max-height: none; text-align: left;"><span style="color:#6ee7b7;font-weight:700;"># Dispatch &mdash; Agent Marketplace</span>
+<!-- ===== SPLIT CARDS ===== -->
+<div class="split-grid">
+    <a href="/signup" class="feature-card">
+        <h2>Use MCP servers</h2>
+        <p>Connect once and expose every subscribed server as namespaced tools in your MCP client.</p>
+        <div class="feature-tags">
+            <span class="tag">one API key</span>
+            <span class="tag">per-call or subscription</span>
+            <span class="tag">tool aggregation</span>
+        </div>
+        <span class="btn" style="font-size: 0.8rem; padding: 0.5rem 1.1rem;">Get API key</span>
+    </a>
+    <a href="/signup" class="feature-card">
+        <h2>Sell an MCP server</h2>
+        <p>Publish a Python or external MCP server. We handle hosting, billing, discovery, and credential storage.</p>
+        <div class="feature-tags">
+            <span class="tag">four pricing models</span>
+            <span class="tag">hosted or self-hosted</span>
+            <span class="tag">instant payouts</span>
+        </div>
+        <span class="btn btn-outline" style="font-size: 0.8rem; padding: 0.5rem 1.1rem;">Start selling</span>
+    </a>
+</div>
 
-You have access to Dispatch, a hosted agent marketplace.
-Use it to invoke pre-built agents via a single API call.
+<!-- ===== INTEGRATE ===== -->
+<div class="integrate-section">
+    <div class="integrate-header">
+        <h2>Add to Claude Code</h2>
+        <p>Give Claude access to every agent on Dispatch. Two ways to integrate.</p>
+    </div>
 
-<span style="color:#6ee7b7;font-weight:700;">## API Access</span>
+    <div class="integrate-options">
+
+        <!-- Option 1: Plugin -->
+        <div class="integrate-option">
+            <div class="integrate-option-header">
+                <div class="label">Recommended</div>
+                <h3>Install the plugin</h3>
+                <p>One command. Your API key is stored securely in the system keychain.</p>
+            </div>
+            <ul class="steps-list">
+                <li>
+                    <span class="step-num">1</span>
+                    <span>Add the marketplace</span>
+                </li>
+            </ul>
+            <div class="terminal" style="margin: 0 0.75rem; border-radius: 8px;">
+                <div class="terminal-bar" style="padding: 0.45rem 0.75rem;">
+                    <div class="terminal-dots"><span></span><span></span><span></span></div>
+                    <div class="terminal-title">Claude Code</div>
+                    <button class="copy-btn" onclick="copyText('/plugin marketplace add dispatch/agentlist')" style="position: static; font-size: 0.7rem; padding: 0.2rem 0.5rem;">Copy</button>
+                </div>
+                <div class="terminal-body" style="padding: 0.75rem; font-size: 0.76rem; line-height: 1.5;"><span class="h">/plugin marketplace add dispatch/agentlist</span></div>
+            </div>
+            <ul class="steps-list" style="padding-top: 0.5rem;">
+                <li>
+                    <span class="step-num">2</span>
+                    <span>Install the Dispatch plugin</span>
+                </li>
+            </ul>
+            <div class="terminal" style="margin: 0 0.75rem 1rem; border-radius: 8px;">
+                <div class="terminal-bar" style="padding: 0.45rem 0.75rem;">
+                    <div class="terminal-dots"><span></span><span></span><span></span></div>
+                    <div class="terminal-title">Claude Code</div>
+                    <button class="copy-btn" onclick="copyText('/plugin install dispatch@dispatch-marketplace')" style="position: static; font-size: 0.7rem; padding: 0.2rem 0.5rem;">Copy</button>
+                </div>
+                <div class="terminal-body" style="padding: 0.75rem; font-size: 0.76rem; line-height: 1.5;"><span class="h">/plugin install dispatch@dispatch-marketplace</span></div>
+            </div>
+        </div>
+
+        <!-- Option 2: CLAUDE.md -->
+        <div class="integrate-option">
+            <div class="integrate-option-header">
+                <div class="label">Manual</div>
+                <h3>Add to CLAUDE.md</h3>
+                <p>Paste this snippet into your project's CLAUDE.md file.</p>
+            </div>
+            <div class="terminal" style="margin: 0 0.75rem 1rem; border-radius: 8px; flex: 1;">
+                <div class="terminal-bar" style="padding: 0.45rem 0.75rem;">
+                    <div class="terminal-dots"><span></span><span></span><span></span></div>
+                    <div class="terminal-title">CLAUDE.md</div>
+                    <button class="copy-btn" onclick="copySnippet()" style="position: static; font-size: 0.7rem; padding: 0.2rem 0.5rem;">Copy</button>
+                </div>
+                <div class="terminal-body" id="claude-snippet" style="font-size: 0.72rem; line-height: 1.6; max-height: 340px; overflow-y: auto;"><span class="h"># Dispatch &mdash; Agent Marketplace</span>
+
+You have access to Dispatch, a hosted agent
+marketplace. Use it to invoke pre-built agents
+via a single API call.
+
+<span class="h">## API Access</span>
 
 - **Gateway URL:** <code>{{ gateway_url }}</code>
 - **API Key:** <code>YOUR_API_KEY</code>
 
-<span style="color:#6ee7b7;font-weight:700;">## Endpoints</span>
+<span class="h">## Endpoints</span>
 
-<span style="color:#888;"># Check your balance</span>
+<span class="dim"># Check your balance</span>
 curl -H "Authorization: Bearer YOUR_API_KEY" \
   {{ gateway_url }}/v1/balance
 
-<span style="color:#888;"># Discover agents by keyword</span>
-curl -X POST -H "Authorization: Bearer YOUR_API_KEY" \
+<span class="dim"># Discover agents by keyword</span>
+curl -X POST \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"query": "summarize"}' \
   {{ gateway_url }}/v1/discover
 
-<span style="color:#888;"># Invoke an agent</span>
-curl -X POST -H "Authorization: Bearer YOUR_API_KEY" \
+<span class="dim"># Invoke an agent</span>
+curl -X POST \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"agent_slug":"echo","input":{"message":"hello"}}' \
-  {{ gateway_url }}/v1/invoke
+  {{ gateway_url }}/v1/invoke</div>
+            </div>
+        </div>
 
-<span style="color:#6ee7b7;font-weight:700;">## Notes</span>
-- Agents are billed per invocation (prepaid USD credits).
-- Use <code>/v1/discover</code> to search for agents by description.
-- Use <code>/v1/balance</code> to check remaining credits.
-        <button class="copy-btn" onclick="copySnippet()">Copy</button>
     </div>
 </div>
 
+<!-- ===== FEATURED AGENTS ===== -->
 <div id="agents"></div>
-<h2 style="margin-bottom: 0.25rem;">Featured Agents</h2>
-<p style="margin-bottom: 2rem;">Powerful integrations with real-world services, ready to invoke.</p>
+<h2 style="margin-bottom: 0.2rem;">Featured MCP Servers</h2>
+<p style="margin-bottom: 1.75rem;">Powerful integrations with real-world services, ready for tool calls.</p>
 
-<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 1rem; margin-bottom: 3rem;">
+<div class="agents-grid">
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">zillow-research</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">10c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">zillow-research</span>
+            <span class="agent-price">10c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Search Zillow listings, pull comps, tax &amp; price history, and get AI-powered valuation analysis.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">real-estate</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">zillow</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">comps</span>
+        <p class="agent-desc">Search Zillow listings, pull comps, tax &amp; price history, and get AI-powered valuation analysis.</p>
+        <div class="agent-tags">
+            <span class="tag">real-estate</span>
+            <span class="tag">zillow</span>
+            <span class="tag">comps</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">instacart</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">5c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">instacart</span>
+            <span class="agent-price">5c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Build grocery lists, find recipes, and get real-time product availability and pricing from Instacart.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">grocery</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">instacart</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">recipes</span>
+        <p class="agent-desc">Build grocery lists, find recipes, and get real-time product availability and pricing from Instacart.</p>
+        <div class="agent-tags">
+            <span class="tag">grocery</span>
+            <span class="tag">instacart</span>
+            <span class="tag">recipes</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 21V7"/><path d="M16 21V13"/><path d="M12 21V11"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">amazon-research</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">8c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">amazon-research</span>
+            <span class="agent-price">8c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Search Amazon products, compare prices, analyze reviews, and track price history across categories.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">amazon</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">shopping</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">price-tracking</span>
+        <p class="agent-desc">Search Amazon products, compare prices, analyze reviews, and track price history across categories.</p>
+        <div class="agent-tags">
+            <span class="tag">amazon</span>
+            <span class="tag">shopping</span>
+            <span class="tag">price-tracking</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">arxiv-research</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">5c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">arxiv-research</span>
+            <span class="agent-price">5c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Search arXiv papers by topic, get AI summaries of findings, extract key results, and find related work.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">arxiv</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">research</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">papers</span>
+        <p class="agent-desc">Search arXiv papers by topic, get AI summaries of findings, extract key results, and find related work.</p>
+        <div class="agent-tags">
+            <span class="tag">arxiv</span>
+            <span class="tag">research</span>
+            <span class="tag">papers</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">medical-codes</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">3c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">medical-codes</span>
+            <span class="agent-price">3c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Look up ICD-10 diagnosis codes, CPT procedure codes, and get billing guidance with modifier suggestions.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">healthcare</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">ICD-10</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">billing</span>
+        <p class="agent-desc">Look up ICD-10 diagnosis codes, CPT procedure codes, and get billing guidance with modifier suggestions.</p>
+        <div class="agent-tags">
+            <span class="tag">healthcare</span>
+            <span class="tag">ICD-10</span>
+            <span class="tag">billing</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">google-workspace</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">5c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">google-workspace</span>
+            <span class="agent-price">5c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Create and edit Google Docs, Sheets, and Slides. Read calendar events and manage Gmail drafts.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">google</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">docs</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">productivity</span>
+        <p class="agent-desc">Create and edit Google Docs, Sheets, and Slides. Read calendar events and manage Gmail drafts.</p>
+        <div class="agent-tags">
+            <span class="tag">google</span>
+            <span class="tag">docs</span>
+            <span class="tag">productivity</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">linkedin-research</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">10c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">linkedin-research</span>
+            <span class="agent-price">10c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Research companies and people on LinkedIn. Pull employee counts, funding, job posts, and org structure.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">linkedin</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">company-intel</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">people</span>
+        <p class="agent-desc">Research companies and people on LinkedIn. Pull employee counts, funding, job posts, and org structure.</p>
+        <div class="agent-tags">
+            <span class="tag">linkedin</span>
+            <span class="tag">company-intel</span>
+            <span class="tag">people</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">flight-search</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">8c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">flight-search</span>
+            <span class="agent-price">8c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Search flights across airlines, compare fares, find layover options, and track price drops in real time.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">travel</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">flights</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">price-alerts</span>
+        <p class="agent-desc">Search flights across airlines, compare fares, find layover options, and track price drops in real time.</p>
+        <div class="agent-tags">
+            <span class="tag">travel</span>
+            <span class="tag">flights</span>
+            <span class="tag">price-alerts</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">sec-filings</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">10c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">sec-filings</span>
+            <span class="agent-price">10c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Search SEC EDGAR filings, extract financials from 10-K/10-Q reports, and summarize risk factors.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">finance</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">SEC</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">10-K</span>
+        <p class="agent-desc">Search SEC EDGAR filings, extract financials from 10-K/10-Q reports, and summarize risk factors.</p>
+        <div class="agent-tags">
+            <span class="tag">finance</span>
+            <span class="tag">SEC</span>
+            <span class="tag">10-K</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="14" y1="4" x2="10" y2="20"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">github-analyzer</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">5c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">github-analyzer</span>
+            <span class="agent-price">5c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Analyze GitHub repos, audit dependencies for vulnerabilities, review PRs, and summarize changelogs.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">github</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">code-review</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">security</span>
+        <p class="agent-desc">Analyze GitHub repos, audit dependencies for vulnerabilities, review PRs, and summarize changelogs.</p>
+        <div class="agent-tags">
+            <span class="tag">github</span>
+            <span class="tag">code-review</span>
+            <span class="tag">security</span>
         </div>
     </div>
 
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0; border-color: #1a3a2a;">
-        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem;">
-            <div style="width: 32px; height: 32px; background: #1a2e1a; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            </div>
-            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="color: #fff; font-size: 1rem; margin: 0;">yelp-search</h3>
-                <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">5c/call</span>
-            </div>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">yelp-search</span>
+            <span class="agent-price">5c/call</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">Search Yelp for restaurants and businesses, read reviews, compare ratings, and get hours and menus.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">yelp</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">restaurants</span>
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">reviews</span>
+        <p class="agent-desc">Search Yelp for restaurants and businesses, read reviews, compare ratings, and get hours and menus.</p>
+        <div class="agent-tags">
+            <span class="tag">yelp</span>
+            <span class="tag">restaurants</span>
+            <span class="tag">reviews</span>
         </div>
     </div>
 
 </div>
 
-<h2 style="margin-bottom: 0.25rem;">All Agents</h2>
-<p style="margin-bottom: 2rem;">Browse all {{ agent_count }} agents available on the platform.</p>
+<!-- ===== ALL AGENTS ===== -->
+<h2 style="margin-bottom: 0.2rem;">All MCP Servers</h2>
+<p style="margin-bottom: 1.5rem;">Browse all {{ agent_count }} servers available on the platform.</p>
 
 {% for category_name, cat_agents in agents_by_category.items() %}
-<h3 style="color: #6ee7b7; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; margin-top: 2rem;">{{ category_name }}</h3>
-<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+<div class="category-label">{{ category_name }}</div>
+<div class="agents-grid" style="margin-bottom: 1rem;">
     {% for agent in cat_agents %}
-    <div class="card" style="padding: 1.25rem; margin-bottom: 0;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
-            <h3 style="color: #fff; font-size: 1rem; margin: 0;">{{ agent.slug }}</h3>
-            <span style="background: #1a2e1a; color: #6ee7b7; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;">{{ agent.price_per_call_cents }}c/call</span>
+    <div class="agent-card">
+        <div class="agent-card-header">
+            <span class="agent-name">{{ agent.slug }}</span>
+            <span class="agent-price">{{ pricing_label(agent) }}</span>
         </div>
-        <p style="font-size: 0.85rem; margin-bottom: 0.75rem; color: #999; line-height: 1.5;">{{ agent.description[:120] }}{% if agent.description|length > 120 %}...{% endif %}</p>
+        <p class="agent-desc">{{ agent.description[:120] }}{% if agent.description|length > 120 %}...{% endif %}</p>
         {% if agent.tags %}
-        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
+        <div class="agent-tags">
             {% for tag in agent.tags[:4] %}
-            <span style="background: #1a1a1a; border: 1px solid #2a2a2a; padding: 0.1rem 0.45rem; border-radius: 3px; font-size: 0.7rem; color: #777;">{{ tag }}</span>
+            <span class="tag">{{ tag }}</span>
             {% endfor %}
         </div>
         {% endif %}
+        <div class="agent-actions">
+            <span class="tag">{{ agent.pricing_model.replace('_', ' ') }}</span>
+            <form method="post" action="/marketplace/{{ agent.slug }}/subscribe" style="margin: 0;">
+                <button type="submit" class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.78rem;">Subscribe</button>
+            </form>
+        </div>
     </div>
     {% endfor %}
 </div>
 {% endfor %}
 
-<div style="text-align: center; padding: 2rem 0 1rem;">
-    <a href="/signup" class="btn" style="padding: 0.85rem 2.5rem; font-size: 1.05rem;">Get Your API Key</a>
+<!-- ===== CTA ===== -->
+<div class="cta-section">
+    <a href="/signup" class="btn" style="padding: 0.7rem 2rem;">Get Your API Key</a>
 </div>
 
 <textarea id="snippet-raw" style="display:none;">{{ snippet_raw }}</textarea>
@@ -293,9 +661,16 @@ curl -X POST -H "Authorization: Bearer YOUR_API_KEY" \
 function copySnippet() {
     const raw = document.getElementById('snippet-raw').value;
     navigator.clipboard.writeText(raw).then(() => {
-        const btn = document.querySelector('#claude-snippet .copy-btn');
-        btn.textContent = 'Copied!';
+        const btn = document.querySelector('#claude-snippet').closest('.terminal').querySelector('.copy-btn');
+        btn.textContent = 'Copied';
         setTimeout(() => btn.textContent = 'Copy', 2000);
+    });
+}
+
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        event.target.textContent = 'Copied';
+        setTimeout(() => event.target.textContent = 'Copy', 2000);
     });
 }
 </script>

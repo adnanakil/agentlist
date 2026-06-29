@@ -7,22 +7,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
 WORKDIR /app
 
-COPY pyproject.toml ./
 COPY packages/ag-common/ packages/ag-common/
 COPY packages/ag-db/ packages/ag-db/
+COPY agent-sdk/python/ agent-sdk/python/
+COPY agents/ agents/
 COPY services/orchestrator/ services/orchestrator/
 
-RUN uv pip install --system --no-cache \
+RUN pip install --no-cache-dir \
     ./packages/ag-common \
     ./packages/ag-db \
+    ./agent-sdk/python \
     ./services/orchestrator
 
 WORKDIR /app/services/orchestrator
 
-EXPOSE 8003
+ENV PORT=8003
 
-CMD ["uvicorn", "orchestrator.main:app", "--host", "0.0.0.0", "--port", "8003"]
+CMD uvicorn orchestrator.main:app --host 0.0.0.0 --port $PORT

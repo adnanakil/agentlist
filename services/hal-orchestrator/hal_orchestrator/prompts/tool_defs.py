@@ -187,7 +187,8 @@ MAIN_TOOLS: list[dict] = [
                             "type": "string",
                             "description": (
                                 "nba, wnba, ncaab/cbb, nfl, ncaaf/cfb, mlb, nhl, "
-                                "epl, laliga, mls, ucl (default nba)"
+                                "epl, laliga, mls, ucl, worldcup (FIFA World Cup / "
+                                "international) (default nba)"
                             ),
                         },
                         "team": {
@@ -364,8 +365,9 @@ MAIN_TOOLS: list[dict] = [
                 "name": "contacts",
                 "description": (
                     "Manage the current user's contact profile. "
-                    "Actions: get (read profile), update (set fields like name, onboarded, "
-                    "google_connected, email, notes)."
+                    "Actions: get (read profile), update (set fields like name, "
+                    "timezone, home_location, work_location, onboarded, "
+                    "google_connected, google_offered, email, notes)."
                 ),
                 "parameters": {
                     "type": "object",
@@ -378,6 +380,24 @@ MAIN_TOOLS: list[dict] = [
                             "type": "string",
                             "description": "User's name (for update)",
                         },
+                        "timezone": {
+                            "type": "string",
+                            "description": (
+                                "User's IANA timezone, e.g. 'America/Los_Angeles'. "
+                                "Infer it from a city/state if they give one."
+                            ),
+                        },
+                        "home_location": {
+                            "type": "string",
+                            "description": (
+                                "Where the user lives (neighborhood/city) — for "
+                                "planning, weather, and travel."
+                            ),
+                        },
+                        "work_location": {
+                            "type": "string",
+                            "description": "Where the user works or spends their days.",
+                        },
                         "onboarded": {
                             "type": "boolean",
                             "description": "Set to true after onboarding is complete",
@@ -385,6 +405,13 @@ MAIN_TOOLS: list[dict] = [
                         "google_connected": {
                             "type": "boolean",
                             "description": "Whether Google is connected",
+                        },
+                        "google_offered": {
+                            "type": "boolean",
+                            "description": (
+                                "Set true once you've offered the Google connect "
+                                "link, so it isn't offered again."
+                            ),
                         },
                         "email": {
                             "type": "string",

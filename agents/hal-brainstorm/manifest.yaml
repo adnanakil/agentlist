@@ -1,0 +1,21 @@
+name: hal-brainstorm
+version: "0.1.0"
+description: "Creative thinking and analysis agent powered by Gemini Pro. Brainstorm ideas, explore concepts, reframe problems, and think through challenges from multiple angles."
+runtime: python
+entrypoint: agent.py
+category: research
+tags: [brainstorm, ideas, creative, thinking, strategy]
+price_per_call_cents: 0
+input_schema:
+  type: object
+  properties:
+    topic:
+      type: string
+      description: "Topic, problem, or question to brainstorm about"
+    style:
+      type: string
+      description: "Brainstorming style: divergent, convergent, reframe, or freeform (default)"
+    num_ideas:
+      type: integer
+      description: "Number of ideas to generate (default 5)"
+  required: [topic]

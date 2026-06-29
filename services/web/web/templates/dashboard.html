@@ -3,7 +3,7 @@
 {% block title %}Dashboard — Dispatch{% endblock %}
 
 {% block nav_links %}
-<span style="color: #888;">{{ account.email }}</span>
+<span style="color: #6b7280;">{{ account.email }}</span>
 <a href="/logout" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Log Out</a>
 {% endblock %}
 
@@ -20,7 +20,7 @@
 
 {% if flash_agent %}
 <div class="success">
-    <strong>Agent submitted!</strong> Your agent <code>{{ flash_agent }}</code> is now live on the marketplace.
+    <strong>Marketplace updated.</strong> <code>{{ flash_agent }}</code> is ready in your account.
 </div>
 {% endif %}
 
@@ -43,68 +43,107 @@
 
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-        <h2 style="margin-bottom: 0;">My Credentials</h2>
+        <h2 style="margin-bottom: 0;">End-user Credentials</h2>
         <a href="/dashboard/credentials" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Manage Credentials</a>
     </div>
-    <p style="font-size: 0.9rem; color: #888;">
-        Some agents need your own API keys to work (e.g. Instacart, Anthropic). Store them securely and they'll be injected at runtime.
+    <p style="font-size: 0.9rem; color: #6b7280;">
+        Some MCP servers need your own API keys. Store them here so calls can receive scoped credentials at runtime.
     </p>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="margin-bottom: 0;">Subscribed MCP Servers</h2>
+        <a href="/#agents" class="btn btn-outline" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Browse Marketplace</a>
+    </div>
+    {% if mcp_subscriptions %}
+    <div style="display: grid; gap: 0.75rem;">
+        {% for sub in mcp_subscriptions %}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+            <div>
+                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+                    <span style="font-weight: 700;">{{ sub.agent.name }}</span>
+                    <code style="font-size: 0.8rem; color: #6b7280;">{{ sub.agent.slug }}</code>
+                    <span style="background: #d1fae5; color: #047857; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem;">active</span>
+                </div>
+                <p style="font-size: 0.85rem; color: #6b7280; margin: 0;">
+                    {{ sub.agent.mcp_tools|length or 1 }} MCP tool{% if (sub.agent.mcp_tools|length or 1) != 1 %}s{% endif %} exposed through <code>/v1/mcp</code>.
+                </p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-left: 1rem;">
+                <div style="text-align: right;">
+                    <div style="font-weight: 700;">{{ pricing_label(sub.agent) }}</div>
+                    <div style="font-size: 0.75rem; color: #9ca3af;">{{ sub.agent.pricing_model.replace('_', ' ') }}</div>
+                </div>
+                <form method="post" action="/dashboard/subscriptions/{{ sub.id }}/cancel" style="margin: 0;">
+                    <button type="submit" class="btn btn-outline" style="padding: 0.45rem 0.8rem; font-size: 0.8rem;">Cancel</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #9ca3af; text-align: center; padding: 1.5rem 0;">
+        You have not subscribed to any MCP servers yet.
+    </p>
+    {% endif %}
 </div>
 
 {% if account.role == 'developer' %}
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h2 style="margin-bottom: 0;">My Agents</h2>
-        <a href="/dashboard/submit-agent" class="btn" style="padding: 0.6rem 1.25rem; font-size: 0.9rem;">Submit New Agent</a>
+        <h2 style="margin-bottom: 0;">My MCP Servers</h2>
+        <a href="/dashboard/submit-agent" class="btn" style="padding: 0.6rem 1.25rem; font-size: 0.9rem;">Publish Server</a>
     </div>
     {% if my_agents %}
     <div style="display: grid; gap: 0.75rem;">
         {% for agent in my_agents %}
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; background: #1a1a1a; border: 1px solid #222; border-radius: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px;">
             <div>
                 <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
-                    <span style="color: #fff; font-weight: 600;">{{ agent.name }}</span>
-                    <code style="font-size: 0.8rem; color: #888;">{{ agent.slug }}</code>
+                    <span style="color: #111827; font-weight: 600;">{{ agent.name }}</span>
+                    <code style="font-size: 0.8rem; color: #6b7280;">{{ agent.slug }}</code>
+                    <span style="background: rgba(243, 244, 246, 0.7); color: #4b5563; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem;">{{ agent.pricing_model.replace('_', ' ') }}</span>
                     {% if agent.status == 'active' %}
-                    <span style="background: #0f291e; color: #6ee7b7; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">active</span>
+                    <span style="background: #d1fae5; color: #047857; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem;">active</span>
                     {% elif agent.status == 'draft' %}
-                    <span style="background: #1a1a2e; color: #818cf8; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">draft</span>
+                    <span style="background: #e0e7ff; color: #4338ca; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem;">draft</span>
                     {% elif agent.status == 'review' %}
-                    <span style="background: #2a1f0a; color: #f59e0b; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">review</span>
+                    <span style="background: #fef3c7; color: #d97706; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem;">review</span>
                     {% elif agent.status == 'suspended' %}
-                    <span style="background: #2a1215; color: #f87171; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">suspended</span>
+                    <span style="background: #fee2e2; color: #b91c1c; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem;">suspended</span>
                     {% endif %}
                     {% if agent.endpoint_url %}
-                    <span style="background: #1a1a2e; color: #818cf8; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">external</span>
+                    <span style="background: rgba(243, 244, 246, 0.7); backdrop-filter: blur(4px); color: #4b5563; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem;">external</span>
                     {% else %}
-                    <span style="background: #1a1a1a; color: #666; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">hosted</span>
+                    <span style="background: rgba(243, 244, 246, 0.7); backdrop-filter: blur(4px); color: #4b5563; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem;">hosted</span>
                     {% endif %}
                 </div>
-                <p style="font-size: 0.85rem; color: #888; margin: 0;">{{ agent.description[:100] }}{% if agent.description|length > 100 %}...{% endif %}</p>
+                <p style="font-size: 0.85rem; color: #6b7280; margin: 0;">{{ agent.description[:100] }}{% if agent.description|length > 100 %}...{% endif %}</p>
             </div>
             <div style="display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; margin-left: 1rem;">
-                <a href="/dashboard/agents/{{ agent.slug }}/credentials" style="font-size: 0.8rem; color: #888; border: 1px solid #333; padding: 0.3rem 0.75rem; border-radius: 4px;">Credentials</a>
+                <a href="/dashboard/agents/{{ agent.slug }}/credentials" style="font-size: 0.8rem; color: #6b7280; border: 1px solid #d1d5db; padding: 0.3rem 0.75rem; border-radius: 9999px;">Credentials</a>
                 <form method="post" action="/dashboard/agents/{{ agent.slug }}/toggle" style="margin: 0;">
                     {% if agent.status == 'active' %}
-                    <button type="submit" style="font-size: 0.8rem; color: #f59e0b; background: none; border: 1px solid #333; padding: 0.3rem 0.75rem; border-radius: 4px; cursor: pointer;">Disable</button>
+                    <button type="submit" style="font-size: 0.8rem; color: #f59e0b; background: none; border: 1px solid #d1d5db; padding: 0.3rem 0.75rem; border-radius: 9999px; cursor: pointer;">Disable</button>
                     {% else %}
-                    <button type="submit" style="font-size: 0.8rem; color: #6ee7b7; background: none; border: 1px solid #333; padding: 0.3rem 0.75rem; border-radius: 4px; cursor: pointer;">Enable</button>
+                    <button type="submit" style="font-size: 0.8rem; color: #4f46e5; background: none; border: 1px solid #d1d5db; padding: 0.3rem 0.75rem; border-radius: 9999px; cursor: pointer;">Enable</button>
                     {% endif %}
                 </form>
                 <form method="post" action="/dashboard/agents/{{ agent.slug }}/delete" style="margin: 0;" onsubmit="return confirm('Permanently delete {{ agent.name }}?')">
-                    <button type="submit" style="font-size: 0.8rem; color: #f87171; background: none; border: 1px solid #333; padding: 0.3rem 0.75rem; border-radius: 4px; cursor: pointer;">Delete</button>
+                    <button type="submit" style="font-size: 0.8rem; color: #b91c1c; background: none; border: 1px solid #d1d5db; padding: 0.3rem 0.75rem; border-radius: 9999px; cursor: pointer;">Delete</button>
                 </form>
                 <div style="text-align: right; margin-left: 0.5rem;">
-                    <div style="color: #6ee7b7; font-weight: 600;">{{ agent.price_per_call_cents }}c</div>
-                    <div style="font-size: 0.75rem; color: #666;">per call</div>
+                    <div style="color: #4f46e5; font-weight: 600;">{{ pricing_label(agent) }}</div>
+                    <div style="font-size: 0.75rem; color: #9ca3af;">pricing</div>
                 </div>
             </div>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <p style="color: #666; text-align: center; padding: 2rem 0;">
-        You haven't submitted any agents yet. Click the button above to get started.
+    <p style="color: #9ca3af; text-align: center; padding: 2rem 0;">
+        You have not published any MCP servers yet.
     </p>
     {% endif %}
 </div>
@@ -122,15 +161,15 @@
     </div>
     {% else %}
     <p>Your API key prefix: <code>{{ key_prefix }}...</code></p>
-    <p style="font-size: 0.85rem; color: #888;">
+    <p style="font-size: 0.85rem; color: #6b7280;">
         The full key was shown only at signup. If you lost it, you'll need to generate a new one.
     </p>
     {% endif %}
 </div>
 
 <div class="card">
-    <h2>CLAUDE.md Snippet</h2>
-    <p>Copy this into a <code>CLAUDE.md</code> file in any project to give Claude Code access to Dispatch.</p>
+    <h2>MCP Gateway Snippet</h2>
+    <p>Use this endpoint from a local bridge or any client that can send MCP JSON-RPC over HTTP.</p>
     <div class="snippet-box" id="snippet-box">{{ claude_snippet }}
         <button class="copy-btn" onclick="copyText('snippet-box')">Copy</button>
     </div>

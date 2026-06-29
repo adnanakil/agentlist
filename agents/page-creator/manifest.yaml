@@ -1,0 +1,24 @@
+name: page-creator
+version: "0.1.0"
+description: "Create shareable HTML pages and documents with unique URLs. Supports rich content including lists, tables, links, and images. Perfect for creating reports, comparisons, or documentation that can be shared via link."
+runtime: python
+entrypoint: agent.py
+category: web
+tags: [pages, documents, html, sharing, publishing]
+price_per_call_cents: 2
+input_schema:
+  type: object
+  properties:
+    action:
+      type: string
+      description: "Action to perform: 'create', 'update', 'list', or 'delete'"
+    title:
+      type: string
+      description: "Page title (required for create)"
+    content:
+      type: string
+      description: "HTML content for the page (supports h2, h3, ul, ol, table, a, strong, em, blockquote, img)"
+    page_id:
+      type: string
+      description: "Page ID (required for update and delete)"
+  required: [action]

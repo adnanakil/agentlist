@@ -1,0 +1,16 @@
+name: image-generator
+version: "0.1.0"
+description: "Generate images from text descriptions using AI. Provide a prompt and get back a shareable image URL. Powered by Gemini's image generation model."
+runtime: python
+entrypoint: agent.py
+category: research
+tags: [image, generation, ai, art, creative, gemini]
+price_per_call_cents: 5
+required_consumer_credentials: [GEMINI_API_KEY]
+input_schema:
+  type: object
+  properties:
+    prompt:
+      type: string
+      description: "Text description of the image to generate (e.g. 'a fluffy orange cat on a windowsill, golden hour lighting')"
+  required: [prompt]

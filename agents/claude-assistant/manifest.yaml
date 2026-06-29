@@ -1,0 +1,22 @@
+name: claude-assistant
+version: "0.1.0"
+description: "An AI assistant powered by Claude. Send a prompt and get an intelligent response. Supports system instructions for customized behavior."
+runtime: python
+entrypoint: agent.py
+category: research
+tags: [ai, claude, assistant, chat, llm]
+price_per_call_cents: 5
+required_consumer_credentials: [ANTHROPIC_API_KEY]
+input_schema:
+  type: object
+  properties:
+    prompt:
+      type: string
+      description: "The prompt to send to Claude"
+    system:
+      type: string
+      description: "Optional system instruction to customize Claude's behavior"
+    max_tokens:
+      type: integer
+      description: "Maximum tokens in the response (default 1024)"
+  required: [prompt]

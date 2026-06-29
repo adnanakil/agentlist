@@ -20,8 +20,16 @@ from sqlalchemy.orm import selectinload
 from ag_common.auth import generate_api_key
 from ag_common.config import WebConfig
 from ag_db.models import (
-    Account, Agent, AgentCredential, AgentSubscription, ApiKey, Category,
-    ConsumerCredential, LedgerAccount,
+    Account,
+    Agent,
+    AgentCredential,
+    AgentSubscription,
+    ApiKey,
+    Category,
+    ConsumerCredential,
+    LedgerAccount,
+    McpSubscription,
+    McpTool,
 )
 from ag_db.session import get_session
 
@@ -40,6 +48,48 @@ def _encrypt_value(plaintext: str) -> bytes:
     if not key:
         raise ValueError("ENCRYPTION_KEY not configured")
     return Fernet(key.encode()).encrypt(plaintext.encode())
+
+
+def _pricing_label(agent: Agent) -> str:
+    if agent.pricing_model == "subscription":
+        monthly = (agent.pricing_config or {}).get("monthly_cents", 0)
+        return f"${monthly / 100:.2f}/mo"
+    if agent.pricing_model == "byo_creds":
+        monthly = (agent.pricing_config or {}).get("hosting_cents", 0)
+        return f"${monthly / 100:.2f}/mo hosting"
+    return f"{agent.price_per_call_cents}c/call"
+
+
+def _parse_tool_schema(raw: str, default_schema: dict) -> list[dict]:
+    if not raw.strip():
+        return [
+            {
+                "name": "invoke",
+                "description": "Invoke this MCP server.",
+                "inputSchema": default_schema or {"type": "object", "properties": {}},
+            }
+        ]
+    parsed = json.loads(raw)
+    if not isinstance(parsed, list):
+        raise ValueError("Tool schema must be a JSON array.")
+
+    tools = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            raise ValueError("Every tool must be a JSON object.")
+        name = str(item.get("name", "")).strip()
+        if not re.match(r"^[A-Za-z0-9_-]+$", name):
+            raise ValueError("Tool names may contain letters, numbers, underscores, and hyphens.")
+        tools.append(
+            {
+                "name": name,
+                "description": str(item.get("description") or ""),
+                "inputSchema": item.get("inputSchema")
+                or item.get("input_schema")
+                or {"type": "object", "properties": {}},
+            }
+        )
+    return tools
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +153,7 @@ async def index(
             "category_count": len(agents_by_category),
             "gateway_url": GATEWAY_URL,
             "snippet_raw": snippet_raw,
+            "pricing_label": _pricing_label,
         },
     )
 
@@ -311,6 +362,15 @@ async def dashboard(
         )
         my_agents = list(result.scalars().all())
 
+    # Fetch active MCP subscriptions (consumer dashboard)
+    result = await session.execute(
+        select(McpSubscription)
+        .where(McpSubscription.account_id == account_id, McpSubscription.status == "active")
+        .options(selectinload(McpSubscription.agent).selectinload(Agent.mcp_tools))
+        .order_by(McpSubscription.created_at.desc())
+    )
+    mcp_subscriptions = list(result.scalars().all())
+
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -323,7 +383,9 @@ async def dashboard(
             "claude_snippet": claude_snippet,
             "gateway_url": GATEWAY_URL,
             "my_agents": my_agents,
+            "mcp_subscriptions": mcp_subscriptions,
             "flash_agent": flash_agent,
+            "pricing_label": _pricing_label,
         },
     )
 
@@ -370,10 +432,13 @@ async def submit_agent_submit(
     name: str = Form(...),
     description: str = Form(...),
     price_per_call_cents: int = Form(0),
+    pricing_model: str = Form("per_call"),
+    monthly_price_cents: int = Form(0),
     hosting_type: str = Form("hosted"),
     agent_code: str = Form(""),
     endpoint_url: str = Form(""),
     input_schema: str = Form(""),
+    tool_schema: str = Form(""),
     required_consumer_credentials: str = Form(""),
     session: AsyncSession = Depends(get_session),
 ) -> HTMLResponse | RedirectResponse:
@@ -386,10 +451,13 @@ async def submit_agent_submit(
         "name": name,
         "description": description,
         "price_per_call_cents": price_per_call_cents,
+        "pricing_model": pricing_model,
+        "monthly_price_cents": monthly_price_cents,
         "hosting_type": hosting_type,
         "agent_code": agent_code,
         "endpoint_url": endpoint_url,
         "input_schema": input_schema,
+        "tool_schema": tool_schema,
         "required_consumer_credentials": required_consumer_credentials,
     }
 
@@ -432,6 +500,10 @@ async def submit_agent_submit(
     # Validate price
     if price_per_call_cents < 0:
         return _err("Price cannot be negative.")
+    if pricing_model not in ("per_call", "subscription", "freemium", "byo_creds"):
+        return _err("Invalid pricing model.")
+    if monthly_price_cents < 0:
+        return _err("Monthly price cannot be negative.")
 
     # Parse required consumer credentials
     req_consumer_creds = [
@@ -450,6 +522,17 @@ async def submit_agent_submit(
             schema_dict = json.loads(input_schema)
         except json.JSONDecodeError:
             return _err("Input schema must be valid JSON.")
+
+    try:
+        tools = _parse_tool_schema(tool_schema, schema_dict)
+    except (json.JSONDecodeError, ValueError) as exc:
+        return _err(str(exc))
+
+    pricing_config: dict = {}
+    if pricing_model == "subscription":
+        pricing_config["monthly_cents"] = monthly_price_cents
+    elif pricing_model == "byo_creds":
+        pricing_config["hosting_cents"] = monthly_price_cents
 
     # Validate hosting type
     is_external = hosting_type == "external"
@@ -472,7 +555,10 @@ async def submit_agent_submit(
         "version": "0.1.0",
         "runtime": "external" if is_external else "python",
         "price_per_call_cents": price_per_call_cents,
+        "pricing_model": pricing_model,
+        "pricing_config": pricing_config,
         "input_schema": schema_dict,
+        "tools": tools,
         "tags": [],
     }
     if agent_code:
@@ -511,8 +597,26 @@ async def submit_agent_submit(
         image_uri=None if is_external else f"agentgate-agent-{slug}:latest",
         endpoint_url=endpoint_url if is_external else None,
         required_consumer_credentials=req_consumer_creds,
+        runtime_kind="external_url" if is_external else "python",
+        runtime_version=None,
+        entry_point="server.py" if not is_external else None,
+        tool_schema=tools,
+        pricing_model=pricing_model,
+        pricing_config=pricing_config,
     )
     session.add(agent)
+
+    for tool in tools:
+        session.add(
+            McpTool(
+                id=uuid.uuid4(),
+                agent_id=agent_id,
+                name=tool["name"],
+                description=tool.get("description") or description,
+                input_schema=tool.get("inputSchema") or {},
+                price_cents=tool.get("price_cents"),
+            )
+        )
 
     # Save encrypted credentials
     for cred_name, cred_value in credentials:
@@ -536,6 +640,78 @@ async def submit_agent_submit(
     )
 
     request.session["flash_agent"] = slug
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@router.post("/marketplace/{slug}/subscribe", response_model=None)
+async def mcp_subscribe(
+    request: Request,
+    slug: str,
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    account = await _require_authenticated(request, session)
+    if not account:
+        return RedirectResponse(url="/login", status_code=303)
+
+    result = await session.execute(
+        select(Agent).where(Agent.slug == slug, Agent.status == "active")
+    )
+    agent = result.scalar_one_or_none()
+    if not agent:
+        return RedirectResponse(url="/#agents", status_code=303)
+
+    result = await session.execute(
+        select(McpSubscription).where(
+            McpSubscription.account_id == account.id,
+            McpSubscription.agent_id == agent.id,
+        )
+    )
+    subscription = result.scalar_one_or_none()
+    if subscription:
+        subscription.status = "active"
+    else:
+        session.add(
+            McpSubscription(
+                id=uuid.uuid4(),
+                account_id=account.id,
+                agent_id=agent.id,
+                status="active",
+            )
+        )
+        agent.install_count += 1
+
+    await session.commit()
+    request.session["flash_agent"] = slug
+    log.info("mcp.subscription.created", account_id=str(account.id), slug=slug)
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@router.post("/dashboard/subscriptions/{sub_id}/cancel", response_model=None)
+async def mcp_subscription_cancel(
+    request: Request,
+    sub_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    account = await _require_authenticated(request, session)
+    if not account:
+        return RedirectResponse(url="/login", status_code=303)
+
+    try:
+        sub_uuid = uuid.UUID(sub_id)
+    except ValueError:
+        return RedirectResponse(url="/dashboard", status_code=303)
+
+    result = await session.execute(
+        select(McpSubscription).where(
+            McpSubscription.id == sub_uuid,
+            McpSubscription.account_id == account.id,
+        )
+    )
+    subscription = result.scalar_one_or_none()
+    if subscription:
+        subscription.status = "cancelled"
+        await session.commit()
+
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
@@ -1053,10 +1229,10 @@ async def logout(request: Request) -> RedirectResponse:
 
 
 def _build_claude_snippet(api_key: str) -> str:
-    return f"""# Dispatch - Agent Marketplace
+    return f"""# AgentGate MCP Marketplace
 
-You have access to Dispatch, a hosted agent marketplace.
-Use it to invoke pre-built agents via a single API call.
+You have access to AgentGate, a hosted MCP marketplace.
+Subscribed MCP servers are exposed through one gateway endpoint.
 
 ## API Access
 
@@ -1080,9 +1256,15 @@ curl -X POST -H "Authorization: Bearer {api_key}" \\
   -H "Content-Type: application/json" \\
   -d '{{"agent_slug":"echo","input":{{"message":"hello"}}}}' \\
   {GATEWAY_URL}/v1/invoke
+
+# List subscribed MCP tools
+curl -X POST -H "Authorization: Bearer {api_key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{{}}}}' \\
+  {GATEWAY_URL}/v1/mcp
 ```
 
 ## Notes
-- Agents are billed per invocation (prepaid USD credits).
-- Use `/v1/discover` to search for agents by description.
+- MCP tools are namespaced as `server_slug__tool_name`.
+- Subscribe to servers from the dashboard before calling `/v1/mcp`.
 - Use `/v1/balance` to check remaining credits."""
