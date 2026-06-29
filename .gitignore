@@ -46,6 +46,3 @@ scripts/.eval_snap_*.json
 
 # Claude Code (local tooling, worktrees, session state)
 .claude/
-
-# Local project notes (contains live credentials — keep out of the repo)
-CLAUDE.md
