@@ -59,6 +59,7 @@ async def execute_tool(
     from hal_orchestrator.tools.cron import tool_schedule
     from hal_orchestrator.tools.current_time import tool_current_time
     from hal_orchestrator.tools.delegate import tool_delegate
+    from hal_orchestrator.tools.helpful import tool_helpful
     from hal_orchestrator.tools.history import tool_recall_history
     from hal_orchestrator.tools.resy import tool_resy
     from hal_orchestrator.tools.google import (
@@ -117,6 +118,7 @@ async def execute_tool(
         "resy": lambda: tool_resy(args, ctx),
         "watch": lambda: tool_watch(args, ctx),
         "sports_score": lambda: tool_sports_score(args, ctx),
+        "helpful_mode": lambda: tool_helpful(args, ctx),
     }
 
     handler = handlers.get(name)

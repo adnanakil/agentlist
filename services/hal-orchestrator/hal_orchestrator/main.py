@@ -26,6 +26,7 @@ from hal_orchestrator.services.curator import curator_loop
 from hal_orchestrator.services.profile_enricher import profile_enricher_loop
 from hal_orchestrator.services.growth import growth_loop
 from hal_orchestrator.services.heartbeat import heartbeat_loop
+from hal_orchestrator.services.helpful import helpful_loop
 from hal_orchestrator.services.reminders import run_reminder_checker
 from hal_orchestrator.services.skill_synthesizer import skill_synthesizer_loop
 from hal_orchestrator.services.summarizer import summarizer_loop
@@ -116,6 +117,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         heartbeat_loop(settings, state.http_client)
     )
 
+    # Helpful mode: OPT-IN proactive concierge — a daily situation/location-aware
+    # brief (weather, local events, news, agenda) + a few capped same-day pings.
+    helpful_task = asyncio.create_task(
+        helpful_loop(settings, state.http_client)
+    )
+
     # Watch checker: re-polls notify-when conditions on a cheap model and fires
     # once when true. Silent until then (WATCH_FEATURE_SPEC.md).
     watch_task = asyncio.create_task(
@@ -135,6 +142,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         reflection_task,
         baby_watch_task,
         heartbeat_task,
+        helpful_task,
         watch_task,
     ):
         task.cancel()

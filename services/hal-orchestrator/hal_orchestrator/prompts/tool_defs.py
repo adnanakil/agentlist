@@ -480,6 +480,40 @@ MAIN_TOOLS: list[dict] = [
                 },
             },
             {
+                "name": "helpful_mode",
+                "description": (
+                    "Turn the user's proactive 'helpful mode' on/off or tune it. "
+                    "When ON, HAL sends a short situation- and location-aware daily "
+                    "brief (weather, local events/things to do, news, today's "
+                    "agenda) plus a few capped same-day heads-ups. Use when the user "
+                    "asks to enable/disable proactive briefs, change what they "
+                    "cover, or change the time. Off by default."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["on", "off", "status", "set"],
+                            "description": "on, off, status, or set (adjust interests/hour)",
+                        },
+                        "interests": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": ["weather", "events", "news", "agenda"],
+                            },
+                            "description": "Which topics the brief should cover.",
+                        },
+                        "hour": {
+                            "type": "integer",
+                            "description": "Local hour (5–21) to send the daily brief. Default 8.",
+                        },
+                    },
+                    "required": ["action"],
+                },
+            },
+            {
                 "name": "recall_history",
                 "description": (
                     "Search THIS chat's own past conversation archive by keyword "

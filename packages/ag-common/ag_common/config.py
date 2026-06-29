@@ -127,6 +127,18 @@ class HalOrchestratorConfig(BaseConfig):
     heartbeat_active_hour_end: int = 22    # local hour, exclusive
     heartbeat_include_groups: bool = False  # group tools can't see calendar/gmail
     heartbeat_max_silos_per_tick: int = 10
+    # Helpful mode: an OPT-IN proactive concierge (distinct from the heartbeat).
+    # Once a day it sends a short brief tailored to the user's situation +
+    # location (weather, local events, news, today's agenda), plus a few capped
+    # same-day "something changed" pings. Per-user opt-in lives in
+    # profile.extra_data["helpful"]; this is the master switch + cadence ceilings.
+    helpful_enabled: bool = True
+    helpful_model: str = ""                  # "" -> gemini_background_model
+    helpful_check_interval_seconds: int = 300
+    helpful_brief_hour: int = 8              # default local hour for the daily brief
+    helpful_active_hour_end: int = 21        # no pings after this local hour
+    helpful_max_pings_per_day: int = 2       # opportunistic same-day pings (excl. brief)
+    helpful_ping_min_gap_hours: int = 3      # min spacing between opportunistic checks
     # Google OAuth (per-user read-only Calendar + Gmail). client_id/secret come
     # from a Google Cloud OAuth 2.0 Web client; redirect_uri must be registered
     # on that client and point at this service's public /api/google/callback.
