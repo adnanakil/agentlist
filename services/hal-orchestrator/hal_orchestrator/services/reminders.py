@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 import structlog
@@ -26,6 +28,7 @@ async def create_reminder(
     sender_phone: str | None = None,
     is_group: bool = False,
     group_name: str | None = None,
+    cancel_if: str | None = None,
 ) -> dict:
     """Create a new reminder."""
     reminder = HalReminder(
@@ -36,6 +39,7 @@ async def create_reminder(
         sender_phone=sender_phone,
         is_group=is_group,
         group_name=group_name,
+        cancel_if=cancel_if,
     )
     session.add(reminder)
     await session.flush()
@@ -136,21 +140,45 @@ async def _check_and_send_reminders(
 
         for reminder in due_reminders:
             try:
-                await _send_reminder_via_bridge(settings, http_client, reminder)
+                # Snapshot before the gate may reword it — a recurring copy
+                # should carry the original wording, not this occurrence's.
+                original_text = reminder.text
+
+                drop = False
+                if reminder.cancel_if:
+                    verdict = await _gate_reminder(
+                        settings, http_client, session, reminder, now
+                    )
+                    if verdict is not None:
+                        drop = verdict.drop
+                        if not drop and verdict.text:
+                            reminder.text = verdict.text
+
+                if drop:
+                    log.info(
+                        "reminder.gated_out",
+                        reminder_id=str(reminder.id),
+                        phone=reminder.phone,
+                        text=original_text[:60],
+                    )
+                else:
+                    await _send_reminder_via_bridge(settings, http_client, reminder)
                 reminder.sent = True
 
-                # Handle recurrence
+                # Handle recurrence (independent of send/drop — a daily reminder
+                # that's moot today should still come back tomorrow).
                 if reminder.recurrence:
                     next_due = _next_occurrence(reminder.due_at, reminder.recurrence)
                     if next_due:
                         new_reminder = HalReminder(
                             phone=reminder.phone,
-                            text=reminder.text,
+                            text=original_text,
                             due_at=next_due,
                             recurrence=reminder.recurrence,
                             sender_phone=reminder.sender_phone,
                             is_group=reminder.is_group,
                             group_name=reminder.group_name,
+                            cancel_if=reminder.cancel_if,
                         )
                         session.add(new_reminder)
 
@@ -163,6 +191,126 @@ async def _check_and_send_reminders(
                 )
 
         await session.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Fire-time relevance gate — let the model decide keep / drop / reword
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class GateVerdict:
+    drop: bool
+    text: str | None  # reworded reminder text, or None to keep as-is
+
+
+GATE_SYSTEM = (
+    "You are a relevance gate for a reminder that is about to be sent. The "
+    "reminder was scheduled earlier against a PREDICTED event; you decide "
+    "whether it's still worth sending now that real life has unfolded."
+)
+
+
+def build_gate_prompt(
+    reminder_text: str, cancel_if: str, situation: str, now_str: str
+) -> str:
+    """The user-turn handed to the gate model. Pure so it's unit-testable."""
+    return (
+        "A reminder is scheduled to send to the user RIGHT NOW.\n\n"
+        f"Reminder text: {reminder_text}\n"
+        f"Cancel this reminder if: {cancel_if}\n\n"
+        f"Current time: {now_str}\n"
+        f"Live situation:\n{situation}\n\n"
+        "Has the situation made this reminder moot (the user already did the "
+        "thing, or it no longer applies)?\n"
+        "- Reply exactly DROP to cancel it.\n"
+        "- Reply exactly SEND to send it as written.\n"
+        "- Reply 'SEND: <new text>' to send it with wording updated to the "
+        "current situation.\n"
+        "Reply with only that — no explanation."
+    )
+
+
+def parse_gate_verdict(reply: str) -> GateVerdict:
+    """Parse the gate model's reply. Unrecognized/empty -> SEND (fail-open:
+    a possibly-stale reminder beats silently swallowing a real one). Pure."""
+    line = (reply or "").strip()
+    if not line:
+        return GateVerdict(drop=False, text=None)
+    first = line.splitlines()[0].strip()
+    upper = first.upper()
+    if upper.startswith("DROP"):
+        return GateVerdict(drop=True, text=None)
+    if upper.startswith("SEND"):
+        rest = first[4:].lstrip()
+        if rest.startswith(":"):
+            new = rest[1:].strip()
+            return GateVerdict(drop=False, text=new or None)
+        return GateVerdict(drop=False, text=None)
+    return GateVerdict(drop=False, text=None)
+
+
+async def _gate_reminder(
+    settings: HalOrchestratorConfig,
+    http_client: httpx.AsyncClient,
+    session: AsyncSession,
+    reminder: HalReminder,
+    now: datetime,
+) -> GateVerdict | None:
+    """Re-evaluate a reminder's `cancel_if` against live state via the cheap
+    background model. Returns None on model failure (caller fails open = send).
+
+    The rich live signal today is the baby forecast (the only stateful predictor
+    HAL has); for a reminder whose silo has no family, the model still gets the
+    reminder + condition + current time, which covers purely time-based
+    conditions. Other live context can be folded into `situation` later."""
+    from hal_orchestrator.services.baby import (
+        as_pairs,
+        forecast_next,
+        format_forecast,
+        get_family_for_silo,
+        load_events,
+    )
+    from hal_orchestrator.services.gemini import call_gemini
+
+    situation_parts: list[str] = []
+    now_str = now.astimezone(timezone.utc).strftime("%a %b %-d %-I:%M %p UTC")
+
+    family = await get_family_for_silo(session, reminder.phone)
+    if family is not None:
+        tz = ZoneInfo(family.timezone)
+        now_str = now.astimezone(tz).strftime("%a %b %-d %-I:%M %p")
+        events = as_pairs(
+            await load_events(session, family.id, since=now - timedelta(days=14))
+        )
+        if events:
+            forecast = forecast_next(events, tz, now)
+            situation_parts.append(format_forecast(forecast, tz, family.baby_name))
+
+    situation = "\n".join(situation_parts) or "(no extra context available)"
+    prompt = build_gate_prompt(reminder.text, reminder.cancel_if, situation, now_str)
+
+    resp = await call_gemini(
+        client=http_client,
+        settings=settings,
+        history=[{"role": "user", "parts": [{"text": prompt}]}],
+        tools=None,
+        system=GATE_SYSTEM,
+        model=settings.gemini_background_model,
+    )
+    if not resp:
+        return None
+
+    parts = (resp.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+    raw = "".join(p.get("text", "") for p in parts)
+    verdict = parse_gate_verdict(raw)
+    log.info(
+        "reminder.gate",
+        reminder_id=str(reminder.id),
+        drop=verdict.drop,
+        reworded=bool(verdict.text),
+    )
+    return verdict
 
 
 async def _send_reminder_via_bridge(

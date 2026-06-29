@@ -430,6 +430,20 @@ MAIN_TOOLS: list[dict] = [
                             "type": "string",
                             "description": "Optional recurrence: daily, weekly, or monthly",
                         },
+                        "cancel_if": {
+                            "type": "string",
+                            "description": (
+                                "Optional plain-language condition under which this "
+                                "reminder is no longer worth sending. At the due "
+                                "time HAL re-checks it against live state and "
+                                "silently drops (or rewords) the reminder if it's "
+                                "moot. Use it whenever the reminder is tied to a "
+                                "PREDICTED event that the user might do early/late "
+                                "or skip, e.g. 'the user already left for the "
+                                "airport' or 'the meeting was cancelled'. Omit for "
+                                "fixed reminders that should always fire."
+                            ),
+                        },
                         "reminder_id": {
                             "type": "string",
                             "description": "Reminder ID (for delete)",

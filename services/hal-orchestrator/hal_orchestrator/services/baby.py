@@ -417,6 +417,7 @@ async def _replace_tagged_reminder(
     tag: str,
     text: str,
     due_at: datetime,
+    cancel_if: str | None = None,
 ) -> None:
     """One pending auto-reminder per tag per silo: replace any unsent one."""
     await session.execute(
@@ -426,7 +427,9 @@ async def _replace_tagged_reminder(
             HalReminder.text.startswith(tag),
         )
     )
-    session.add(HalReminder(phone=silo, text=text, due_at=due_at))
+    session.add(
+        HalReminder(phone=silo, text=text, due_at=due_at, cancel_if=cancel_if)
+    )
     await session.flush()
 
 
@@ -471,7 +474,13 @@ async def apply_auto_reminders(
                 f"{TAG_WIND_DOWN} Start winding {baby} down — next nap looks "
                 f"like ~{fmt(forecast['next_nap'])}"
             )
-            await _replace_tagged_reminder(session, silo, TAG_WIND_DOWN, text, due)
+            cancel_if = (
+                f"{baby} is already asleep (down for a nap or the night), or he "
+                f"already woke again so the next nap is no longer ~{fmt(forecast['next_nap'])}"
+            )
+            await _replace_tagged_reminder(
+                session, silo, TAG_WIND_DOWN, text, due, cancel_if
+            )
             set_msgs.append(f"wind-down at {fmt(due)}")
 
     # Bottle prep ahead of the predicted next feed.
@@ -482,7 +491,13 @@ async def apply_auto_reminders(
                 f"{TAG_FEED_PREP} Bottle prep — {baby}'s next feed is "
                 f"around {fmt(forecast['next_feed'])}"
             )
-            await _replace_tagged_reminder(session, silo, TAG_FEED_PREP, text, due)
+            cancel_if = (
+                f"{baby} has already been fed since this was set, or the next "
+                f"feed is no longer around {fmt(forecast['next_feed'])}"
+            )
+            await _replace_tagged_reminder(
+                session, silo, TAG_FEED_PREP, text, due, cancel_if
+            )
             set_msgs.append(f"bottle prep at {fmt(due)}")
 
     return set_msgs

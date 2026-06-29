@@ -484,6 +484,10 @@ class HalReminder(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     recurrence: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Plain-language condition under which this reminder is no longer worth
+    # sending (e.g. "the baby is already asleep"). Re-evaluated against live
+    # state at fire time; NULL = always send (dumb-clock behaviour).
+    cancel_if: Mapped[str | None] = mapped_column(Text, nullable=True)
     sender_phone: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sent: Mapped[bool] = mapped_column(Boolean, default=False)
     is_group: Mapped[bool] = mapped_column(Boolean, default=False)

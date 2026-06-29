@@ -21,6 +21,7 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
         text = args.get("text", "")
         due_time_str = args.get("due_time", "")
         recur = args.get("recur")
+        cancel_if = (args.get("cancel_if") or "").strip() or None
 
         if not text or not due_time_str:
             return "Error: 'text' and 'due_time' are required"
@@ -39,6 +40,7 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
             text=text,
             due_at=due_at,
             recurrence=recur,
+            cancel_if=cancel_if,
         )
         return f"Reminder set: {json.dumps(result)}"
 
