@@ -473,7 +473,7 @@ async def main():
             # fake buffer is live only for the one call)
             if beats:
                 print("\n########## HEARTBEAT (internal turn; repetition + silence) ##########")
-            from hal_orchestrator.services.heartbeat import HEARTBEAT_PROMPT
+            from hal_orchestrator.services.heartbeat import HEARTBEAT_PROMPT, delivery_directive
             for scn in beats:
                 sid, seed, gathered, expect = scn[0], scn[1], scn[2], scn[3]
                 # Optional 5th element: keywords the alert MUST reference, so an
@@ -481,7 +481,12 @@ async def main():
                 must_mention = scn[4] if len(scn) > 4 else None
                 await restore_conv()
                 await seed_history(seed)
+                # Mirror _beat() exactly: gathered block + the deterministic
+                # delivery directive (when the inbox shows a real arrival).
                 text = HEARTBEAT_PROMPT + "\n\n## Gathered for you (reason over this — don't re-fetch):\n" + gathered
+                _dd = delivery_directive(gathered)
+                if _dd:
+                    text += "\n\n" + _dd
                 try:
                     r = await client.post(URL, headers={"Authorization": f"Bearer {secret}"},
                                           json={"phone": SILO, "text": text, "internal": True,

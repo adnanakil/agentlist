@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -53,14 +54,21 @@ want to leave earlier, bring an umbrella, or change plans.
 
 CHECK 2 — THEIR INBOX (INDEPENDENT of CHECK 1 — a delivery or a reply is worth a \
 heads-up on its own, even with nothing upcoming). Scan the recent unread email \
-below for a NEW real-world thing they'd want to know NOW: a package/delivery \
-("your projector was delivered"), a reply from an actual person, an order / \
-reservation / on-sale confirmation. If you see one the user likely hasn't seen, \
-you MUST flag it — surfacing a delivery or a real reply is the single most \
-useful thing a heartbeat does, and it is NOT a "stay silent" case; do not \
-default to "..." when there's a real inbox item below. IGNORE only machine/\
-service/newsletter noise — deploys, CI, monitoring, marketing, automated app \
-emails — those are never events the user needs from you.
+below for a NEW real-world thing they'd want to know NOW: \
+(a) a package that just ARRIVED, is OUT FOR DELIVERY, or was LEFT AT THE DOOR \
+("your projector was delivered", "Amazon: left at front door", a UPS/USPS/FedEx/\
+DoorDash drop) — judge the CONTENT (a delivery happened) over the SENDER: this \
+counts EVEN when it's from Amazon or another retailer/app that ALSO sends \
+marketing, so do NOT wave a real delivery off as an "automated app email"; \
+(b) a reply from an actual person; \
+(c) an order / reservation / on-sale confirmation. \
+If you see one the user likely hasn't seen, you MUST flag it — surfacing a \
+delivery or a real reply is the single most useful thing a heartbeat does, and \
+it is NOT a "stay silent" case; do not default to "..." when there's a real \
+inbox item below. IGNORE machine/service/newsletter noise — deploys, CI, \
+monitoring, marketing, review requests, receipts, and "shipped — arriving in N \
+days" notices (a FUTURE arrival is not a NOW event) — those are never events the \
+user needs from you.
 
 Third-party news about a topic the user cares about is still newsletter/news \
 noise, not personal account status. In particular, do NOT turn The Information, \
@@ -86,6 +94,36 @@ Otherwise reply with EXACTLY "..." — nothing upcoming in the next ~2h, \
 conditions fine, nothing new in the inbox worth flagging, or you already told \
 them. Most heartbeats MUST be silent. Never use a heartbeat to ask a question, \
 request Google access, make small talk, or report tool problems."""
+
+
+# A package that actually ARRIVED (not merely "shipped, arriving later", and not
+# the "USPS Informed Delivery" mail-scan digest, which is why bare "delivery" is
+# excluded). Surfacing a delivery is the heartbeat's highest-value job, but the
+# cheap background model flip-flops on impersonal transactional mail at
+# temperature — so when the pre-fetched inbox clearly shows one, we make the
+# flag deterministic (the model still phrases it and dedups against what it
+# already said) instead of leaving a coin-flip to sampling.
+_DELIVERY_RE = re.compile(
+    r"\b(delivered|out for delivery|left at (the )?(front )?door|"
+    r"arriving today|dropped off (at|on))\b",
+    re.I,
+)
+
+
+def delivery_directive(gathered: str) -> str:
+    """A hard MUST-surface directive when `gathered` (the pre-fetched inbox)
+    shows a package actually arrived; '' otherwise. Appended AFTER the gathered
+    block so it's the last thing the model reads — countering the strong
+    'most heartbeats must be silent' default for this one high-value case."""
+    if not _DELIVERY_RE.search(gathered or ""):
+        return ""
+    return (
+        "‼️ A DELIVERY just landed in the inbox above — a package arrived / was "
+        "left at the door. Surfacing this is the entire point of CHECK 2: you "
+        'MUST lead your reply with a one-line heads-up about it, and must NOT '
+        'reply "...", UNLESS your own recent messages already told them about '
+        "this same delivery."
+    )
 
 
 def in_active_hours(now_local: datetime, settings: HalOrchestratorConfig) -> bool:
@@ -188,6 +226,9 @@ async def _beat(
     context = await _gather_context(settings, http, silo)
     if context:
         prompt += "\n\n## Gathered for you (reason over this — don't re-fetch):\n" + context
+        directive = delivery_directive(context)
+        if directive:
+            prompt += "\n\n" + directive
 
     payload: dict = {
         "phone": silo,
