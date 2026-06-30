@@ -27,12 +27,18 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
             return "Error: 'text' and 'due_time' are required"
 
         try:
-            # Parse ISO datetime, assume UTC if no timezone
             due_at = datetime.fromisoformat(due_time_str)
-            if due_at.tzinfo is None:
-                due_at = due_at.replace(tzinfo=timezone.utc)
         except ValueError:
             return f"Error: invalid due_time format: {due_time_str}. Use ISO format like 2026-02-10T09:00:00"
+        if due_at.tzinfo is None:
+            # A bare time means the USER'S local time, not UTC — otherwise a
+            # naive "9am" is stored as 9am UTC (5am ET) and pings them at dawn.
+            from hal_orchestrator.prompts.system import resolve_tz
+            from hal_orchestrator.services.profiles import get_profile
+
+            user_tz = resolve_tz(await get_profile(ctx.session, ctx.phone))
+            due_at = due_at.replace(tzinfo=user_tz)
+        due_at = due_at.astimezone(timezone.utc)
 
         result = await create_reminder(
             ctx.session,

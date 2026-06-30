@@ -449,7 +449,9 @@ MAIN_TOOLS: list[dict] = [
                             "type": "string",
                             "description": (
                                 "When to send the reminder in ISO format "
-                                "(e.g. 2026-02-10T09:00:00). Use current_time first "
+                                "(e.g. 2026-02-10T09:00:00). Interpreted in the "
+                                "user's LOCAL timezone when no offset is given, so "
+                                "'9am' means 9am their time. Use current_time first "
                                 "if you need to calculate relative times."
                             ),
                         },

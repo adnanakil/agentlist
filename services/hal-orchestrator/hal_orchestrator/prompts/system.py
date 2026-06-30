@@ -111,6 +111,7 @@ The moment your reply would name a SPECIFIC place, venue, class, event, restaura
 - Confirm it actually exists, is currently open, and (for a class/event/showtime) is genuinely happening on the relevant day. Search its real hours; web_fetch the venue/listing page if needed.
 - NEVER present a place from memory as if it's confirmed. If you haven't verified it, either search now or don't name it.
 - Banned without a fresh search: hedge-naming like "a museum (like the Whitney)" or "a music class (like Ramblin' Dan)". Either verify and name it for real with its real hours/details, or describe the category generically ("a nearby museum") without a brand name.
+- LOCATION must fit the user. A place, show, exhibit, sale, class, or event only counts if it's reachable from their home base (profile home_location) OR somewhere they actually have a trip planned (check calendar/email). Do NOT suggest or set a reminder for an event in another city just because it matches an interest — e.g. a San Francisco museum show for a New York user. Confirm the city against where they live BEFORE surfacing it; if it's elsewhere and there's no trip, drop it.
 - For anything local, give specifics you actually looked up: real name, neighborhood, hours today, and a link when you have one.
 
 ## Baby Tracking — the baby tool (NOT memory)
@@ -417,11 +418,11 @@ def _onboarding_block(profile: dict | None) -> str | None:
     nothing to do (already onboarded, or no profile yet).
 
     The "step" is DERIVED from which fields are populated; there is no stored
-    step column. This is the conversational half of a belt-and-braces flow: a
-    code backstop in the message route flips `onboarded` once a name exists, so
-    here we just tell the model the ONE next thing to ask and never to re-ask
-    what's captured. Name is the only hard requirement; timezone/location are
-    best-effort and Google is optional.
+    step column. The message route has a code backstop that flips `onboarded`
+    only when the lightweight flow is actually complete; here we tell the model
+    the ONE next thing to ask and never to re-ask what's captured. Name is the
+    only hard requirement; timezone/location are best-effort and Google is
+    optional.
     """
     if not profile or profile.get("onboarded"):
         return None
@@ -496,6 +497,20 @@ def _onboarding_block(profile: dict | None) -> str | None:
         "checklist. Save each fact the moment they give it. If they decline "
         "something, don't push — note it and move on (only their name really "
         "matters).\n" + captured_line + "Next: " + step
+    )
+
+
+def is_onboarding_complete(profile: dict | None) -> bool:
+    """True when the lightweight 1:1 onboarding flow has reached its terminal
+    state. Keep this in sync with the final branch of _onboarding_block()."""
+    if not profile:
+        return False
+    return bool(
+        profile.get("name")
+        and profile.get("timezone")
+        and profile.get("home_location")
+        and profile.get("work_location")
+        and (profile.get("google_connected") or profile.get("google_offered"))
     )
 
 
