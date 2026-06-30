@@ -21,6 +21,7 @@ from hal_orchestrator.prompts.system import (
     SYSTEM_PROMPT,
     USER_TZ,
     build_user_context,
+    is_onboarding_complete,
     resolve_tz,
 )
 from hal_orchestrator.state import get_http_client, get_settings
@@ -113,6 +114,37 @@ def _is_repeat_alert(reply: str, history: list[dict], cap: int = HEARTBEAT_REPEA
             if similar >= cap:
                 return True
     return False
+
+
+# Leads that mark a heartbeat as a NON-alert: it's re-referencing what it
+# already said, or declaring there's nothing new. The background model keeps
+# narrating the same unread inbox every cycle ("Already flagged X in my 7:37
+# check. Nothing new…") — reworded each time, so it slips under _is_repeat_alert's
+# Jaccard threshold. If a heartbeat LEADS with one of these, it should have
+# stayed silent; suppress it.
+_REHASH_LEADS = (
+    "already flagged", "already mentioned", "already noted", "already covered",
+    "already told", "already sent", "already surfaced", "already caught",
+    "already pinged", "already gave", "as i flagged", "as i mentioned",
+    "as flagged", "as mentioned", "as noted", "nothing new", "nothing else new",
+    "nothing else worth", "nothing to flag", "nothing else to flag",
+    "no new ", "all quiet", "still quiet", "still nothing",
+)
+_GREETING_RE = re.compile(
+    r"^(hey|hi|hello|good\s+(morning|evening|afternoon)|morning|evening|afternoon)"
+    r"[\s,!.…—–-]*(adnan)?[\s,!.…—–:-]*",
+    re.I,
+)
+
+
+def _is_rehash_heartbeat(reply: str) -> bool:
+    """True if the heartbeat LEADS with a rehash / 'nothing new' declaration —
+    a non-alert masquerading as one. Distinct from _is_repeat_alert (which needs
+    textual overlap with a specific prior alert); this catches the reworded
+    'already flagged X' rehash. Checks only the LEAD, so a real alert that leads
+    with new info and merely ends '…nothing else urgent' still goes out."""
+    head = _GREETING_RE.sub("", reply.strip()).lstrip().lower()
+    return head.startswith(_REHASH_LEADS)
 
 
 # --------------------------------------------------------------------------- #
@@ -857,6 +889,13 @@ def build_message_router() -> APIRouter:
             log.info("message.heartbeat_repeat_suppressed", silo=silo, reply=reply[:80])
             outbound_reply = ""
 
+        # Re-hash guard: a heartbeat that LEADS by re-referencing what it already
+        # flagged, or by declaring "nothing new / all quiet", is a non-alert —
+        # the chatty background model narrating the same unread inbox again.
+        if body.internal and outbound_reply and _is_rehash_heartbeat(reply):
+            log.info("message.heartbeat_rehash_suppressed", silo=silo, reply=reply[:80])
+            outbound_reply = ""
+
         if body.internal:
             # Heartbeat turn. Silent → persist nothing (96 silent checks/day
             # would drown the real conversation and the nightly grader).
@@ -916,13 +955,13 @@ def build_message_router() -> APIRouter:
                 capture_trajectory,
             )
 
-            # Onboarding auto-complete backstop (1:1 only): once we have a name,
-            # mark the user onboarded even if the model forgot to flip it. Re-reads
-            # the row (the model may have saved the name during this turn).
-            # Idempotent — only writes when name present and not yet onboarded.
+            # Onboarding auto-complete backstop (1:1 only): once the lightweight
+            # flow is complete, mark the user onboarded even if the model forgot
+            # to flip it. Re-read the row because the model may have saved facts
+            # during this turn. Idempotent.
             if not is_group and not body.internal:
                 fresh = await get_profile(session, silo)
-                if fresh.get("name") and not fresh.get("onboarded"):
+                if is_onboarding_complete(fresh) and not fresh.get("onboarded"):
                     await update_profile(session, silo, onboarded=True)
 
             await archive_turn(session, silo, "user", user_text)
