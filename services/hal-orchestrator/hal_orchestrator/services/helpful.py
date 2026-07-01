@@ -135,18 +135,29 @@ async def _gather(
     from hal_orchestrator.tools.registry import ToolContext, execute_tool
 
     lines: list[str] = []
+    plan: list[tuple[str, str, dict]] = [("Current time", "current_time", {})]
+    if location:
+        # No hard-coded city fallback: a non-NYC user with an unset
+        # home_location was getting a "local" brief built on NYC weather.
+        # Unknown location -> skip weather; the model can ask for home_location.
+        plan.append(("Today's weather", "get_weather", {"location": location}))
+    else:
+        lines.append(
+            "Today's weather — (skipped: the user's home_location isn't saved; "
+            "if the brief would benefit, ask for it once and save it to the "
+            "profile rather than assuming a city)"
+        )
+    plan += [
+        ("Today's calendar", "google_calendar", {"action": "list_events"}),
+        (
+            "Recent unread email",
+            "google_gmail",
+            {"action": "list_emails", "query": "is:unread newer_than:1d", "max_results": 6},
+        ),
+    ]
     async for session in db_session.get_session():
         ctx = ToolContext(phone=silo, session=session, settings=settings, http_client=http)
-        for label, name, args in (
-            ("Current time", "current_time", {}),
-            ("Today's weather", "get_weather", {"location": location or "New York, NY"}),
-            ("Today's calendar", "google_calendar", {"action": "list_events"}),
-            (
-                "Recent unread email",
-                "google_gmail",
-                {"action": "list_emails", "query": "is:unread newer_than:1d", "max_results": 6},
-            ),
-        ):
+        for label, name, args in plan:
             try:
                 lines.append(f"{label} — " + str(await execute_tool(name, args, ctx)))
             except Exception:

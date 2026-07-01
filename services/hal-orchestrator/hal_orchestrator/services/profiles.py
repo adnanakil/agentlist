@@ -22,6 +22,12 @@ EXTRA_KEYS = (
     "work_location",
     "google_offered",
     "onboarding_started_at",
+    # Heartbeat identity-dedup: {gmail_message_id: iso_ts} of inbox items
+    # already surfaced in a proactive alert (services/heartbeat.py).
+    "hb_seen",
+    # Saved address book: {lowercased name: {"phone": "+1...", "name": "..."}}
+    # — lets "text my wife" resolve without the user re-typing numbers.
+    "contacts",
 )
 
 

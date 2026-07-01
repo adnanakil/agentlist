@@ -22,6 +22,7 @@ import asyncio
 import os
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 import structlog
@@ -31,9 +32,15 @@ from ag_common.config import HalOrchestratorConfig
 from ag_db import session as db_session
 from ag_db.models import HalTurn
 
+from hal_orchestrator.prompts.system import USER_TZ, resolve_tz
+
 log = structlog.get_logger()
 
 TICK_SECONDS = 60
+
+# How long a surfaced-item key stays in the dedup set. Unread mail older than
+# 1d falls out of the gather query anyway; 7d covers stubbornly-unread items.
+SEEN_TTL_HOURS = 24 * 7
 
 HEARTBEAT_PROMPT = """\
 [HEARTBEAT — automated check-in. The user did NOT text you and will never see \
@@ -88,7 +95,9 @@ replied). ONE short message, lead with the thing.
 Never alert about baby feed/nap/bedtime timing — the baby system handles that. \
 Before claiming an absence ("no reply yet"), verify it against the actual \
 emails/events — never assert something you didn't check. Don't repeat an alert \
-you already sent (check your own recent messages).
+you already sent (check your own recent messages). Inbox lines tagged \
+"[ALREADY TOLD THE USER …]" were surfaced in a previous alert: never mention \
+them again, and never send a message that only re-references old items.
 
 Otherwise reply with EXACTLY "..." — nothing upcoming in the next ~2h, \
 conditions fine, nothing new in the inbox worth flagging, or you already told \
@@ -114,8 +123,12 @@ def delivery_directive(gathered: str) -> str:
     """A hard MUST-surface directive when `gathered` (the pre-fetched inbox)
     shows a package actually arrived; '' otherwise. Appended AFTER the gathered
     block so it's the last thing the model reads — countering the strong
-    'most heartbeats must be silent' default for this one high-value case."""
-    if not _DELIVERY_RE.search(gathered or ""):
+    'most heartbeats must be silent' default for this one high-value case.
+    Lines already marked as surfaced (identity dedup) don't count."""
+    fresh = "\n".join(
+        ln for ln in (gathered or "").splitlines() if SEEN_MARK not in ln
+    )
+    if not _DELIVERY_RE.search(fresh):
         return ""
     return (
         "‼️ A DELIVERY just landed in the inbox above — a package arrived / was "
@@ -124,6 +137,105 @@ def delivery_directive(gathered: str) -> str:
         'reply "...", UNLESS your own recent messages already told them about '
         "this same delivery."
     )
+
+
+# ---------------------------------------------------------------------------
+# Identity-keyed dedup for surfaced inbox items.
+#
+# The text-similarity suppressors in routes/message.py are heuristics — a
+# reworded re-narration slips through, and (worse) a genuinely NEW alert can
+# be eaten by a fuzzy match. This is the durable fix: every email line in the
+# gathered block carries its Gmail message id; once an alert has told the user
+# about an item, its id goes into profile.extra_data["hb_seen"] and future
+# gathers annotate that line as already-surfaced. Identity never rewords.
+# ---------------------------------------------------------------------------
+
+SEEN_MARK = "[ALREADY TOLD THE USER — do not re-alert about this item]"
+
+_MAIL_ID_RE = re.compile(r"\[id: ([A-Za-z0-9_-]+)\]")
+
+_SEEN_STOP = frozenset(
+    "the a an to of for and or in on at is it you your from re fw fwd with was "
+    "were has have had this that new update notification".split()
+)
+
+
+def _line_words(line: str) -> set[str]:
+    return {
+        w for w in re.findall(r"[a-z0-9]+", line.lower())
+        if w not in _SEEN_STOP and len(w) > 2
+    }
+
+
+def annotate_seen(gathered: str, seen: dict[str, str]) -> str:
+    """Tag every mail line whose Gmail id is already in `seen`."""
+    if not seen:
+        return gathered
+    out = []
+    for ln in gathered.splitlines():
+        m = _MAIL_ID_RE.search(ln)
+        if m and m.group(1) in seen:
+            ln = f"{ln}  {SEEN_MARK}"
+        out.append(ln)
+    return "\n".join(out)
+
+
+def ids_covered_by_alert(gathered: str, reply: str, directive_fired: bool) -> list[str]:
+    """Gmail ids the alert `reply` plausibly told the user about: lines whose
+    content words overlap the reply (>=2), plus every delivery-pattern line
+    when the delivery directive forced the alert. Deliberately NOT 'everything
+    in context' — an unmentioned item keeps its chance to alert later."""
+    reply_words = _line_words(reply)
+    covered: list[str] = []
+    for ln in (gathered or "").splitlines():
+        m = _MAIL_ID_RE.search(ln)
+        if not m or SEEN_MARK in ln:
+            continue
+        if len(_line_words(ln) & reply_words) >= 2:
+            covered.append(m.group(1))
+        elif directive_fired and _DELIVERY_RE.search(ln):
+            covered.append(m.group(1))
+    return covered
+
+
+def _prune_seen(seen: dict[str, str], now: datetime) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key, ts in seen.items():
+        try:
+            when = datetime.fromisoformat(ts)
+        except (TypeError, ValueError):
+            continue
+        if (now - when) < timedelta(hours=SEEN_TTL_HOURS):
+            out[key] = ts
+    return out
+
+
+async def _load_seen(silo: str) -> dict[str, str]:
+    from hal_orchestrator.services.profiles import get_profile
+
+    async for session in db_session.get_session():
+        profile = await get_profile(session, silo)
+        seen = (profile.get("extra_data") or {}).get("hb_seen") or {}
+        if not isinstance(seen, dict):
+            return {}
+        return _prune_seen(seen, datetime.now(timezone.utc))
+    return {}
+
+
+async def _mark_seen(silo: str, ids: list[str], prior: dict[str, str]) -> None:
+    if not ids:
+        return
+    from hal_orchestrator.services.profiles import update_profile
+
+    now = datetime.now(timezone.utc)
+    merged = _prune_seen(dict(prior), now)
+    for i in ids:
+        merged[i] = now.isoformat()
+    async for session in db_session.get_session():
+        await update_profile(session, silo, hb_seen=merged)
+        await session.commit()
+        break
+    log.info("heartbeat.marked_seen", silo=silo, n=len(ids))
 
 
 def in_active_hours(now_local: datetime, settings: HalOrchestratorConfig) -> bool:
@@ -224,7 +336,16 @@ async def _beat(
     # go fetch it on its own).
     prompt = HEARTBEAT_PROMPT
     context = await _gather_context(settings, http, silo)
+    directive = ""
+    seen: dict[str, str] = {}
     if context:
+        # Identity dedup: annotate items already surfaced in a prior alert so
+        # the model (and the delivery directive) treat them as old news.
+        try:
+            seen = await _load_seen(silo)
+        except Exception:
+            log.exception("heartbeat.load_seen_failed", silo=silo)
+        context = annotate_seen(context, seen)
         prompt += "\n\n## Gathered for you (reason over this — don't re-fetch):\n" + context
         directive = delivery_directive(context)
         if directive:
@@ -256,6 +377,14 @@ async def _beat(
     if reply:
         await state.outbox.put({"to": silo, "text": reply})
         log.info("heartbeat.alerted", silo=silo, chars=len(reply))
+        # Durably record which inbox items this alert covered, so the next
+        # gather annotates them and the model never re-narrates them.
+        try:
+            await _mark_seen(
+                silo, ids_covered_by_alert(context, reply, bool(directive)), seen
+            )
+        except Exception:
+            log.exception("heartbeat.mark_seen_failed", silo=silo)
     for sm in data.get("side_messages", []):
         if sm.get("to") and sm.get("text"):
             await state.outbox.put({"to": sm["to"], "text": sm["text"]})
@@ -266,7 +395,6 @@ async def heartbeat_loop(
 ) -> None:
     if not settings.heartbeat_enabled:
         return
-    from hal_orchestrator.prompts.system import USER_TZ
 
     while db_session._session_factory is None:
         await asyncio.sleep(1)
@@ -281,11 +409,31 @@ async def heartbeat_loop(
         while True:
             await asyncio.sleep(TICK_SECONDS)
             try:
-                if not in_active_hours(datetime.now(USER_TZ), settings):
-                    continue
                 now = datetime.now(timezone.utc)
                 candidates = await _active_silos(settings)
-                for silo in due_silos(candidates, last_run, now, settings):
+                due = due_silos(candidates, last_run, now, settings)
+                if not due:
+                    continue
+                # Quiet hours are evaluated in EACH SILO'S OWN timezone (from
+                # its profile), not a single global one — an LA user shouldn't
+                # get 4am heartbeats because it's 7am in New York. A silo
+                # skipped for quiet hours keeps its due-ness (no last_run
+                # write) so it fires when its local morning starts.
+                tz_by_silo: dict[str, ZoneInfo] = {}
+                async for session in db_session.get_session():
+                    from hal_orchestrator.services.profiles import get_profile
+
+                    for silo in due:
+                        try:
+                            tz_by_silo[silo] = resolve_tz(await get_profile(session, silo))
+                        except Exception:
+                            tz_by_silo[silo] = USER_TZ
+                    break
+                for silo in due:
+                    if not in_active_hours(
+                        datetime.now(tz_by_silo.get(silo, USER_TZ)), settings
+                    ):
+                        continue
                     last_run[silo] = now
                     try:
                         await _beat(settings, http, silo)

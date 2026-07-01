@@ -6,6 +6,7 @@ and returns the final text response.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 from datetime import datetime
@@ -66,7 +67,11 @@ def _contains_quiet_sentinel(text: str) -> bool:
         ls = line.strip()
         if ls and not ls.strip(".… "):
             return True
-    if not s.rsplit(None, 1)[-1].strip(".…"):          # trailing bare "…" token
+    # Trailing bare "…" token: only a sentinel on SHORT replies ("nothing to
+    # flag ..."). A long multi-sentence alert that merely trails off with an
+    # ellipsis ("Rain at 3 — grab the walk in before then …") is a REAL alert;
+    # eating it was over-suppression.
+    if len(s) <= 80 and not s.rsplit(None, 1)[-1].strip(".…"):
         return True
     return False
 
@@ -128,7 +133,10 @@ _REHASH_LEADS = (
     "already pinged", "already gave", "as i flagged", "as i mentioned",
     "as flagged", "as mentioned", "as noted", "nothing new", "nothing else new",
     "nothing else worth", "nothing to flag", "nothing else to flag",
-    "no new ", "all quiet", "still quiet", "still nothing",
+    # NB: "no new " is deliberately NOT in this list — a real alert can lead
+    # with it ("No new flights — your 5pm is cancelled") and identity-keyed
+    # dedup (heartbeat seen-items) now covers the inbox-rehash case.
+    "all quiet", "still quiet", "still nothing",
 )
 _GREETING_RE = re.compile(
     r"^(hey|hi|hello|good\s+(morning|evening|afternoon)|morning|evening|afternoon)"
@@ -279,6 +287,258 @@ async def _finalize_answer(
     except Exception:
         log.exception("message.finalize_failed", silo=silo)
     return "I dug into that but couldn't pin it down — can you give me one more detail?"
+
+
+# --------------------------------------------------------------------------- #
+# Parallel tool execution — network-only tools with no DB-session use may run
+# concurrently within one model turn (a plan turn firing weather + travel_time
+# + several web_searches otherwise pays the SUM of their latencies). Everything
+# else stays sequential: the SQLAlchemy AsyncSession is not concurrency-safe.
+# (log_friction on the error path is a sync session.add — no awaited IO — so
+# even concurrent failures are safe.)
+# --------------------------------------------------------------------------- #
+
+PARALLEL_SAFE_TOOLS = frozenset(
+    {"web_search", "web_fetch", "get_weather", "travel_time", "sports_score", "places"}
+)
+
+# --------------------------------------------------------------------------- #
+# Auto archive recall — messages that reference past discussion pull matching
+# older turns from the durable archive into context, instead of relying on the
+# model to think of calling recall_history (it usually doesn't).
+# --------------------------------------------------------------------------- #
+
+_PAST_REF_RX = re.compile(
+    r"\b(remember (when|what|that|the)|last (time|week|month)|a while (ago|back)|"
+    r"the other (day|night|week)|we (talked|discussed|spoke|went over)|"
+    r"you (said|told me|mentioned|recommended|suggested|found)|"
+    r"what did (i|we|you)|(that|the) (place|restaurant|spot|hotel|article|thing) "
+    r"(you|we|i) (mentioned|found|liked|talked)|as (we )?discussed)\b",
+    re.I,
+)
+
+_RECALL_STOP = frozenset(
+    "the a an to of for and or in on at is it you your i we that this what did "
+    "was were when where remember mentioned said told about with have had".split()
+)
+
+
+async def _auto_recall_archive(session, silo: str, user_text: str) -> list[dict]:
+    """Best-effort archive lookup for a past-referencing message. Full-text
+    first; if the AND-semantics FTS misses, retry with the two most distinctive
+    keywords. Only returns turns older than 6h — newer ones are already in the
+    rolling context window."""
+    from hal_orchestrator.services.history_search import search_history
+
+    cutoff = 6 * 60 * 60
+    now = datetime.now().astimezone()
+
+    def _older_than_cutoff(rows: list[dict]) -> list[dict]:
+        out = []
+        for r in rows:
+            try:
+                at = datetime.fromisoformat(r["at"]) if r.get("at") else None
+            except ValueError:
+                at = None
+            if at is None or (now - at).total_seconds() >= cutoff:
+                out.append(r)
+        return out
+
+    rows = _older_than_cutoff(
+        await search_history(session, silo, query=user_text, limit=8)
+    )
+    if not rows:
+        words = sorted(
+            {
+                w
+                for w in re.findall(r"[a-z0-9']+", user_text.lower())
+                if w not in _RECALL_STOP and len(w) > 3
+            },
+            key=len,
+            reverse=True,
+        )[:2]
+        if words:
+            rows = _older_than_cutoff(
+                await search_history(session, silo, query=" ".join(words), limit=8)
+            )
+    return rows[:5]
+
+
+# --------------------------------------------------------------------------- #
+# Claimed-action verification — the recurring trust-killer in the nightly
+# grades: HAL SAYS it set a reminder / logged the feed / created the watch but
+# made no such tool call, and only admits it next turn. A prompt rule (playbook)
+# didn't fix it, so enforce it mechanically: scan the final reply for action
+# claims, check the turn's actual tool calls, and when a claim is unbacked run
+# one corrective mini-loop that either performs the action for real or rewrites
+# the reply to stop claiming it.
+# --------------------------------------------------------------------------- #
+
+_ACTION_CLAIMS: list[tuple[re.Pattern, frozenset, str]] = [
+    (
+        re.compile(
+            r"\b(reminder('s| is| has been)? (set|created|scheduled)|"
+            r"(i('ve| have)? |just )set (a |the |that |your )?reminder|"
+            r"i('ll| will) remind you)\b",
+            re.I,
+        ),
+        frozenset({"set_reminder", "baby", "schedule"}),
+        "set_reminder",
+    ),
+    (
+        re.compile(
+            r"\b(logged|log it|got (it|that|him|her) (logged|down)|noted (the|that|his|her) "
+            r"(feed|nap|wake|bedtime|diaper))\b",
+            re.I,
+        ),
+        frozenset({"baby"}),
+        "baby log",
+    ),
+    (
+        re.compile(
+            r"\b(i('ve| have)? scheduled|task (is )?scheduled|"
+            r"scheduled (it|that|the task) for)\b",
+            re.I,
+        ),
+        frozenset({"schedule", "set_reminder"}),
+        "schedule",
+    ),
+    (
+        re.compile(
+            r"\b((added|created|put) (it|that|an? (event|hold)) (on|to|in) your calendar|"
+            r"calendar (event|invite|hold) (is )?(created|added|set))\b",
+            re.I,
+        ),
+        frozenset({"google_calendar"}),
+        "calendar event",
+    ),
+    (
+        re.compile(
+            r"\b(i('m| am) (now )?watching (for|the)|watch (is )?(set|created|live)|"
+            r"i('ll| will) (keep an eye on|watch for|let you know (the moment|when|if)))\b",
+            re.I,
+        ),
+        frozenset({"watch", "schedule", "set_reminder"}),
+        "watch",
+    ),
+    (
+        re.compile(
+            r"\b(texted (him|her|them|your)|sent (the|a|your) (message|text)|"
+            r"message (is )?sent)\b",
+            re.I,
+        ),
+        frozenset({"send_message", "delegate"}),
+        "send_message",
+    ),
+    (
+        re.compile(
+            r"\b(draft (is )?(saved|created|ready)|drafted (an|the|that) email|"
+            r"email (is )?(sent|on its way))\b",
+            re.I,
+        ),
+        frozenset({"google_gmail", "delegate"}),
+        "email",
+    ),
+]
+
+
+def _unbacked_action_claims(reply: str, tools_used: set[str]) -> list[str]:
+    """Action claims in `reply` with no matching tool call this turn."""
+    return [
+        label
+        for rx, accepted, label in _ACTION_CLAIMS
+        if rx.search(reply) and not (tools_used & accepted)
+    ]
+
+
+async def _enforce_claimed_actions(
+    http_client,
+    settings,
+    history: list,
+    system_prompt: str,
+    ctx,
+    silo: str,
+    model: str | None,
+    thinking_level: str | None,
+    unbacked: list[str],
+    trajectory_steps: list[dict],
+) -> tuple[str | None, int]:
+    """One corrective mini-loop (<=3 iterations, tools enabled). Returns
+    (corrected_reply or None on failure, tool_calls_made). Mutates `history`
+    in place — the correction becomes part of the persisted turn."""
+    from hal_orchestrator.prompts.tool_defs import MAIN_TOOLS
+    from hal_orchestrator.services.gemini import call_gemini
+
+    history.append(
+        {
+            "role": "user",
+            "parts": [
+                {
+                    "text": (
+                        "[SELF-CHECK — automated, the user did NOT send this and "
+                        "will only see your corrected reply] Your reply claims you "
+                        f"performed: {', '.join(unbacked)} — but you made NO "
+                        "matching tool call this turn, so it did NOT happen. "
+                        "Fix it now: (a) actually perform the action(s) with the "
+                        "real tool(s), then send your reply confirming what you "
+                        "truly did; or (b) if you can't do it, rewrite the reply "
+                        "to stop claiming it and say what you need. Output ONLY "
+                        "the final corrected message to the user."
+                    )
+                }
+            ],
+        }
+    )
+    extra_calls = 0
+    for _ in range(3):
+        try:
+            response = await call_gemini(
+                client=http_client,
+                settings=settings,
+                history=history,
+                tools=MAIN_TOOLS,
+                system=system_prompt,
+                model=model,
+                thinking_level=thinking_level,
+            )
+        except Exception:
+            log.exception("message.claim_check_call_failed", silo=silo)
+            return None, extra_calls
+        candidates = (response or {}).get("candidates", [])
+        parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+        if not parts:
+            return None, extra_calls
+        func_calls = [p for p in parts if "functionCall" in p]
+        if func_calls:
+            history.append({"role": "model", "parts": parts})
+            func_responses = []
+            for fc in func_calls:
+                call = fc["functionCall"]
+                tool_name = call["name"]
+                tool_args = call.get("args", {})
+                extra_calls += 1
+                trajectory_steps.append(
+                    {"tool": tool_name, "args": list(tool_args.keys())[:8]}
+                )
+                from hal_orchestrator.tools.registry import execute_tool
+
+                result = await execute_tool(tool_name, tool_args, ctx)
+                func_responses.append(
+                    {
+                        "functionResponse": {
+                            "name": tool_name,
+                            "response": {"content": result},
+                        }
+                    }
+                )
+            history.append({"role": "user", "parts": func_responses})
+            continue
+        text = "\n".join(p.get("text", "") for p in parts if "text" in p).strip()
+        if text:
+            history.append({"role": "model", "parts": [{"text": text}]})
+            return text, extra_calls
+        return None, extra_calls
+    return None, extra_calls
 
 
 # --------------------------------------------------------------------------- #
@@ -543,9 +803,37 @@ def build_message_router() -> APIRouter:
                 )
                 log.info("message.retrieved", silo=silo, n=len(relevant))
 
+        # Auto archive recall: a message that references past discussion pulls
+        # matching older turns from the durable archive into context — the model
+        # rarely thinks to call recall_history on its own, so anything beyond
+        # the rolling window was effectively forgotten. Best-effort.
+        if not body.internal and _PAST_REF_RX.search(user_text):
+            try:
+                recalled = await _auto_recall_archive(session, silo, user_text)
+            except Exception:
+                log.exception("message.auto_recall_failed", silo=silo)
+                recalled = []
+            if recalled:
+                system_prompt += (
+                    "\n\n## Older messages that may be what they're referring to "
+                    "(auto-recalled from this chat's archive — verify with "
+                    "recall_history if you need more)\n"
+                    + "\n".join(
+                        f"- [{(r.get('at') or '')[:10]}] {r['role']}: {r['content'][:300]}"
+                        for r in recalled
+                    )
+                )
+                log.info("message.archive_recalled", silo=silo, n=len(recalled))
+
         # Rolling long-horizon summary (maintained by the summarizer daemon) —
         # preserves context beyond the recent-turn window without re-feeding it.
-        convo_summary = await get_summary(session, silo)
+        # Best-effort like its context-assembly siblings: a summary read error
+        # must degrade the context, not fail the whole reply.
+        try:
+            convo_summary = await get_summary(session, silo)
+        except Exception:
+            log.exception("message.summary_failed", silo=silo)
+            convo_summary = None
         if convo_summary:
             system_prompt += (
                 "\n\n## Conversation summary so far (older context beyond the recent "
@@ -670,9 +958,12 @@ def build_message_router() -> APIRouter:
                 # Add model's response to history
                 history.append({"role": "model", "parts": parts})
 
-                # Execute each tool call
-                func_responses = []
-                for fc in func_calls:
+                # Execute the tool calls. Network-only tools (PARALLEL_SAFE_TOOLS)
+                # in a multi-call batch run concurrently; session-touching tools
+                # run sequentially. Response order always matches call order.
+                func_responses: list[dict | None] = [None] * len(func_calls)
+                parallel_batch: list[tuple[int, str, dict]] = []
+                for idx, fc in enumerate(func_calls):
                     call = fc["functionCall"]
                     tool_name = call["name"]
                     tool_args = call.get("args", {})
@@ -689,19 +980,35 @@ def build_message_router() -> APIRouter:
                         iteration=iteration,
                     )
 
-                    result = await execute_tool(tool_name, tool_args, ctx)
+                    if len(func_calls) > 1 and tool_name in PARALLEL_SAFE_TOOLS:
+                        parallel_batch.append((idx, tool_name, tool_args))
+                        continue
 
-                    func_responses.append(
-                        {
+                    result = await execute_tool(tool_name, tool_args, ctx)
+                    func_responses[idx] = {
+                        "functionResponse": {
+                            "name": tool_name,
+                            "response": {"content": result},
+                        }
+                    }
+
+                if parallel_batch:
+                    results = await asyncio.gather(
+                        *(execute_tool(n, a, ctx) for _, n, a in parallel_batch),
+                        return_exceptions=True,
+                    )
+                    for (idx, tool_name, _), result in zip(parallel_batch, results):
+                        if isinstance(result, BaseException):
+                            result = f"Tool error ({tool_name}): {result}"
+                        func_responses[idx] = {
                             "functionResponse": {
                                 "name": tool_name,
-                                "response": {"content": result},
+                                "response": {"content": str(result)},
                             }
                         }
-                    )
 
                 # Add tool responses to history
-                history.append({"role": "user", "parts": func_responses})
+                history.append({"role": "user", "parts": [r for r in func_responses if r]})
 
                 # Runaway guard: one tool hammered repeatedly without converging
                 # → stop and synthesize from what we have (don't burn the budget).
@@ -719,7 +1026,15 @@ def build_message_router() -> APIRouter:
             reply = "\n".join(text_parts).strip()
 
             if not reply:
-                reply = "..."
+                # Degenerate turn: parts existed but carried no text (thinking-
+                # only / truncated). This is NOT the model deliberately choosing
+                # silence (that's an explicit "..." text) — in a 1:1 collapsing
+                # it to the sentinel meant the user got dead air. Route it
+                # through the stalled path: internal turns stay silent,
+                # real turns get a synthesized answer.
+                log.warning("message.empty_text_turn", silo=silo, iteration=iteration)
+                stalled = True
+                break
 
             history.append({"role": "model", "parts": [{"text": reply}]})
             _reset_failures(silo)
@@ -801,6 +1116,48 @@ def build_message_router() -> APIRouter:
                 reply = stripped
                 if history and history[-1].get("role") == "model":
                     history[-1] = {"role": "model", "parts": [{"text": reply}]}
+
+        # Claimed-action enforcement: if the reply claims an action (set a
+        # reminder, logged the feed, created a watch, texted someone) that has
+        # NO matching tool call this turn, run one corrective mini-loop that
+        # actually performs it — or rewrites the reply to stop claiming it.
+        # The #1 recurring trust failure in the nightly grades; a playbook rule
+        # alone didn't fix it.
+        if (
+            reply
+            and not gemini_failed
+            and not stalled
+            and not body.internal
+            and not _is_quiet_sentinel(reply)
+        ):
+            try:
+                tools_used = {s["tool"] for s in trajectory_steps}
+                unbacked = _unbacked_action_claims(reply, tools_used)
+                if unbacked:
+                    log.warning(
+                        "message.unbacked_claims", silo=silo, claims=unbacked
+                    )
+                    corrected, extra_calls = await _enforce_claimed_actions(
+                        http_client, settings, history, system_prompt, ctx,
+                        silo, body.model, body.thinking_level, unbacked,
+                        trajectory_steps,
+                    )
+                    total_tool_calls += extra_calls
+                    if corrected:
+                        reply = _strip_markdown(corrected)
+                        try:
+                            from hal_orchestrator.services.friction import (
+                                log_friction,
+                            )
+
+                            log_friction(
+                                session, silo, "unbacked_claim",
+                                ", ".join(unbacked)[:200],
+                            )
+                        except Exception:
+                            pass
+            except Exception:
+                log.exception("message.claim_check_failed", silo=silo)
 
         # Layer 2 hardening: self-critique on plan/recommendation turns, run
         # SYNCHRONOUSLY — before the reply is sent. One extra model call re-reads

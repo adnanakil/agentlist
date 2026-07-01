@@ -69,6 +69,7 @@ async def execute_tool(
     )
     from hal_orchestrator.tools.image_edit import tool_image_edit
     from hal_orchestrator.tools.memory import tool_memory
+    from hal_orchestrator.tools.places import tool_places
     from hal_orchestrator.tools.profile import tool_profile
     from hal_orchestrator.tools.reminders import tool_set_reminder
     from hal_orchestrator.tools.send_message import tool_send_message
@@ -99,6 +100,7 @@ async def execute_tool(
         "web_fetch": lambda: tool_web_fetch(args, ctx),
         "get_weather": lambda: tool_weather(args, ctx),
         "travel_time": lambda: tool_travel_time(args, ctx),
+        "places": lambda: tool_places(args, ctx),
         "send_message": lambda: tool_send_message(args, ctx),
         "baby": lambda: tool_baby(args, ctx),
         "memory": lambda: tool_memory(args, ctx),

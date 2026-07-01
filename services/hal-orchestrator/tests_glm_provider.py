@@ -46,7 +46,7 @@ check("tools translated to input_schema", body["tools"][0]["name"] == "baby" and
 
 print("body defaults + omissions:")
 bare = G._build_glm_body(HIST, None, None, "glm-5.2", None)
-check("default max_tokens 16000", bare["max_tokens"] == 16000)
+check("default max_tokens 16384 (aligned with gemini cap)", bare["max_tokens"] == 16384)
 check("no tools key when none", "tools" not in bare)
 check("no system key when none", "system" not in bare)
 

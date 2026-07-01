@@ -32,10 +32,18 @@ async def tool_schedule(args: dict, ctx: ToolContext) -> str:
             return f"Error: recur must be one of {', '.join(sorted(RECURRENCES))}."
         try:
             due = datetime.fromisoformat(due_str)
-            if due.tzinfo is None:
-                due = due.replace(tzinfo=timezone.utc)
         except ValueError:
             return f"Error: invalid due_time '{due_str}'. Use ISO, e.g. 2026-06-11T08:00:00-04:00."
+        if due.tzinfo is None:
+            # A bare time means the USER'S local time, not UTC — otherwise
+            # "brief me at 8am" fires at 8am UTC (4am ET). Same rule as
+            # set_reminder.
+            from hal_orchestrator.prompts.system import resolve_tz
+            from hal_orchestrator.services.profiles import get_profile
+
+            user_tz = resolve_tz(await get_profile(ctx.session, ctx.phone))
+            due = due.replace(tzinfo=user_tz)
+        due = due.astimezone(timezone.utc)
 
         job = await create_cron(
             ctx.session,

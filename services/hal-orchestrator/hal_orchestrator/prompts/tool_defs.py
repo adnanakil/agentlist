@@ -292,6 +292,40 @@ MAIN_TOOLS: list[dict] = [
                 },
             },
             {
+                "name": "places",
+                "description": (
+                    "Find real, current nearby places (Google Places). Text search like "
+                    "'coffee shops near Fort Greene Brooklyn' or 'ramen open now in "
+                    "Chelsea' returns name, rating + review count, price ($–$$$$), LIVE "
+                    "open/closed status, address, phone, and a Google Maps link. Use this "
+                    "for ANY 'near me / open now / find a spot / best X around here' "
+                    "question instead of web_search — it's live and structured. Pass the "
+                    "neighborhood/city in the query; set open_now to filter to what's open."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": (
+                                "What + where, e.g. 'coffee shops near Fort Greene "
+                                "Brooklyn' or 'best tacos in Austin'. Include the "
+                                "neighborhood/city."
+                            ),
+                        },
+                        "open_now": {
+                            "type": "boolean",
+                            "description": "Only return places open right now.",
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "How many to return (1-8, default 5).",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+            {
                 "name": "profile",
                 "description": (
                     "Read or update the user's persistent profile — a markdown doc "
@@ -326,8 +360,13 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "web_search",
                 "description": (
-                    "Quick web search. For thorough research, "
-                    "delegate to the research agent instead."
+                    "Web search — use it directly for quick lookups: current "
+                    "events, hours, prices, news, reviews, facts, verifying a "
+                    "place. Only delegate to the research agent for a genuinely "
+                    "deep multi-source dive. If it reports the search service "
+                    "was unavailable/blocked, that is NOT 'no results' — retry "
+                    "once or use browser/web_fetch instead; never tell the user "
+                    "nothing exists based on a blocked search."
                 ),
                 "parameters": {
                     "type": "object",
@@ -341,9 +380,31 @@ MAIN_TOOLS: list[dict] = [
                 },
             },
             {
+                "name": "web_fetch",
+                "description": (
+                    "Fetch a URL and return its readable text — for verifying a "
+                    "venue/listing page, reading an article, or following up a "
+                    "web_search result. For JS-heavy pages, YouTube/TikTok "
+                    "transcripts, or screenshots use browser instead."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "The URL to fetch",
+                        },
+                    },
+                    "required": ["url"],
+                },
+            },
+            {
                 "name": "send_message",
                 "description": (
-                    "Send an iMessage directly. "
+                    "Send an iMessage directly. Accepts a phone number OR the "
+                    "name of a saved contact (saved via contacts action="
+                    "add_contact — e.g. 'wife', 'Mom'). If a name isn't saved "
+                    "it returns the saved-contact list instead of guessing. "
                     "For complex messaging tasks, delegate to the texting agent."
                 ),
                 "parameters": {
@@ -351,7 +412,10 @@ MAIN_TOOLS: list[dict] = [
                     "properties": {
                         "to": {
                             "type": "string",
-                            "description": "Phone number in +1XXXXXXXXXX format",
+                            "description": (
+                                "Phone number in +1XXXXXXXXXX format, or a saved "
+                                "contact name"
+                            ),
                         },
                         "text": {
                             "type": "string",
@@ -367,14 +431,31 @@ MAIN_TOOLS: list[dict] = [
                     "Manage the current user's contact profile. "
                     "Actions: get (read profile), update (set fields like name, "
                     "timezone, home_location, work_location, onboarded, "
-                    "google_connected, google_offered, email, notes)."
+                    "google_connected, google_offered, email, notes), "
+                    "add_contact (save a person's number under a name — 'wife', "
+                    "'Mom', 'Seth' — so send_message works by name; when the "
+                    "user gives you someone's number, save it proactively), "
+                    "list_contacts (show the saved address book)."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
-                            "description": "get or update",
+                            "description": "get, update, add_contact, or list_contacts",
+                        },
+                        "contact_name": {
+                            "type": "string",
+                            "description": (
+                                "For add_contact: the name/relation to save, "
+                                "e.g. 'wife', 'Mom', 'Seth'"
+                            ),
+                        },
+                        "contact_phone": {
+                            "type": "string",
+                            "description": (
+                                "For add_contact: their number, +1XXXXXXXXXX"
+                            ),
                         },
                         "name": {
                             "type": "string",
@@ -701,13 +782,14 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "google_auth",
                 "description": (
-                    "Manage the user's Google connection (read-only Calendar + Gmail), "
-                    "scoped to this 1:1 chat. Actions: status (is it connected, and as "
-                    "which account), start (returns a one-tap consent LINK — send it to "
-                    "the user verbatim on its own line and ask them to tap it, approve, "
-                    "and text back), disconnect (revoke + forget). If google_calendar or "
-                    "google_gmail says it's not connected, call start. Personal — refuses "
-                    "in group chats."
+                    "Manage the user's Google connection (Calendar + Gmail, read & "
+                    "write), scoped to this 1:1 chat. Actions: status (is it connected, "
+                    "and as which account), start (returns a one-tap consent LINK — send "
+                    "it to the user verbatim on its own line and ask them to tap it, "
+                    "approve, and text back), disconnect (revoke + forget). If "
+                    "google_calendar or google_gmail says it's not connected — or that "
+                    "the connection is read-only and must be reconnected for write "
+                    "access — call start. Personal — refuses in group chats."
                 ),
                 "parameters": {
                     "type": "object",
@@ -723,23 +805,33 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "google_calendar",
                 "description": (
-                    "Read the user's Google Calendar (READ-ONLY — cannot create or edit). "
-                    "Actions: list_events (upcoming events; optional time_min/time_max as "
-                    "RFC3339, defaults to the next 7 days), search_events (same plus a "
-                    "query string). Requires the user to have connected Google "
-                    "(google_auth). Personal — refuses in group chats."
+                    "Read AND write the user's Google Calendar. Actions: list_events "
+                    "(upcoming events; optional time_min/time_max as RFC3339, defaults "
+                    "to the next 7 days), search_events (same plus a query string), "
+                    "create_event (add an event to their primary calendar — needs "
+                    "summary + start; end defaults to start + 1h; a naive start like "
+                    "2026-07-02T15:00:00 is read in the user's own timezone). Requires "
+                    "the user to have connected Google (google_auth); if the connection "
+                    "predates write access you'll be told to have them reconnect. "
+                    "Personal — refuses in group chats."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
-                            "enum": ["list_events", "search_events"],
+                            "enum": ["list_events", "search_events", "create_event"],
                         },
                         "time_min": {"type": "string", "description": "RFC3339 start, e.g. 2026-06-09T00:00:00-04:00"},
                         "time_max": {"type": "string", "description": "RFC3339 end"},
                         "query": {"type": "string", "description": "Text to match (for search_events)"},
                         "max_results": {"type": "integer", "description": "Default 10"},
+                        "summary": {"type": "string", "description": "Event title (for create_event)"},
+                        "start": {"type": "string", "description": "Event start, ISO 8601. Naive (no offset) is read in the user's timezone, e.g. 2026-07-02T15:00:00 (for create_event)"},
+                        "end": {"type": "string", "description": "Event end, ISO 8601; defaults to start + 1 hour (for create_event)"},
+                        "description": {"type": "string", "description": "Event notes/description (for create_event)"},
+                        "location": {"type": "string", "description": "Event location (for create_event)"},
+                        "attendees": {"type": "array", "items": {"type": "string"}, "description": "Attendee email addresses to invite (for create_event)"},
                     },
                     "required": ["action"],
                 },
@@ -747,62 +839,44 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "google_gmail",
                 "description": (
-                    "Read the user's Gmail (READ-ONLY — cannot send, draft, or modify). "
-                    "Actions: list_emails (query defaults to 'is:unread'; supports Gmail "
-                    "search like 'is:unread newer_than:1d', returns ids + sender + "
-                    "subject + snippet), read_email (full body by message_id). Requires "
-                    "the user to have connected Google (google_auth). Personal — refuses "
-                    "in group chats."
+                    "Read AND write the user's Gmail. Actions: list_emails (query "
+                    "defaults to 'is:unread'; supports Gmail search like "
+                    "'is:unread newer_than:1d', returns ids + sender + subject + "
+                    "snippet), read_email (full body by message_id), create_draft (save "
+                    "a draft to the user's Drafts — needs to/subject/body, optional cc; "
+                    "NEVER sends), send (actually send the email). SEND SAFETY: sending "
+                    "is irreversible — before calling send you MUST show the user the "
+                    "exact recipient, subject, and full body in the chat and get an "
+                    "explicit 'yes'; only then call send with confirmed=true. When "
+                    "unsure, use create_draft instead. Requires the user to have "
+                    "connected Google (google_auth); if the connection predates write "
+                    "access you'll be told to have them reconnect. Personal — refuses in "
+                    "group chats."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
-                            "enum": ["list_emails", "read_email"],
+                            "enum": ["list_emails", "read_email", "create_draft", "send"],
                         },
                         "query": {"type": "string", "description": "Gmail search query, e.g. 'is:unread newer_than:1d'"},
                         "max_results": {"type": "integer", "description": "Default 10"},
                         "message_id": {"type": "string", "description": "Message id (for read_email)"},
+                        "to": {"type": "string", "description": "Recipient email address (for create_draft/send)"},
+                        "subject": {"type": "string", "description": "Email subject (for create_draft/send)"},
+                        "body": {"type": "string", "description": "Email body, plain text (for create_draft/send)"},
+                        "cc": {"type": "string", "description": "CC address(es), comma-separated (for create_draft/send)"},
+                        "confirmed": {"type": "boolean", "description": "Must be true to actually send, and only after the user has seen the exact recipient/subject/body and said yes (for send)"},
                     },
                     "required": ["action"],
                 },
             },
-            # --- Stubbed tools (not yet available in cloud) ---
-            {
-                "name": "vault",
-                "description": "Encrypted credential storage. (Not yet available in cloud version.)",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {"type": "string", "description": "store, retrieve, delete, or list"},
-                    },
-                    "required": ["action"],
-                },
-            },
-            {
-                "name": "connect_account",
-                "description": "Connect service accounts. (Not yet available in cloud version.)",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {"type": "string", "description": "start_qr, start_credentials, check_status, or list_services"},
-                    },
-                    "required": ["action"],
-                },
-            },
-            {
-                "name": "manage_agents",
-                "description": "Create/manage custom agents. (Not yet available in cloud version.)",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {"type": "string", "description": "The action to perform"},
-                        "config": {"type": "object", "description": "Configuration object"},
-                    },
-                    "required": ["action", "config"],
-                },
-            },
+            # NOTE: dead "not yet available" stubs (vault, connect_account,
+            # manage_agents, events) are deliberately NOT advertised here —
+            # offering the model tools that always fail wastes context and
+            # makes HAL promise capabilities it doesn't have. The registry
+            # still stubs them defensively if something calls one.
             {
                 "name": "resy",
                 "description": (
@@ -824,17 +898,6 @@ MAIN_TOOLS: list[dict] = [
                         "party_size": {"type": "integer", "description": "Number of people (default 2)"},
                     },
                     "required": ["action"],
-                },
-            },
-            {
-                "name": "events",
-                "description": "Event detection tool. (Not yet available in cloud version.)",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "Event search query"},
-                    },
-                    "required": ["query"],
                 },
             },
             {
@@ -935,23 +998,6 @@ def get_agent_tools(tool_names: list[str]) -> list[dict]:
     """Build a Gemini tools array containing only the specified tool names."""
     all_decls = MAIN_TOOLS[0]["function_declarations"]
     filtered = [d for d in all_decls if d["name"] in tool_names]
-
-    # Add web_fetch if needed (agent-only tool, not in main tools)
-    if "web_fetch" in tool_names and not any(d["name"] == "web_fetch" for d in filtered):
-        filtered.append({
-            "name": "web_fetch",
-            "description": "Fetch and read the content of a web page URL.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The URL to fetch",
-                    },
-                },
-                "required": ["url"],
-            },
-        })
 
     if not filtered:
         return []

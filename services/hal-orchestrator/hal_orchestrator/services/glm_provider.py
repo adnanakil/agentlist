@@ -56,7 +56,7 @@ def _build_glm_body(
     string (NOT a cache_control block list)."""
     body: dict = {
         "model": model,
-        "max_tokens": max_output_tokens or 16000,
+        "max_tokens": max_output_tokens or 16384,
         "messages": _to_anthropic_messages(history),
     }
     if system:

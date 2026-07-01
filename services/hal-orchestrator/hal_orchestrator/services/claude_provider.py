@@ -226,7 +226,7 @@ async def call_claude(
     messages = _to_anthropic_messages(history)
     body: dict = {
         "model": model,
-        "max_tokens": max_output_tokens or 16000,
+        "max_tokens": max_output_tokens or 16384,
         "messages": messages,
     }
     # Adaptive thinking + effort only on models that support it (Opus/Sonnet

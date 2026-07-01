@@ -89,8 +89,9 @@ class HalOrchestratorConfig(BaseConfig):
     # small cap and truncate the answer mid-sentence (finishReason MAX_TOKENS).
     # It's a ceiling, not a target — you're billed for tokens actually used, so
     # a higher cap just prevents premature cutoff, it doesn't cost more on short
-    # replies.
-    gemini_max_output_tokens: int = 8192
+    # replies. Kept equal to the Claude/GLM shim default (16384) so a mid-turn
+    # failover between providers never silently halves the output budget.
+    gemini_max_output_tokens: int = 16384
     reminder_check_interval_seconds: int = 30
     gemini_image_model: str = "gemini-2.5-flash-image"
     # Cheap shallow model for watch polls (WATCH_FEATURE_SPEC.md). Forced to
@@ -114,6 +115,10 @@ class HalOrchestratorConfig(BaseConfig):
     agentlist_api_key: str = ""           # Bearer token for gateway fallback
     agentlist_account_id: str = ""        # UUID for internal invoke X-Account-ID header
     rapidapi_key: str = ""                # RapidAPI key for Airbnb search
+    # Brave Search API key (https://brave.com/search/api). When set, web_search
+    # uses Brave (reliable JSON API) and falls back to DuckDuckGo scraping only
+    # if Brave errors. Unset -> DDG scraping (brittle: bot-blocked pages).
+    brave_search_api_key: str = ""
     # Google Routes API key (travel_time tool: live-traffic drive times,
     # walking, transit with real schedules).
     google_maps_api_key: str = ""

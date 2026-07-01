@@ -13,12 +13,12 @@ Research request: {{topic}}
 
 Steps:
 
-1. Delegate to the scholar agent with task = "research {{topic}} — return
-   bullet points with cited sources (URL or domain)". Scholar handles
+1. Delegate to the research agent with task = "research {{topic}} — return
+   bullet points with cited sources (URL or domain)". Research handles
    web search + fact-checking + citation.
-2. If scholar returns thin or refuses, fall back to the research agent for
-   a quick web pass. Then add a note: "couldn't get deep sources — quick
-   web pass instead".
+2. If research returns thin or fails, do the web pass yourself: several
+   web_search queries from different angles + web_fetch the best results.
+   Then add a note: "couldn't get deep sources — quick web pass instead".
 
 Reply format (plain text, iMessage):
 
