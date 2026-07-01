@@ -1,9 +1,13 @@
-"""Google OAuth + read-only Calendar/Gmail for HAL (per-silo).
+"""Google OAuth + Calendar/Gmail (read & write) for HAL (per-silo).
 
-Each user connects their OWN Google account from their 1:1 chat. We hold only
-read-only scopes (calendar.readonly, gmail.readonly) and store the resulting
-tokens Fernet-encrypted, keyed by silo. All API access goes through raw httpx
+Each user connects their OWN Google account from their 1:1 chat. We hold
+calendar + gmail read AND write scopes and store the resulting tokens
+Fernet-encrypted, keyed by silo. All API access goes through raw httpx
 (no google client libs) to match the rest of the service.
+
+Users who connected before write support have read-only tokens; write calls on
+those tokens fail with an insufficient-scope 403, which we surface as a
+"reconnect" prompt (reads keep working). See _scope_insufficient.
 
 OAuth-over-text flow:
   1. user: "connect my google"  → google_auth(start)
@@ -22,6 +26,7 @@ import hmac
 import json
 import time
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 from urllib.parse import urlencode
 
 import httpx
@@ -35,13 +40,18 @@ from ag_db.models import HalGoogleAccount
 
 log = structlog.get_logger()
 
-# Read-only access only (matches the product decision). openid+email let us show
-# WHICH account is connected. Changing this list requires users to reconnect.
+# Calendar + Gmail read AND write. openid+email let us show WHICH account is
+# connected. Changing this list requires users to reconnect — existing tokens
+# keep only the scopes they were granted, so writes on an old (read-only) token
+# fail with a 403 that _scope_insufficient turns into a reconnect prompt.
 SCOPES = [
     "openid",
     "email",
     "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.compose",
+    "https://www.googleapis.com/auth/gmail.send",
 ]
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -51,6 +61,15 @@ USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 CAL_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 GMAIL_LIST_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
 GMAIL_MSG_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}"
+GMAIL_DRAFTS_URL = "https://gmail.googleapis.com/gmail/v1/users/me/drafts"
+GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+
+# Markers returned as the second element of a write result (data, marker):
+#   None            -> success (data is populated)
+#   WRITE_ERR_SCOPE -> old read-only token; the user must reconnect Google
+#   WRITE_ERR_HTTP  -> transient / other API failure
+WRITE_ERR_SCOPE = "scope"
+WRITE_ERR_HTTP = "http"
 
 STATE_TTL_SECONDS = 600  # signed consent links expire after 10 min
 
@@ -443,3 +462,170 @@ async def get_message(
         "date": _header(payload, "Date"),
         "body": _extract_body(payload)[:4000],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Write (Calendar events, Gmail drafts/send)
+# --------------------------------------------------------------------------- #
+
+
+def _scope_insufficient(r: httpx.Response) -> bool:
+    """True if a write failure is Google telling us the token lacks write scopes.
+
+    Users who connected before write support have read-only tokens; Google
+    answers writes on them with 403 "Request had insufficient authentication
+    scopes." (occasionally surfaced as 401). A bare 403 on one of our writes is
+    overwhelmingly this case, so we err toward the actionable "reconnect" hint.
+    """
+    if r.status_code not in (401, 403):
+        return False
+    body = (r.text or "").lower()
+    if "insufficient" in body or "scope" in body or "permission_denied" in body:
+        return True
+    return r.status_code == 403
+
+
+def _rfc2822_base64(to: str, subject: str, body: str, cc: str | None = None) -> str:
+    """A base64url-encoded RFC2822 message, as the Gmail drafts/send APIs want."""
+    msg = EmailMessage()
+    msg["To"] = to
+    if cc:
+        msg["Cc"] = cc
+    msg["Subject"] = subject
+    msg.set_content(body)
+    return base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+
+def _event_time(iso: str, tz_name: str | None) -> dict:
+    """A Calendar start/end object. A naive datetime (no offset) is anchored to
+    the user's timezone via the API's own timeZone field, so "3pm" means 3pm
+    where the user is — not 3pm UTC."""
+    obj: dict = {"dateTime": iso}
+    naive = True
+    try:
+        naive = datetime.fromisoformat(iso).tzinfo is None
+    except ValueError:
+        naive = False  # unusual string — let Google validate it
+    if naive and tz_name:
+        obj["timeZone"] = tz_name
+    return obj
+
+
+async def create_calendar_event(
+    client: httpx.AsyncClient,
+    access_token: str,
+    summary: str,
+    start_iso: str,
+    end_iso: str,
+    description: str | None = None,
+    location: str | None = None,
+    attendees: list[str] | None = None,
+    timezone: str | None = None,
+) -> tuple[dict | None, str | None]:
+    """Create an event on the user's primary calendar.
+
+    Returns (event, None) on success, or (None, marker) where marker is
+    WRITE_ERR_SCOPE (reconnect needed) or WRITE_ERR_HTTP (transient).
+    """
+    body: dict = {
+        "summary": summary,
+        "start": _event_time(start_iso, timezone),
+        "end": _event_time(end_iso, timezone),
+    }
+    if description:
+        body["description"] = description
+    if location:
+        body["location"] = location
+    if attendees:
+        body["attendees"] = [{"email": a} for a in attendees]
+    try:
+        r = await client.post(
+            CAL_EVENTS_URL,
+            json=body,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=30,
+        )
+    except Exception:
+        log.exception("google.calendar_create_error")
+        return None, WRITE_ERR_HTTP
+    if r.status_code in (200, 201):
+        ev = r.json()
+        start = ev.get("start") or {}
+        return {
+            "id": ev.get("id"),
+            "summary": ev.get("summary", summary),
+            "start": start.get("dateTime") or start.get("date"),
+            "html_link": ev.get("htmlLink"),
+        }, None
+    if _scope_insufficient(r):
+        log.warning("google.calendar_create_scope", status=r.status_code)
+        return None, WRITE_ERR_SCOPE
+    log.error("google.calendar_create_http", status=r.status_code, body=r.text[:200])
+    return None, WRITE_ERR_HTTP
+
+
+async def create_gmail_draft(
+    client: httpx.AsyncClient,
+    access_token: str,
+    to: str,
+    subject: str,
+    body: str,
+    cc: str | None = None,
+) -> tuple[dict | None, str | None]:
+    """Save a Gmail draft (never sends). Returns (draft, None) or (None, marker)."""
+    raw = _rfc2822_base64(to, subject, body, cc)
+    try:
+        r = await client.post(
+            GMAIL_DRAFTS_URL,
+            json={"message": {"raw": raw}},
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=30,
+        )
+    except Exception:
+        log.exception("google.gmail_draft_error")
+        return None, WRITE_ERR_HTTP
+    if r.status_code in (200, 201):
+        d = r.json()
+        return {
+            "id": d.get("id"),
+            "message_id": (d.get("message") or {}).get("id"),
+        }, None
+    if _scope_insufficient(r):
+        log.warning("google.gmail_draft_scope", status=r.status_code)
+        return None, WRITE_ERR_SCOPE
+    log.error("google.gmail_draft_http", status=r.status_code, body=r.text[:200])
+    return None, WRITE_ERR_HTTP
+
+
+async def send_gmail(
+    client: httpx.AsyncClient,
+    access_token: str,
+    to: str,
+    subject: str,
+    body: str,
+    cc: str | None = None,
+) -> tuple[dict | None, str | None]:
+    """Send an email as the user. Returns (sent, None) or (None, marker).
+
+    The confirm-before-send gate lives in the tool layer; by the time we're
+    called the send is authorized.
+    """
+    raw = _rfc2822_base64(to, subject, body, cc)
+    try:
+        r = await client.post(
+            GMAIL_SEND_URL,
+            json={"raw": raw},
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=30,
+        )
+    except Exception:
+        log.exception("google.gmail_send_error")
+        return None, WRITE_ERR_HTTP
+    if r.status_code in (200, 201):
+        m = r.json()
+        return {"id": m.get("id"), "thread_id": m.get("threadId")}, None
+    if _scope_insufficient(r):
+        log.warning("google.gmail_send_scope", status=r.status_code)
+        return None, WRITE_ERR_SCOPE
+    log.error("google.gmail_send_http", status=r.status_code, body=r.text[:200])
+    return None, WRITE_ERR_HTTP
