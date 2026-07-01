@@ -8,13 +8,14 @@ weekday at 8am text me my morning brief", "summarize my unread email at 6pm".
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from hal_orchestrator.services.cron import (
     RECURRENCES,
     create_cron,
     delete_cron,
     list_cron,
+    reschedule,
 )
 from hal_orchestrator.tools.registry import ToolContext
 
@@ -44,6 +45,22 @@ async def tool_schedule(args: dict, ctx: ToolContext) -> str:
             user_tz = resolve_tz(await get_profile(ctx.session, ctx.phone))
             due = due.replace(tzinfo=user_tz)
         due = due.astimezone(timezone.utc)
+
+        # Past-due guard (same as set_reminder): a past one-shot runs
+        # instantly — almost always an AM/PM/date slip; recurring rolls to
+        # the next occurrence.
+        now = datetime.now(timezone.utc)
+        if due <= now - timedelta(minutes=1):
+            if recur != "once":
+                rolled = reschedule(due, recur, now)
+                if rolled:
+                    due = rolled
+            else:
+                return (
+                    f"Error: due_time {due.isoformat()} is in the PAST "
+                    f"(now {now.isoformat()} UTC). Likely an AM/PM or date "
+                    "slip — call current_time, recompute, and try again."
+                )
 
         job = await create_cron(
             ctx.session,

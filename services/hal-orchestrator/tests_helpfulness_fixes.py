@@ -243,6 +243,60 @@ finally:
     profiles_mod.get_profile = _orig_get_profile
 
 # --------------------------------------------------------------------------- #
+print("\npast-due guards (AM/PM slip protection):")
+import hal_orchestrator.tools.reminders as rem_tool
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+
+
+async def _fake_create_reminder(session, **kw):
+    return {"id": "r1", "text": kw.get("text"), "due_at": str(kw.get("due_at"))}
+
+
+_orig_cr = rem_tool.create_reminder
+rem_tool.create_reminder = _fake_create_reminder
+try:
+    ctx = SimpleNamespace(phone="+1000", session=None)
+    past = (_dt.now(_tz.utc) - _td(hours=12)).isoformat()
+    r = asyncio.run(rem_tool.tool_set_reminder(
+        {"action": "create", "text": "bottles", "due_time": past}, ctx))
+    check("one-shot past due -> error asking recompute",
+          r.startswith("Error") and "PAST" in r)
+    fut = (_dt.now(_tz.utc) + _td(minutes=20)).isoformat()
+    r = asyncio.run(rem_tool.tool_set_reminder(
+        {"action": "create", "text": "bottles", "due_time": fut}, ctx))
+    check("future due -> created", r.startswith("Reminder set"))
+    r = asyncio.run(rem_tool.tool_set_reminder(
+        {"action": "create", "text": "vitamins", "due_time": past, "recur": "daily"}, ctx))
+    check("recurring past due -> rolled forward, created", r.startswith("Reminder set"))
+finally:
+    rem_tool.create_reminder = _orig_cr
+
+_captured2 = {}
+
+
+async def _fake_create_cron2(session, **kw):
+    _captured2.update(kw)
+    return _FakeJob()
+
+
+cron_tool.create_cron = _fake_create_cron2
+profiles_mod.get_profile = _fake_get_profile_la
+try:
+    ctx = SimpleNamespace(phone="+1000", session=None, is_group=False,
+                          chat_id=None, sender_phone=None)
+    past = (_dt.now(_tz.utc) - _td(hours=5)).isoformat()
+    r = asyncio.run(cron_tool.tool_schedule(
+        {"action": "create", "prompt": "brief", "due_time": past}, ctx))
+    check("cron one-shot past -> error", r.startswith("Error") and "PAST" in r)
+    r = asyncio.run(cron_tool.tool_schedule(
+        {"action": "create", "prompt": "brief", "due_time": past, "recur": "daily"}, ctx))
+    check("cron recurring past -> rolled to future",
+          not r.startswith("Error") and _captured2["next_run_at"] > _dt.now(_tz.utc))
+finally:
+    cron_tool.create_cron = _orig_create
+    profiles_mod.get_profile = _orig_get_profile
+
+# --------------------------------------------------------------------------- #
 print()
 if failures:
     print(f"{len(failures)} FAILURES: {failures}")

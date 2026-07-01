@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from hal_orchestrator.services.reminders import (
     create_reminder,
@@ -39,6 +39,28 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
             user_tz = resolve_tz(await get_profile(ctx.session, ctx.phone))
             due_at = due_at.replace(tzinfo=user_tz)
         due_at = due_at.astimezone(timezone.utc)
+
+        # Past-due guard: a one-shot reminder in the past fires INSTANTLY,
+        # which is never what anyone meant — it's almost always an AM/PM or
+        # date slip in the computed ISO (seen live: "7:22 PM" said, 07:22
+        # stored, pinged the user immediately). Make the model recompute.
+        now = datetime.now(timezone.utc)
+        if due_at <= now - timedelta(minutes=1):
+            if recur:
+                # Recurring ("every day at 8am" set after 8am): roll forward
+                # to the next occurrence instead of erroring.
+                from hal_orchestrator.services.cron import reschedule
+
+                rolled = reschedule(due_at, recur, now)
+                if rolled:
+                    due_at = rolled
+            else:
+                return (
+                    f"Error: due_time {due_at.isoformat()} is in the PAST "
+                    f"(now {now.isoformat()} UTC). This is usually an AM/PM or "
+                    "date slip — call current_time, recompute the intended "
+                    "LOCAL time, and create the reminder again."
+                )
 
         result = await create_reminder(
             ctx.session,

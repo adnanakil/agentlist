@@ -112,10 +112,25 @@ async def call_gemini(
     )
 
     if not fallbacks:
-        return await _dispatch_model(
+        resp = await _dispatch_model(
             client, settings, history, tools, system, primary,
             max_retries, max_output_tokens, thinking_level, is_primary=True,
         )
+        if resp is None:
+            # Background failover: an explicitly-passed background model that
+            # hard-fails (e.g. GLM out of credits) gets ONE cheap rescue hop to
+            # the flash model — never a premium fallback. Without this, an
+            # unfunded background provider silently kills the entire proactive
+            # layer (heartbeats, critic, growth grading) — which is exactly
+            # what happened with glm-5.2 on 2026-07-01.
+            rescue = settings.gemini_flash_model
+            if rescue and rescue != primary:
+                log.warning("model.background_failover", failed=primary, using=rescue)
+                resp = await _dispatch_model(
+                    client, settings, history, tools, system, rescue,
+                    max_retries, max_output_tokens, thinking_level, is_primary=False,
+                )
+        return resp
 
     # Skip the primary during its post-failure cooldown (don't re-pay the retry
     # tax every round of a sustained outage); re-probe once the cooldown lapses.
