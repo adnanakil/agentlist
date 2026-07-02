@@ -155,6 +155,9 @@ class HalOrchestratorConfig(BaseConfig):
     encryption_key: str = ""
     # Where the nightly self-improvement digest (feature proposals) is sent.
     admin_phone: str = ""
+    # HAL's public iMessage number, shown on the tryhal.com landing page ("/").
+    # Unset -> the page shows a coming-soon variant without a number.
+    hal_public_number: str = ""
     # Resy private-API web key (swappable without redeploy if Resy rotates it).
     # Defaults to Resy's public website key.
     resy_api_key: str = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"

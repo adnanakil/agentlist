@@ -20,6 +20,7 @@ from ag_db.session import create_engine_and_session
 import hal_orchestrator.state as state
 from hal_orchestrator.routes.admin import build_admin_router
 from hal_orchestrator.routes.google import build_google_router
+from hal_orchestrator.routes.landing import build_landing_router
 from hal_orchestrator.routes.message import build_message_router
 from hal_orchestrator.services.baby_watch import baby_watch_loop
 from hal_orchestrator.services.cron import run_cron_checker
@@ -181,6 +182,9 @@ def create_app() -> FastAPI:
 
     # Admin dashboard (token-protected, read-only)
     application.include_router(build_admin_router())
+
+    # Public landing page (tryhal.com)
+    application.include_router(build_landing_router())
 
     return application
 
