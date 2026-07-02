@@ -15,7 +15,49 @@ from hal_orchestrator.tools.registry import ToolContext
 log = structlog.get_logger()
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+
+# Nominatim asks for an identifying UA; volume here is a handful of calls/day.
+_NOMINATIM_UA = "HAL-assistant/1.0 (weather geocoding)"
+
+
+async def _geocode(ctx: ToolContext, location: str) -> tuple[float, float, str] | None:
+    """(lat, lon, label) for a location string, or None.
+
+    Nominatim first: it handles the compound strings real profiles hold
+    ("Chelsea, Manhattan, New York, NY", "Fort Greene, Brooklyn"), which
+    Open-Meteo's geocoder returns NOTHING for — even plain "New York, NY"
+    fails there, and bare "Chelsea" resolves to Chelsea, Vermont. Open-Meteo
+    stays as the fallback if Nominatim is down."""
+    try:
+        r = await ctx.http_client.get(
+            NOMINATIM_URL,
+            params={"q": location, "format": "json", "limit": 1},
+            headers={"User-Agent": _NOMINATIM_UA},
+            timeout=15,
+        )
+        if r.status_code == 200:
+            hits = r.json() or []
+            if hits:
+                h = hits[0]
+                label = ", ".join((h.get("display_name") or location).split(", ")[:2])
+                return float(h["lat"]), float(h["lon"]), label
+    except Exception:
+        log.exception("weather.nominatim_failed", location=location)
+
+    try:
+        geo = await ctx.http_client.get(
+            GEOCODE_URL, params={"name": location, "count": 1}, timeout=15
+        )
+        results = geo.json().get("results") or []
+        if results:
+            g = results[0]
+            label = ", ".join(x for x in (g.get("name"), g.get("admin1")) if x)
+            return g["latitude"], g["longitude"], label
+    except Exception:
+        log.exception("weather.geocode_fallback_failed", location=location)
+    return None
 
 # WMO weather codes -> human text
 _WMO = {
@@ -115,17 +157,13 @@ async def tool_weather(args: dict, ctx: ToolContext) -> str:
     tz = resolve_tz(profile)
 
     try:
-        geo = await ctx.http_client.get(
-            GEOCODE_URL, params={"name": location, "count": 1}, timeout=15
-        )
-        results = geo.json().get("results") or []
-        if not results:
-            return f"Couldn't find a location matching '{location}'."
-        g = results[0]
-        lat, lon = g["latitude"], g["longitude"]
-        place = ", ".join(
-            x for x in (g.get("name"), g.get("admin1")) if x
-        )
+        hit = await _geocode(ctx, location)
+        if hit is None:
+            return (
+                f"Couldn't find a location matching '{location}'. Try a simpler "
+                "form like 'Brooklyn NY' or a city name."
+            )
+        lat, lon, place = hit
 
         fc = await ctx.http_client.get(
             FORECAST_URL,

@@ -331,6 +331,52 @@ finally:
     profiles_mod.get_profile = _orig_get_profile
 
 # --------------------------------------------------------------------------- #
+
+# --------------------------------------------------------------------------- #
+print("\nweather geocode ladder (Nominatim -> Open-Meteo fallback):")
+from hal_orchestrator.tools.weather import _geocode
+
+
+class _GeoResp:
+    def __init__(self, status_code, payload):
+        self.status_code = status_code
+        self._p = payload
+
+    def json(self):
+        return self._p
+
+
+class _GeoHttp:
+    """Fake http client routing by URL substring."""
+    def __init__(self, nominatim, openmeteo):
+        self._n, self._o = nominatim, openmeteo
+        self.calls = []
+
+    async def get(self, url, **kw):
+        self.calls.append(url)
+        return self._n if "nominatim" in url else self._o
+
+
+def _ctx(http):
+    return SimpleNamespace(http_client=http)
+
+
+nom_hit = _GeoResp(200, [{"lat": "40.746", "lon": "-74.002",
+                          "display_name": "Chelsea, Manhattan, New York"}])
+om_hit = _GeoResp(200, {"results": [{"latitude": 44.0, "longitude": -72.4,
+                                     "name": "Chelsea", "admin1": "Vermont"}]})
+empty_nom = _GeoResp(200, [])
+err_nom = _GeoResp(503, [])
+
+r = asyncio.run(_geocode(_ctx(_GeoHttp(nom_hit, om_hit)), "Chelsea, Manhattan, New York, NY"))
+check("nominatim hit wins", r and abs(r[0] - 40.746) < .001 and "Manhattan" in r[2])
+r = asyncio.run(_geocode(_ctx(_GeoHttp(empty_nom, om_hit)), "Chelsea"))
+check("empty nominatim -> open-meteo fallback", r and abs(r[0] - 44.0) < .001)
+r = asyncio.run(_geocode(_ctx(_GeoHttp(err_nom, om_hit)), "Chelsea"))
+check("nominatim 5xx -> open-meteo fallback", r and abs(r[0] - 44.0) < .001)
+r = asyncio.run(_geocode(_ctx(_GeoHttp(empty_nom, _GeoResp(200, {"results": []}))), "zzzz"))
+check("both miss -> None (honest failure)", r is None)
+
 print()
 if failures:
     print(f"{len(failures)} FAILURES: {failures}")
