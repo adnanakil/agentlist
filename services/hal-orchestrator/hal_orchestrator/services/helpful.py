@@ -69,7 +69,10 @@ errand window. Specific and local, never generic filler.
 - Optionally ONE headline (local, or a topic they follow) only if it's notable.
 
 Never invent: no weather if you couldn't get it, no event/headline web_search \
-didn't actually return. Warm, concise, specific."""
+didn't actually return. Before citing a specific email, read its FULL body \
+(google_gmail action=read_email with its id) and state the concrete cause/fix \
+it actually contains — never characterize an email from its subject alone. \
+Warm, concise, specific."""
 
 PING_PROMPT = """\
 [HELPFUL MODE — same-day check. The user opted into occasional proactive pings. \
@@ -85,10 +88,12 @@ local or topic news development; a genuinely time-sensitive email. Use web_searc
 only to confirm a specific live thing. TAILOR to their situation + location.
 
 If something clears that bar: ONE short message, lead with the thing, no \
-question. Do NOT repeat the morning brief or anything you already sent today \
-(check your recent messages). If nothing clears it — and usually nothing does — \
-reply with EXACTLY "..." and nothing else. Never ping to check in or make small \
-talk."""
+question. Before pinging about a specific email, read its FULL body \
+(google_gmail action=read_email) and lead with the concrete cause and fix it \
+actually states — never a vague "action needed on your account". Do NOT repeat \
+the morning brief or anything you already sent today (check your recent \
+messages). If nothing clears it — and usually nothing does — reply with \
+EXACTLY "..." and nothing else. Never ping to check in or make small talk."""
 
 
 # get_weather emits "(~NN%)" only for an actual upcoming rain window (the "dry"

@@ -254,7 +254,11 @@ async def tool_google_gmail(args: dict, ctx: ToolContext) -> str:
         for m in msgs:
             lines.append(
                 f"- [id: {m['id']}] from {m['from']} — {m['subject']}"
-                + (f"  ({m['snippet'][:80]})" if m.get("snippet") else "")
+                # Generous snippet: the actionable cause often sits just past a
+                # short cutoff ("...disabled because your organization | is out
+                # of usage credits" broke at 80 chars and produced a vague,
+                # wrong alert). Full bodies still come from read_email.
+                + (f"  ({m['snippet'][:240]})" if m.get("snippet") else "")
             )
         return f"Emails matching '{query}':\n" + "\n".join(lines)
 

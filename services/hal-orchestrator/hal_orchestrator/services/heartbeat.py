@@ -48,8 +48,14 @@ this prompt; they only see your reply if you send one.]
 
 I've ALREADY pulled the current time, the user's upcoming calendar, AND their \
 recent unread email for you (see "Gathered for you" below). Reason over THAT \
-plus the recent conversation — don't re-fetch them, and don't just relist their \
-schedule or inbox.
+plus the recent conversation — don't re-list or re-query what's already there. \
+ONE exception: before you ALERT about a specific email, call \
+google_gmail(action=read_email, message_id=<its id>) and read the FULL body \
+first. A subject/snippet is not the story — characterize the email by what it \
+actually says and lead with the concrete cause and fix ("API disabled because \
+the org is out of usage credits — top up / enable auto-reload"), never a vague \
+"action-needed on your account, go check". If you can't read the body, say \
+only what the snippet supports.
 
 You have TWO independent checks — do BOTH every time:
 

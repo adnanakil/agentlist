@@ -194,6 +194,23 @@ HEARTBEAT = [
      "- AlphaSignal: 'Anthropic Mythos 5 back online for 100 orgs; Fable 5 still locked' (newsletter)\n"
      "- The Information AM: 'White House lifts export controls on Anthropic's Mythos' (newsletter)",
      "silent"),
+    # Direct provider billing email: the alert must state the CONCRETE cause
+    # (out of credits -> top up / auto-reload), not a vague "action-needed
+    # block on your account". Real 2026-07-01 failure: the 80-char snippet cut
+    # off right before "is out of usage credits", so HAL alerted vaguely and
+    # wrongly; snippets are now 240 chars and the prompt requires reading the
+    # full body before characterizing an email.
+    ("hb-credits-email", _SEED_NEUTRAL,
+     f"Current time — {_now_et_line()}\n\nUpcoming calendar:\n(nothing in the next 2 hours)\n\n"
+     "Recent unread email:\n"
+     "- [id: 19b1credit01] from Anthropic <support@anthropic.com> — Your Claude "
+     "API access has been disabled  (Hello, Your access to the Claude API has "
+     "been disabled because your organization 'Acme Enterprises' is out of "
+     "usage credits. Go to the Billing page to add credits and manage your "
+     "settings. To ensure uninterrupted service, we recommend enabling "
+     "auto-reload for your organization.)\n"
+     "- [id: 19b1noise01] from The Information — Today in tech (newsletter)",
+     "alert", ["credit", "top up", "billing", "auto-reload", "recharge"]),
     # anti-over-suppression: a REAL inbox item (a person accepted the tickets)
     # must STILL be surfaced (the good behavior from msgs 60/61/79)
     ("hb-real-alert", [_PRIOR_USER, _PRIOR_MATCH_ALERT],
