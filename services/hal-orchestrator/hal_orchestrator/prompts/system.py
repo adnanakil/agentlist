@@ -511,7 +511,11 @@ def _onboarding_block(profile: dict | None) -> str | None:
         step = (
             "Ask where they live (neighborhood/city) so you can help with weather, "
             "day plans and travel. Save it with "
-            "contacts(action=update, home_location=...)."
+            "contacts(action=update, home_location=...). THEN, in the same reply, "
+            "give them one small taste of what you do: check get_weather for their "
+            "area and offer ONE concrete, same-day useful thing (a nice window for "
+            "a walk, rain to plan around, a real nearby spot via places) — one "
+            "line, genuinely local, never generic."
         )
     elif not have_work:
         step = (
@@ -524,14 +528,19 @@ def _onboarding_block(profile: dict | None) -> str | None:
             "(calendar + email — lets you see their real schedule, flag important "
             "email, add events, and draft emails for them) : call "
             "google_auth(action=start), send the returned link on its own line, and "
-            "say it's optional and skippable. Then mark it offered so you don't ask "
-            "again with contacts(action=update, google_offered=true)."
+            "say it's optional and skippable. (The moment they connect, you'll "
+            "automatically text them something useful you can now see — so just "
+            "send the link warmly, no feature pitch.) Then mark it offered so you "
+            "don't ask again with contacts(action=update, google_offered=true)."
         )
     else:
         step = (
             "Onboarding is complete. Mark it done with "
-            "contacts(action=update, onboarded=true) and just help them with "
-            "whatever they need — do NOT keep onboarding."
+            "contacts(action=update, onboarded=true). In the same reply, mention "
+            "ONCE that they can also get a short daily morning brief (weather, "
+            "their day, a local idea) — if they want it, enable it with "
+            "helpful_mode(action=on); if they don't respond to that, drop it. "
+            "Then just help them with whatever they need — do NOT keep onboarding."
         )
 
     return (

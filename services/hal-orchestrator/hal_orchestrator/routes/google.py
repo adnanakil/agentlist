@@ -7,6 +7,8 @@ and shows a plain confirmation page telling the user to return to iMessage.
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
@@ -15,7 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ag_db.session import get_session
 
 from hal_orchestrator.services import google as gsvc
-from hal_orchestrator.services.profiles import update_profile
+from hal_orchestrator.services.first_win import run_first_win
+from hal_orchestrator.services.profiles import get_profile, update_profile
 from hal_orchestrator.state import get_http_client, get_settings
 
 log = structlog.get_logger()
@@ -76,12 +79,22 @@ def build_google_router() -> APIRouter:
                 "<p>Google didn’t complete the handshake. Please try again.</p>",
             )
 
+        # Was this the FIRST-ever connect? (Scope-upgrade reconnects shouldn't
+        # re-trigger the first-win scan.)
+        first_connect = not (await get_profile(session, silo)).get("google_connected")
+
         email = await gsvc.save_tokens(
             session, settings, http_client, silo, token_resp
         )
         await update_profile(session, silo, google_connected=True)
         await session.commit()
-        log.info("google.connected", silo=silo, email=email)
+        log.info("google.connected", silo=silo, email=email, first=first_connect)
+
+        # First win: HAL just gained calendar+inbox sight — immediately scan
+        # and text ONE useful concrete thing, so the connection pays off while
+        # the user is still looking at their phone. Fire-and-forget.
+        if first_connect:
+            asyncio.create_task(run_first_win(settings, http_client, silo))
 
         who = f" as {email}" if email else ""
         return _page(
