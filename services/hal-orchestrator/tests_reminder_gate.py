@@ -78,6 +78,64 @@ check("offers DROP / SEND / SEND: contract",
       "DROP" in p and "SEND" in p and "SEND: <new text>" in p)
 
 print()
+
+
+# --- every auto-reminder must carry a cancel_if (gate coverage guarantee) --- #
+# The 2026-07-01 "Tummy time after bedtime" ping happened because routine
+# reminders had NO cancel_if, so the fire-time gate never ran on them.
+# Relevance is the model's call — but only if every auto-reminder opts in.
+import asyncio
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+
+from hal_orchestrator.services.baby import apply_auto_reminders
+
+
+class _FakeSession:
+    def __init__(self):
+        self.added = []
+
+    async def execute(self, *a, **k):
+        return None
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def flush(self):
+        pass
+
+
+def _family(**settings):
+    return SimpleNamespace(
+        id="fam1", baby_name="Bazzy", timezone="America/New_York",
+        settings=settings,
+    )
+
+
+print("\nauto-reminders all carry cancel_if:")
+now = datetime.now(timezone.utc)
+
+# routine (the bug): tummy time 30 min after a feed
+s = _FakeSession()
+fam = _family(routines=[{"after": "feed", "offset_min": 30, "text": "Tummy time for Bazzy"}])
+asyncio.run(apply_auto_reminders(s, fam, "feed", now, "+1555", {}, now))
+check("routine reminder created", len(s.added) == 1)
+check("routine reminder has cancel_if (asleep -> gate can drop it)",
+      s.added and bool(s.added[0].cancel_if) and "asleep" in s.added[0].cancel_if)
+
+# wind-down after a wake
+s = _FakeSession()
+fam = _family()
+fc = {"next_nap": now + timedelta(hours=2)}
+asyncio.run(apply_auto_reminders(s, fam, "wake", now, "+1555", fc, now))
+check("wind-down has cancel_if", s.added and bool(s.added[0].cancel_if))
+
+# bottle prep after a feed
+s = _FakeSession()
+fc = {"next_feed": now + timedelta(hours=3)}
+asyncio.run(apply_auto_reminders(s, fam, "feed", now, "+1555", fc, now))
+check("feed-prep has cancel_if", s.added and bool(s.added[0].cancel_if))
+
 if failures:
     print(f"{len(failures)} FAILURES: {failures}")
     sys.exit(1)

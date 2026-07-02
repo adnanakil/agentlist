@@ -260,10 +260,11 @@ async def _gate_reminder(
     """Re-evaluate a reminder's `cancel_if` against live state via the cheap
     background model. Returns None on model failure (caller fails open = send).
 
-    The rich live signal today is the baby forecast (the only stateful predictor
-    HAL has); for a reminder whose silo has no family, the model still gets the
-    reminder + condition + current time, which covers purely time-based
-    conditions. Other live context can be folded into `situation` later."""
+    The situation the model judges over: the baby forecast (when the silo has
+    a family) plus the silo's RECENT CONVERSATION — the richest live signal.
+    A parent texting "717 asleep" or "let's skip it tonight" is exactly what
+    should kill a pending awake-time reminder, and only the model can weigh
+    that; there is deliberately no hard-coded cancellation rule."""
     from hal_orchestrator.services.baby import (
         as_pairs,
         forecast_next,
@@ -286,6 +287,24 @@ async def _gate_reminder(
         if events:
             forecast = forecast_next(events, tz, now)
             situation_parts.append(format_forecast(forecast, tz, family.baby_name))
+
+    # Recent conversation in the reminder's silo (best-effort). Newest last so
+    # the model reads it chronologically.
+    try:
+        from hal_orchestrator.services.history_search import search_history
+
+        recent = await search_history(session, reminder.phone, query="", limit=8)
+        if recent:
+            lines = [
+                f"[{(r.get('at') or '')[:16]}] {r['role']}: {r['content'][:200]}"
+                for r in reversed(recent)
+            ]
+            situation_parts.append(
+                "Recent conversation in this chat (oldest first):\n"
+                + "\n".join(lines)
+            )
+    except Exception:
+        log.exception("reminder.gate_history_failed", reminder_id=str(reminder.id))
 
     situation = "\n".join(situation_parts) or "(no extra context available)"
     prompt = build_gate_prompt(reminder.text, reminder.cancel_if, situation, now_str)

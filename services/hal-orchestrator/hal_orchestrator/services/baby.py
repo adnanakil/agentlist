@@ -456,6 +456,10 @@ async def apply_auto_reminders(
         return at.astimezone(tz).strftime("%-I:%M %p")
 
     # Event-triggered routines (e.g. tummy time 30 min after each feed).
+    # Every auto-reminder carries a cancel_if so the fire-time model gate
+    # ALWAYS re-judges it against live state — a routine without one fired
+    # unconditionally, which is how "Tummy time" pinged the group minutes
+    # after bedtime was logged. Relevance is the model's call, not a rule.
     for routine in settings.get("routines", []):
         if routine.get("after") != kind:
             continue
@@ -463,7 +467,12 @@ async def apply_auto_reminders(
         if due <= now:
             continue
         text = routine.get("text") or f"{baby} routine"
-        await _replace_tagged_reminder(session, silo, text[:20], text, due)
+        cancel_if = (
+            f"{baby} is asleep (napping or down for the night), or "
+            f"'{text}' already happened, or anything logged/said since makes "
+            f"this awake-time routine moot or unwanted right now"
+        )
+        await _replace_tagged_reminder(session, silo, text[:20], text, due, cancel_if)
         set_msgs.append(f"{text} at {fmt(due)}")
 
     # Wind-down ahead of the predicted next nap.
