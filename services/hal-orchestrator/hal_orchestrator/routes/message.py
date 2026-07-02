@@ -547,6 +547,102 @@ async def _enforce_claimed_actions(
 
 
 # --------------------------------------------------------------------------- #
+# Group tact gate — a second-pass model judgment on UNPROMPTED interjections in
+# ambient-watched groups. The AMBIENT_WATCH_BLOCK prompt already demands
+# silence-by-default, but at temperature the model still commiserates with
+# banter ("The absolute worst 🙄 any idea what they're filming?" — 2026-07-02).
+# Same pattern as the reminder relevance gate: relevance/tact is the model's
+# call, made by a fresh skeptical pass rather than a hard-coded rule.
+# --------------------------------------------------------------------------- #
+
+_HAL_MENTION_RX = re.compile(r"\bhal\b", re.I)
+_URL_RX = re.compile(r"https?://|\bwww\.", re.I)
+
+GROUP_TACT_SYSTEM = (
+    "You are the tact filter for HAL, an AI assistant that silently watches a "
+    "group chat. HAL drafted an UNPROMPTED message — nobody addressed it. Most "
+    "such interjections should NOT be sent; the members are talking to each "
+    "other, and an assistant that chimes into banter is annoying."
+)
+
+
+def _needs_group_tact_gate(
+    is_group: bool, ambient_watch: bool, internal: bool, user_text: str, reply: str
+) -> bool:
+    """True for an UNPROMPTED interjection into an ambient-watched group:
+    nobody said 'Hal' (word-boundary — 'halloween' doesn't count), the message
+    carries no link (links have the always-TL;DR duty), and HAL drafted a real
+    non-sentinel reply."""
+    return (
+        is_group
+        and ambient_watch
+        and not internal
+        and bool(reply)
+        and not _is_quiet_sentinel(reply)
+        and not _HAL_MENTION_RX.search(user_text or "")
+        and not _URL_RX.search(user_text or "")
+    )
+
+
+def build_tact_prompt(recent: str, sender: str, user_text: str, draft: str) -> str:
+    """The user-turn handed to the tact-gate model. Pure so it's unit-testable."""
+    return (
+        "Recent group conversation (oldest first):\n"
+        f"{recent or '(none)'}\n\n"
+        f"Newest message (from {sender or 'a member'}): {user_text}\n\n"
+        f"HAL's drafted interjection:\n{draft}\n\n"
+        "Send ONLY if it delivers specific, timely, genuinely USEFUL substance "
+        "the members don't already have — a real answer to an open question, a "
+        "needed factual correction, or concrete logistics they're actively "
+        "trying to figure out. DROP anything that is: agreement, sympathy, "
+        "banter, a reaction, commentary on a shared photo, a curiosity "
+        "question, generic tips, or restating what members said. A tactful "
+        "human assistant interrupts a group RARELY. When in doubt, DROP.\n"
+        "- Reply exactly DROP to not send it.\n"
+        "- Reply exactly SEND to send it as written.\n"
+        "- Reply 'SEND: <tighter text>' to send a trimmed version.\n"
+        "Reply with only that — no explanation."
+    )
+
+
+async def _run_tact_gate(
+    http_client, settings, history: list, sender: str, user_text: str,
+    draft: str, silo: str,
+):
+    """Gate verdict for an unprompted group interjection, or None on model
+    failure (caller fails open = send; the in-prompt default is DROP)."""
+    from hal_orchestrator.services.gemini import call_gemini
+    from hal_orchestrator.services.reminders import parse_gate_verdict
+
+    lines: list[str] = []
+    for entry in history[-10:-1]:
+        text = " ".join(
+            p.get("text", "") for p in entry.get("parts", []) if p.get("text")
+        ).strip()
+        if text:
+            who = "HAL" if entry.get("role") == "model" else "member"
+            lines.append(f"{who}: {text[:200]}")
+    prompt = build_tact_prompt("\n".join(lines[-8:]), sender, user_text, draft)
+
+    resp = await call_gemini(
+        client=http_client,
+        settings=settings,
+        history=[{"role": "user", "parts": [{"text": prompt}]}],
+        tools=None,
+        system=GROUP_TACT_SYSTEM,
+        model=settings.gemini_background_model,
+    )
+    if not resp:
+        return None
+    parts = (resp.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+    verdict = parse_gate_verdict("".join(p.get("text", "") for p in parts))
+    log.info(
+        "message.tact_gate", silo=silo, drop=verdict.drop, reworded=bool(verdict.text)
+    )
+    return verdict
+
+
+# --------------------------------------------------------------------------- #
 # Growth-loop capture (GROWTH.md Stage 1)
 # --------------------------------------------------------------------------- #
 
@@ -1163,6 +1259,34 @@ def build_message_router() -> APIRouter:
                             pass
             except Exception:
                 log.exception("message.claim_check_failed", silo=silo)
+
+        # Group tact gate: an UNPROMPTED interjection into an ambient-watched
+        # group gets a fresh skeptical model pass — "would a tactful human
+        # assistant send this?" — before it reaches the group. Dropped
+        # interjections become the deliberate-silence sentinel so history
+        # reads as HAL choosing quiet (not as an unanswered question it asked).
+        if _needs_group_tact_gate(
+            is_group, ambient_watch, body.internal, user_text, reply
+        ) and not gemini_failed:
+            try:
+                verdict = await _run_tact_gate(
+                    http_client, settings, history, sender_display or "",
+                    user_text, reply, silo,
+                )
+            except Exception:
+                log.exception("message.tact_gate_failed", silo=silo)
+                verdict = None
+            if verdict is not None:
+                if verdict.drop:
+                    log.info(
+                        "message.group_interjection_dropped",
+                        silo=silo, draft=reply[:80],
+                    )
+                    reply = "..."
+                elif verdict.text:
+                    reply = _strip_markdown(verdict.text)
+                if history and history[-1].get("role") == "model":
+                    history[-1] = {"role": "model", "parts": [{"text": reply}]}
 
         # Layer 2 hardening: self-critique on plan/recommendation turns, run
         # SYNCHRONOUSLY — before the reply is sent. One extra model call re-reads

@@ -249,6 +249,34 @@ finally:
     profiles_mod.get_profile = _orig_get_profile
 
 # --------------------------------------------------------------------------- #
+print("\ngroup tact gate (unprompted-interjection filter):")
+from hal_orchestrator.routes.message import _needs_group_tact_gate, build_tact_prompt
+
+BANTER = "Off my own damn street, I immediately became old angry NYer"
+DRAFT = "The absolute worst 🙄 Any idea what they're filming?"
+check("unprompted banter interjection -> gated",
+      _needs_group_tact_gate(True, True, False, BANTER, DRAFT))
+check("'Hal, how long to JFK?' -> NOT gated (addressed)",
+      not _needs_group_tact_gate(True, True, False, "Hal, how long to JFK?", "About 40 min"))
+check("'halloween party sat' -> still gated (word boundary)",
+      _needs_group_tact_gate(True, True, False, "halloween party sat!", DRAFT))
+check("message with a link -> NOT gated (TL;DR duty)",
+      not _needs_group_tact_gate(True, True, False, "look https://x.com/foo", "📄 TL;DR ..."))
+check("sentinel reply -> NOT gated (already silent)",
+      not _needs_group_tact_gate(True, True, False, BANTER, "..."))
+check("1:1 chat -> never gated",
+      not _needs_group_tact_gate(False, False, False, BANTER, DRAFT))
+check("non-watched group -> not gated (only @Hal msgs arrive anyway)",
+      not _needs_group_tact_gate(True, False, False, BANTER, DRAFT))
+check("internal turn -> not gated (heartbeat suppressors own it)",
+      not _needs_group_tact_gate(True, True, True, BANTER, DRAFT))
+
+p = build_tact_prompt("member: pic\nmember: they made me move my car", "Adnan", BANTER, DRAFT)
+check("tact prompt carries convo, message, and draft",
+      "move my car" in p and BANTER in p and DRAFT in p)
+check("tact prompt defaults to DROP when in doubt", "When in doubt, DROP" in p)
+
+# --------------------------------------------------------------------------- #
 print("\npast-due guards (AM/PM slip protection):")
 import hal_orchestrator.tools.reminders as rem_tool
 from datetime import datetime as _dt, timedelta as _td, timezone as _tz

@@ -280,6 +280,40 @@ CLEAN = [("hal_turns", "phone"), ("hal_messages", "phone"), ("hal_reminders", "p
          ("hal_cron_jobs", "phone"), ("hal_user_memories", "phone"),
          ("hal_friction_events", "phone")]
 
+# --------------------------------------------------------------------------- #
+# GROUP scenarios — ambient-watched group discipline (the tact gate).
+# A disposable fake group chat id is registered in hal_watched_groups for the
+# run (bridge-equivalent: every message forwarded), seeded with banter context,
+# then each scenario posts one member message. expect: "silent" (reply must be
+# empty — banter/photos are not HAL's business) or "answer" (+must-mention).
+# Everything (watch row, conversation, turns) is deleted afterwards.
+# --------------------------------------------------------------------------- #
+GROUP_SILO = "chat-eval-tact-000001"
+
+_GROUP_SEED = [
+    {"role": "user", "parts": [{"text": "[group] Audrey: That's the best pic ever"}]},
+    {"role": "model", "parts": [{"text": "..."}]},
+    {"role": "user", "parts": [{"text": "[group] Adnan: [image] They're filming some "
+                                        "bullshit and they made me move my car"}]},
+    {"role": "model", "parts": [{"text": "..."}]},
+]
+
+GROUP = [
+    # The 2026-07-02 failure verbatim: pure banter -> HAL commiserated + asked
+    # "any idea what they're filming?". Must be SILENT.
+    ("grp-banter", _GROUP_SEED,
+     "Off my own damn street, I immediately became old angry NYer",
+     "silent", None),
+    # Chit-chat reply to another MEMBER by name -> silent.
+    ("grp-member-addressed", _GROUP_SEED,
+     "Audrey you would've lost it, they had the whole block coned off",
+     "silent", None),
+    # Directly addressed with a real logistics ask -> must actually answer.
+    ("grp-addressed", _GROUP_SEED,
+     "Hal how long would it take to get from Chelsea to JFK right now?",
+     "answer", ["min", "jfk"]),
+]
+
 # heuristic auto-checks ------------------------------------------------------
 _WRONG_TIME = re.compile(r"\b(1?\d:\d\d\s*[ap]m|past midnight|after midnight|"
                          r"middle of the night|it'?s\s+\d{1,2}\s*(am|pm))\b", re.I)
@@ -410,6 +444,7 @@ async def main():
     wanted = set(a for a in argv if a != "--restore")
     direct = [s for s in DIRECT if not wanted or s[0] in wanted]
     beats = [s for s in HEARTBEAT if not wanted or s[0] in wanted]
+    groups = [s for s in GROUP if not wanted or s[0] in wanted]
 
     conn = await asyncpg.connect(pg)
 
@@ -531,11 +566,57 @@ async def main():
                       f"REPLY:  {reply[:500] if reply else '(silent — empty)'}\n" + "-" * 78)
                 npass += ok
                 nfail += (not ok)
+
+            # ---- GROUP (ambient-watched group discipline) ----
+            if groups:
+                print("\n########## GROUP (watched-group tact: banter=silence) ##########")
+                # Disposable group silo: watch row + conversation row for the run.
+                await conn.execute(
+                    "INSERT INTO hal_watched_groups(id, chat_id, note) "
+                    "VALUES(gen_random_uuid(), $1, 'eval: tact scenarios') "
+                    "ON CONFLICT DO NOTHING", GROUP_SILO)
+                await conn.execute(
+                    "INSERT INTO hal_conversations(id, phone, history, message_count, "
+                    "summary, summarized_at_count) "
+                    "VALUES(gen_random_uuid(), $1, '[]'::jsonb, 0, '', 0) "
+                    "ON CONFLICT DO NOTHING", GROUP_SILO)
+            for sid, seed, msg, expect, must in groups:
+                await conn.execute(
+                    "UPDATE hal_conversations SET history=$2::jsonb, message_count=$3 "
+                    "WHERE phone=$1", GROUP_SILO, json.dumps(seed), len(seed))
+                try:
+                    r = await client.post(URL, headers={"Authorization": f"Bearer {secret}"},
+                                          json={"phone": SILO, "text": msg,
+                                                "is_group": True, "chat_id": GROUP_SILO,
+                                                "sender_name": "Adnan"})
+                    d = r.json()
+                    reply, tools = (d.get("reply") or "").strip(), d.get("tool_calls")
+                except Exception as e:
+                    reply, tools = f"[ERROR {e}]", "?"
+                quiet = _is_quiet(reply)
+                if expect == "silent":
+                    ok = quiet
+                    want = "stay silent — members talking to each other is not HAL's business"
+                else:
+                    hit = (not must) or any(k.lower() in reply.lower() for k in must)
+                    ok = (not quiet) and hit
+                    want = "answer the addressed question" + (f" (mention: {', '.join(must)})" if must else "")
+                print(f"\n### [{sid}]  expect={expect}  tool_calls={tools}  "
+                      f"{'✅ PASS' if ok else '⚠️ FAIL'}\n"
+                      f"MSG:    {msg}\nWANT:   {want}\n"
+                      f"REPLY:  {reply[:400] if reply else '(silent — empty)'}\n" + "-" * 78)
+                npass += ok
+                nfail += (not ok)
     finally:
         # ALWAYS restore + clean, even on an exception mid-run.
         await restore_conv()
         for t, col in CLEAN:
             await conn.execute(f"DELETE FROM {t} WHERE {col}=$1 AND created_at >= $2", SILO, start)
+        # Group-scenario rows are fully disposable — delete everything.
+        await conn.execute("DELETE FROM hal_watched_groups WHERE chat_id=$1", GROUP_SILO)
+        await conn.execute("DELETE FROM hal_conversations WHERE phone=$1", GROUP_SILO)
+        for t, col in CLEAN:
+            await conn.execute(f"DELETE FROM {t} WHERE {col}=$1", GROUP_SILO)
         await conn.close()
         print(f"\nrestored conversation+profile; deleted test-created rows since {start:%H:%M}")
 
