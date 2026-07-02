@@ -74,7 +74,11 @@ PERSONAS = [
      "- [id: fw3aa] from Medium Daily Digest — Stories for you (newsletter)\n"
      "- [id: fw3bb] from Spotify — Your weekly mix is ready (marketing)",
      ["connect", "eye", "watch", "set", "quiet", "nothing"],
-     ["meeting", "delivered", "flight", "medium", "spotify", "mix"],
+     # Fabrication = asserting a CURRENT item that doesn't exist ("you've got X
+     # tomorrow"), not merely using words like "meeting" in a forward-looking
+     # promise ("I'll warn you before meetings").
+     ["you've got", "tomorrow at", "was delivered", "your flight", "departs",
+      "medium", "spotify"],
      "graceful: confirm connected + quietly watching; invent NOTHING"),
 ]
 
