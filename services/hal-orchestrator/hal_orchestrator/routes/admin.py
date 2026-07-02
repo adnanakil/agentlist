@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -194,14 +194,16 @@ def build_admin_router() -> APIRouter:
         }
 
         if format == "json":
-            return {
+            # Explicit JSONResponse: the route's response_class is HTMLResponse,
+            # which would try to encode a plain dict and 500.
+            return JSONResponse({
                 "totals": totals,
                 "conversations": [
                     {k: (v.isoformat() if isinstance(v, datetime) else v)
                      for k, v in r.items()}
                     for r in rows
                 ],
-            }
+            })
 
         now_local = datetime.now(USER_TZ).strftime("%a %b %-d, %-I:%M %p %Z")
         return HTMLResponse(render_dashboard(rows, totals, now_local))
