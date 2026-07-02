@@ -137,6 +137,11 @@ _REHASH_LEADS = (
     # with it ("No new flights — your 5pm is cancelled") and identity-keyed
     # dedup (heartbeat seen-items) now covers the inbox-rehash case.
     "all quiet", "still quiet", "still nothing",
+    # Conversational acknowledgments: a heartbeat is never a conversational
+    # turn, but the background model sometimes "replies" to the last (old)
+    # user message in history ("Got it, noted that it's topped up!"). A real
+    # alert leads with the thing ("Heads up: ..."), never with an ack.
+    "got it", "noted", "understood", "roger", "will do", "sounds good",
 )
 _GREETING_RE = re.compile(
     r"^(hey|hi|hello|good\s+(morning|evening|afternoon)|morning|evening|afternoon)"

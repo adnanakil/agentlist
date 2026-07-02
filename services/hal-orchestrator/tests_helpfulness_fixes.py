@@ -50,6 +50,12 @@ check("'nothing new here' still a rehash",
       _is_rehash_heartbeat("Nothing new since my last check."))
 check("'already flagged the projector' still a rehash",
       _is_rehash_heartbeat("Already flagged the projector delivery earlier."))
+check("heartbeat 'Got it, noted...' ack is suppressed",
+      _is_rehash_heartbeat("Got it, noted that it's topped up and resolved! 👍"))
+check("heartbeat 'Noted — won't bring it up again' suppressed",
+      _is_rehash_heartbeat("Noted, I won't bring it up again."))
+check("real 'Heads up' alert not caught by ack leads",
+      not _is_rehash_heartbeat("Heads up: your API access was disabled — out of credits."))
 
 # --------------------------------------------------------------------------- #
 print("\nclaimed-action detection:")
