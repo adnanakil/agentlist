@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from ag_db.session import create_engine_and_session
 
 import hal_orchestrator.state as state
+from hal_orchestrator.routes.admin import build_admin_router
 from hal_orchestrator.routes.google import build_google_router
 from hal_orchestrator.routes.message import build_message_router
 from hal_orchestrator.services.baby_watch import baby_watch_loop
@@ -177,6 +178,9 @@ def create_app() -> FastAPI:
 
     # Google OAuth callback (public landing page after consent)
     application.include_router(build_google_router())
+
+    # Admin dashboard (token-protected, read-only)
+    application.include_router(build_admin_router())
 
     return application
 
