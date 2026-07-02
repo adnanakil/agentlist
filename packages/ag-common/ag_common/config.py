@@ -76,6 +76,13 @@ class HalOrchestratorConfig(BaseConfig):
     # to disable. Empty/"NONE" → no thinkingConfig sent. Default MEDIUM gives a
     # nice quality boost without the latency of HIGH.
     gemini_thinking_level: str = "MEDIUM"
+    # OVERSEER model — the judgment brain of the nightly growth loop (turn
+    # grading, playbook synthesis, hypothesis verification, backlog specs) and
+    # the system-health diagnosis. Runs once nightly over a bounded set of
+    # turns, so a frontier model (claude-fable-5) is affordable exactly here —
+    # where its judgment compounds into every prompt (playbook) and every
+    # build spec. "" -> gemini_background_model.
+    overseer_model: str = ""
     hal_bridge_secret: str = ""
     hal_bridge_url: str = ""
     orchestrator_url: str = "http://localhost:8005"

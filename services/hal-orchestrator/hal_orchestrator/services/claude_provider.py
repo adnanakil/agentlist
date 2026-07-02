@@ -265,8 +265,11 @@ async def call_claude(
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
     }
-    # Opus 4.6 + thinking on a heavy agentic turn can run long.
-    timeout = max(settings.gemini_timeout_seconds, 180)
+    # Opus 4.6 + thinking on a heavy agentic turn can run long; Fable turns on
+    # hard judgment work (nightly grading/synthesis) can run several minutes.
+    timeout = max(
+        settings.gemini_timeout_seconds, 300 if "fable" in model.lower() else 180
+    )
 
     for attempt in range(max_retries):
         try:

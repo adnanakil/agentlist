@@ -141,15 +141,15 @@ async def _model_json(
     payload: dict,
 ) -> dict:
     """One JSON-payload model call → parsed JSON dict ({} on fail). Runs on the
-    cheap BACKGROUND model — nightly grading/synthesis is always-on infra and
-    shouldn't ride the (possibly premium) main loop's cost. gemini-3.5-flash is
-    capable enough for grading; revisit if grade quality drops."""
+    OVERSEER model when configured (claude-fable-5 — nightly volume is bounded,
+    and grading/synthesis quality compounds into every prompt via the playbook
+    and every build spec via the backlog), else the cheap background model."""
     resp = await call_gemini(
         http,
         settings,
         [{"role": "user", "parts": [{"text": json.dumps(payload, indent=1)}]}],
         system=system,
-        model=settings.gemini_background_model,
+        model=settings.overseer_model or settings.gemini_background_model,
         max_output_tokens=8192,
     )
     if not resp:
@@ -662,6 +662,151 @@ async def _upsert_backlog(
 
 
 # --------------------------------------------------------------------------- #
+# Phase D2 — system-health diagnosis (the overseer's infra eye)
+#
+# Per-turn grading judges CONVERSATIONS; this pass judges the SYSTEM. It reads
+# the day's friction events, turn statuses, and failure categories the way an
+# on-call engineer reads dashboards: correlating symptoms into root causes
+# (many weather tool_errors -> the geocoder is broken; a model_failure spike ->
+# a provider outage or depleted credits — both real incidents this pass would
+# have caught at 3am). Code-level findings land in the feature backlog as
+# ready-to-run specs; the diagnosis heads the nightly digest.
+# --------------------------------------------------------------------------- #
+
+HEALTH_PROMPT = """\
+You are the OVERSEER of HAL, a personal-assistant service (FastAPI on Railway,
+a main model loop with tools, background heartbeat/reminder daemons, Postgres).
+You are reading its last-24h operational signals like an SRE: friction events
+(tool errors, model failures, stub-tool requests, capability refusals, stuck
+turns, unbacked claims), turn statuses, and grading failure categories.
+
+Diagnose SYSTEMIC issues — not individual bad turns (grading covers those).
+Correlate symptoms into root causes: repeated tool_error on one tool means that
+tool/integration is broken; a model_failure cluster means a provider outage,
+depleted credits, or a bad deploy; rising capability_refusal on one theme means
+a missing integration users keep wanting.
+
+For each real finding output:
+- title: short, specific ("weather geocoder failing on compound locations")
+- diagnosis: the root cause in 1-2 sentences, citing the evidence counts
+- remediation: the concrete fix in 1-2 sentences
+- fixable: "config" (env var / model flip / credits top-up), "code" (needs a
+  code change), or "external" (third party; nothing to build)
+- spec: ONLY for fixable="code" — a ready-to-run instruction block a coding
+  agent could implement directly (files to touch if inferable, behavior,
+  how to verify)
+- severity: "critical" (user-facing failures happening now), "degraded"
+  (something broken but routed around), "minor"
+
+Be conservative: a handful of scattered one-off errors on different tools is
+normal operation — output NO finding for noise. Most nights health is "ok"
+with zero findings.
+
+Output STRICT JSON only:
+{"health": "ok" | "attention" | "critical",
+ "one_liner": "<=120 chars for the admin SMS digest",
+ "findings": [{"title": "...", "diagnosis": "...", "remediation": "...",
+ "fixable": "config", "spec": null, "severity": "degraded"}]}"""
+
+
+def build_health_payload(
+    friction_rows: list, status_counts: dict, scorecard: dict
+) -> dict:
+    """Aggregate the day's operational signals for the overseer. Pure so it's
+    unit-testable. friction_rows: (kind, detail) tuples; details are grouped
+    and counted so 40 identical geocoder errors read as one strong signal."""
+    by_kind: dict[str, dict] = {}
+    for kind, detail in friction_rows:
+        k = by_kind.setdefault(kind, {"count": 0, "samples": {}})
+        k["count"] += 1
+        key = (detail or "")[:120]
+        k["samples"][key] = k["samples"].get(key, 0) + 1
+    friction = [
+        {
+            "kind": kind,
+            "count": v["count"],
+            "top_details": [
+                {"detail": d, "n": n}
+                for d, n in sorted(v["samples"].items(), key=lambda x: -x[1])[:5]
+            ],
+        }
+        for kind, v in sorted(by_kind.items(), key=lambda x: -x[1]["count"])
+    ]
+    return {
+        "friction_last_24h": friction,
+        "turn_status_counts": status_counts,
+        "failures_by_category": scorecard.get("failures_by_category", []),
+        "handled_rate_today": (scorecard.get("today") or {}).get("handled_rate"),
+        "handled_rate_7d": (scorecard.get("trailing_week") or {}).get("handled_rate"),
+    }
+
+
+async def run_health_check(
+    session: AsyncSession,
+    settings: HalOrchestratorConfig,
+    http: httpx.AsyncClient,
+    scorecard: dict,
+    denylist: list[str],
+) -> dict:
+    """Overseer system-health pass. Returns {health, one_liner, findings};
+    files fixable="code" findings (with specs) into the feature backlog.
+    Best-effort — a failure here never blocks the rest of the growth run."""
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    friction_rows = (
+        await session.execute(
+            select(HalFrictionEvent.kind, HalFrictionEvent.detail).where(
+                HalFrictionEvent.created_at >= since
+            )
+        )
+    ).all()
+    status_rows = (
+        await session.execute(
+            select(HalTurn.status, func.count())
+            .where(HalTurn.created_at >= since)
+            .group_by(HalTurn.status)
+        )
+    ).all()
+    payload = build_health_payload(
+        [(r[0], r[1]) for r in friction_rows],
+        {r[0]: r[1] for r in status_rows},
+        scorecard,
+    )
+    result = await _model_json(settings, http, HEALTH_PROMPT, payload)
+    health = result.get("health") if result.get("health") in ("ok", "attention", "critical") else "ok"
+    findings = [f for f in (result.get("findings") or []) if isinstance(f, dict)][:5]
+
+    # Code-level findings become backlog items with ready-to-run specs.
+    code_items = [
+        {
+            "title": f.get("title") or "",
+            "problem": f.get("diagnosis") or "",
+            "sketch": f.get("remediation") or "",
+            "spec": f.get("spec") or "",
+            "priority": "high" if f.get("severity") == "critical" else "medium",
+            "evidence_signal": "overseer health check",
+        }
+        for f in findings
+        if f.get("fixable") == "code" and f.get("title")
+    ]
+    if code_items:
+        existing = {
+            str(b.id): b
+            for b in (await session.execute(select(HalFeatureRequest))).scalars()
+        }
+        try:
+            await _upsert_backlog(session, code_items, existing, denylist)
+        except Exception:
+            log.exception("growth.health_backlog_failed")
+
+    log.info("growth.health", health=health, findings=len(findings))
+    return {
+        "health": health,
+        "one_liner": scrub(result.get("one_liner") or "", denylist, 160),
+        "findings": findings,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Phase E — publish + digest
 # --------------------------------------------------------------------------- #
 
@@ -677,6 +822,7 @@ async def _notify_admin(
     verify: dict,
     backlog_pings: list[str],
     weekly: bool,
+    health: dict | None = None,
 ) -> None:
     import hal_orchestrator.state as state
 
@@ -684,6 +830,11 @@ async def _notify_admin(
         return
     today = scorecard["today"]
     lines = ["🌙 HAL nightly growth report"]
+    if health and health.get("health") not in (None, "ok", "unknown"):
+        icon = "🚨" if health["health"] == "critical" else "🩺"
+        lines.append(f"{icon} {health.get('one_liner') or 'system health needs attention'}")
+        for f in (health.get("findings") or [])[:2]:
+            lines.append(f"  • {f.get('title', '')[:90]} [{f.get('fixable', '?')}]")
     counts = today["counts"]
     real = counts.get("handled", 0) + counts.get("partial", 0) + counts.get("failed", 0)
     lines.append(
@@ -736,6 +887,13 @@ async def run_growth(
     scorecard = await build_scorecard(session, denylist)
     verify = await verify_playbook(session)
 
+    # Overseer system-health diagnosis (best-effort; never blocks the run).
+    try:
+        health = await run_health_check(session, settings, http, scorecard, denylist)
+    except Exception:
+        log.exception("growth.health_failed")
+        health = {"health": "unknown", "one_liner": "", "findings": []}
+
     reflection = HalReflection(summary="", report={})
     session.add(reflection)
     await session.flush()
@@ -762,6 +920,7 @@ async def run_growth(
     report = {
         "grading": grade_stats,
         "scorecard": scorecard,
+        "health": health,
         "verify": {"verified": verify["verified"], "failing": [f["content"][:80] for f in verify["failing"]]},
         "synthesis": {k: v for k, v in synth.items() if k != "backlog_changes"},
         "backlog": [
@@ -773,7 +932,7 @@ async def run_growth(
     reflection.report = report
 
     weekly = datetime.now(ET).weekday() == 6
-    await _notify_admin(settings, scorecard, synth, verify, pings, weekly)
+    await _notify_admin(settings, scorecard, synth, verify, pings, weekly, health)
     await session.commit()
     log.info(
         "growth.done",

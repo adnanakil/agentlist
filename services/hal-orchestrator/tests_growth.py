@@ -87,6 +87,33 @@ for n in non_refusals:
 print("fallback set:")
 check("has 5 entries", len(FALLBACK_REPLIES) == 5, str(len(FALLBACK_REPLIES)))
 
+
+
+# --- overseer health check (pure pieces) ------------------------------------ #
+from hal_orchestrator.services.growth import HEALTH_PROMPT, build_health_payload
+
+print("\noverseer health payload:")
+rows = [
+    ("tool_error", "get_weather: Couldn't find a location matching 'Chelsea, Manhattan'"),
+    ("tool_error", "get_weather: Couldn't find a location matching 'Chelsea, Manhattan'"),
+    ("tool_error", "get_weather: Couldn't find a location matching 'Fort Greene'"),
+    ("model_failure", "gemini_failed"),
+    ("stub_tool", "vault"),
+]
+payload = build_health_payload(rows, {"ok": 90, "gemini_failed": 4}, {
+    "failures_by_category": [{"category": "infra_error", "count": 3}],
+    "today": {"handled_rate": 0.91},
+    "trailing_week": {"handled_rate": 0.93},
+})
+fr = payload["friction_last_24h"]
+check("kinds sorted by volume", fr[0]["kind"] == "tool_error" and fr[0]["count"] == 3)
+check("identical details grouped", fr[0]["top_details"][0]["n"] == 2)
+check("status counts included", payload["turn_status_counts"]["gemini_failed"] == 4)
+check("rates included", payload["handled_rate_today"] == 0.91)
+check("prompt demands strict JSON + conservatism",
+      "STRICT JSON" in HEALTH_PROMPT and "NO finding for noise" in HEALTH_PROMPT)
+check("prompt defines fixable tiers", '"config"' in HEALTH_PROMPT and '"code"' in HEALTH_PROMPT)
+
 print()
 if failures:
     print(f"{len(failures)} FAILURES: {failures}")
