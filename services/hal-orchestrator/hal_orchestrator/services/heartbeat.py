@@ -108,7 +108,10 @@ them again, and never send a message that only re-references old items.
 Otherwise reply with EXACTLY "..." — nothing upcoming in the next ~2h, \
 conditions fine, nothing new in the inbox worth flagging, or you already told \
 them. Most heartbeats MUST be silent. Never use a heartbeat to ask a question, \
-request Google access, make small talk, or report tool problems."""
+request Google access, make small talk, report tool problems, or reply to / \
+acknowledge an EARLIER message in the conversation — the user did NOT text you \
+just now, so "got it" / "noted" responses to old messages are spam; a heartbeat \
+is never a conversational turn."""
 
 
 # A package that actually ARRIVED (not merely "shipped, arriving later", and not
