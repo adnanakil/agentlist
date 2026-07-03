@@ -21,6 +21,7 @@ import hal_orchestrator.state as state
 from hal_orchestrator.routes.admin import build_admin_router
 from hal_orchestrator.routes.google import build_google_router
 from hal_orchestrator.routes.landing import build_landing_router
+from hal_orchestrator.routes.legal import build_legal_router
 from hal_orchestrator.routes.message import build_message_router
 from hal_orchestrator.routes.stripe import build_stripe_router
 from hal_orchestrator.services.baby_watch import baby_watch_loop
@@ -222,6 +223,9 @@ def create_app() -> FastAPI:
 
     # Stripe payment webhook (pay -> auto-unlock the message cap)
     application.include_router(build_stripe_router())
+
+    # Privacy Policy + Terms (required + linked from the Google consent screen)
+    application.include_router(build_legal_router())
 
     return application
 
