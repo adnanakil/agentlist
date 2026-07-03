@@ -242,57 +242,20 @@ def _ctx(client, is_group=False):
     )
 
 
-print("tool_google_gmail send — confirmation gate:")
-client = FakeClient(lambda u, j: FakeResponse(200, {"id": "s1"}))
-res = run(
-    tg.tool_google_gmail(
-        {"action": "send", "to": "a@x.com", "subject": "Hi", "body": "hello"}, _ctx(client)
+print("tool_google_gmail send/draft — disabled (read-only launch):")
+# HAL requests only gmail.readonly, so the send/draft tool actions must refuse
+# gracefully and make NO Gmail API call — never the old send/confirm flow.
+for action in ("send", "create_draft", "draft"):
+    client = FakeClient(lambda u, j: FakeResponse(200, {"id": "s1"}))
+    res = run(
+        tg.tool_google_gmail(
+            {"action": action, "to": "a@x.com", "subject": "Hi", "body": "hello",
+             "confirmed": True},
+            _ctx(client),
+        )
     )
-)
-check("no confirmed -> blocked", "STOP" in res and "confirmed=true" in res, res)
-check("no confirmed -> nothing sent", client.calls == [], client.calls)
-
-client = FakeClient(lambda u, j: FakeResponse(200, {"id": "s1"}))
-res = run(
-    tg.tool_google_gmail(
-        {"action": "send", "to": "a@x.com", "subject": "Hi", "body": "hello", "confirmed": True},
-        _ctx(client),
-    )
-)
-check("confirmed=True -> sent", res.startswith("Sent") and len(client.calls) == 1, (res, client.calls))
-
-client = FakeClient(lambda u, j: FakeResponse(200, {"id": "s1"}))
-res = run(
-    tg.tool_google_gmail(
-        {"action": "send", "to": "a@x.com", "subject": "Hi", "body": "hi", "confirmed": "true"},
-        _ctx(client),
-    )
-)
-check("confirmed='true' string -> sent", res.startswith("Sent"), res)
-
-res = run(
-    tg.tool_google_gmail(
-        {"action": "send", "to": "", "body": "", "confirmed": True}, _ctx(FakeClient(lambda u, j: None))
-    )
-)
-check("send missing fields -> error", res.startswith("Error"), res)
-
-print("tool_google_gmail create_draft:")
-client = FakeClient(lambda u, j: FakeResponse(200, {"id": "d1", "message": {"id": "m1"}}))
-res = run(
-    tg.tool_google_gmail(
-        {"action": "create_draft", "to": "a@x.com", "subject": "Hi", "body": "b"}, _ctx(client)
-    )
-)
-check("draft -> saved, not sent", "Draft saved" in res and "nothing was sent" in res.lower(), res)
-
-client = FakeClient(lambda u, j: FakeResponse(403, text="insufficient scopes"))
-res = run(
-    tg.tool_google_gmail(
-        {"action": "create_draft", "to": "a@x.com", "subject": "Hi", "body": "b"}, _ctx(client)
-    )
-)
-check("draft on old token -> reconnect prompt", res == tg._RECONNECT_FOR_WRITE, res)
+    check(f"{action} -> read-only refusal", "read access" in res.lower() and "draft" in res.lower(), res)
+    check(f"{action} -> no API call made", client.calls == [], client.calls)
 
 print("tool_google_calendar create_event:")
 client = FakeClient(_cal_ok)

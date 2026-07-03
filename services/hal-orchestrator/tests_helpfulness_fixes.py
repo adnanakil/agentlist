@@ -237,7 +237,7 @@ try:
         phone="+1000", session=None, is_group=False, chat_id=None, sender_phone=None
     )
     asyncio.run(cron_tool.tool_schedule(
-        {"action": "create", "prompt": "morning brief", "due_time": "2026-07-02T08:00:00"},
+        {"action": "create", "prompt": "morning brief", "due_time": "2030-07-02T08:00:00"},
         ctx,
     ))
     due = _captured["next_run_at"]

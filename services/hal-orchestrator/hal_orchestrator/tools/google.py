@@ -32,10 +32,9 @@ _NOT_CONFIGURED = (
     "Google isn't set up on this HAL instance yet (missing OAuth credentials)."
 )
 _RECONNECT_FOR_WRITE = (
-    "This Google connection is read-only — it was set up before write access "
-    "existed, so I can't create or send on it yet. Use google_auth action=start "
-    "to send the user a fresh connect link; approving it grants calendar + email "
-    "write access. Then retry."
+    "This Google connection predates calendar-write access, so I can't create the "
+    "event on it yet. Use google_auth action=start to send the user a fresh "
+    "connect link; approving it grants calendar write access. Then retry."
 )
 
 
@@ -56,7 +55,7 @@ async def tool_google_auth(args: dict, ctx: ToolContext) -> str:
         acct = await gsvc.get_account(ctx.session, ctx.phone)
         if acct and acct.access_token_enc:
             who = f" ({acct.google_email})" if acct.google_email else ""
-            return f"Google is connected{who}. Calendar + Gmail (read & write)."
+            return f"Google is connected{who}. Calendar (read & write) + Gmail (read)."
         return "Google is not connected. Use action=start to get a connect link."
 
     if action == "start":
@@ -187,12 +186,23 @@ async def tool_google_calendar(args: dict, ctx: ToolContext) -> str:
 
 
 async def tool_google_gmail(args: dict, ctx: ToolContext) -> str:
-    """list_emails | read_email | create_draft | send — Gmail."""
+    """list_emails | read_email — Gmail (read-only)."""
     token, hint = await _access_or_hint(ctx)
     if hint:
         return hint
 
     action = args.get("action", "list_emails")
+
+    # Email send/draft are disabled for the verified launch — HAL requests only
+    # Gmail READ access. Degrade gracefully instead of an insufficient-scope
+    # error. (Re-enable by restoring gmail.send/compose in SCOPES + deleting this
+    # guard; the send/draft branches below are kept intact for that.)
+    if action in ("send", "create_draft", "draft"):
+        return (
+            "I can read and summarize your email, but I'm not set up to send or "
+            "draft messages — HAL only has read access to Gmail. Want me to pull "
+            "up the thread so you can reply from your own Mail app?"
+        )
 
     if action in ("create_draft", "draft"):
         to = (args.get("to") or "").strip()

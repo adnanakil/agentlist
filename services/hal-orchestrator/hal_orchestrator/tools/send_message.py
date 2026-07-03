@@ -63,11 +63,13 @@ async def tool_send_message(args: dict, ctx: ToolContext) -> str:
         log.info("send_message.contact_resolved", name=to, to=resolved)
         to = resolved
 
+    import hal_orchestrator.state as _state
+
     ctx.side_messages.append({"to": to, "text": text})
     log.info(
         "send_message.queued",
         to=to,
-        text=text[:50] if ctx.settings.log_message_content else None,
+        text=text[:50] if _state.settings.log_message_content else None,
         text_len=len(text),
     )
     return f"Message queued for {to}: {text}"

@@ -1,7 +1,7 @@
 """Google OAuth + Calendar/Gmail (read & write) for HAL (per-silo).
 
 Each user connects their OWN Google account from their 1:1 chat. We hold
-calendar + gmail read AND write scopes and store the resulting tokens
+calendar read+write and Gmail read-only scopes and store the resulting tokens
 Fernet-encrypted, keyed by silo. All API access goes through raw httpx
 (no google client libs) to match the rest of the service.
 
@@ -40,18 +40,17 @@ from ag_db.models import HalGoogleAccount
 
 log = structlog.get_logger()
 
-# Calendar + Gmail read AND write. openid+email let us show WHICH account is
-# connected. Changing this list requires users to reconnect — existing tokens
-# keep only the scopes they were granted, so writes on an old (read-only) token
-# fail with a 403 that _scope_insufficient turns into a reconnect prompt.
+# Calendar read+write + Gmail READ-ONLY, plus openid+email to show WHICH account
+# is connected. Email send/draft scopes were intentionally dropped for the
+# verified launch: gmail.readonly is the only restricted scope (still requires
+# the CASA security assessment), and calendar.events keeps calendar write.
+# Changing this list requires users to reconnect.
 SCOPES = [
     "openid",
     "email",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.compose",
-    "https://www.googleapis.com/auth/gmail.send",
 ]
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"

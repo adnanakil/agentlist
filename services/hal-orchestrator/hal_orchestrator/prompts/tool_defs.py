@@ -782,14 +782,13 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "google_auth",
                 "description": (
-                    "Manage the user's Google connection (Calendar + Gmail, read & "
-                    "write), scoped to this 1:1 chat. Actions: status (is it connected, "
-                    "and as which account), start (returns a one-tap consent LINK — send "
-                    "it to the user verbatim on its own line and ask them to tap it, "
-                    "approve, and text back), disconnect (revoke + forget). If "
-                    "google_calendar or google_gmail says it's not connected — or that "
-                    "the connection is read-only and must be reconnected for write "
-                    "access — call start. Personal — refuses in group chats."
+                    "Manage the user's Google connection (Calendar read & write, "
+                    "Gmail read), scoped to this 1:1 chat. Actions: status (is it "
+                    "connected, and as which account), start (returns a one-tap consent "
+                    "LINK — send it to the user verbatim on its own line and ask them to "
+                    "tap it, approve, and text back), disconnect (revoke + forget). If "
+                    "google_calendar or google_gmail says it's not connected, call "
+                    "start. Personal — refuses in group chats."
                 ),
                 "parameters": {
                     "type": "object",
@@ -839,35 +838,25 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "google_gmail",
                 "description": (
-                    "Read AND write the user's Gmail. Actions: list_emails (query "
-                    "defaults to 'is:unread'; supports Gmail search like "
-                    "'is:unread newer_than:1d', returns ids + sender + subject + "
-                    "snippet), read_email (full body by message_id), create_draft (save "
-                    "a draft to the user's Drafts — needs to/subject/body, optional cc; "
-                    "NEVER sends), send (actually send the email). SEND SAFETY: sending "
-                    "is irreversible — before calling send you MUST show the user the "
-                    "exact recipient, subject, and full body in the chat and get an "
-                    "explicit 'yes'; only then call send with confirmed=true. When "
-                    "unsure, use create_draft instead. Requires the user to have "
-                    "connected Google (google_auth); if the connection predates write "
-                    "access you'll be told to have them reconnect. Personal — refuses in "
-                    "group chats."
+                    "Read the user's Gmail (READ-ONLY — HAL cannot send or draft "
+                    "email). Actions: list_emails (query defaults to 'is:unread'; "
+                    "supports Gmail search like 'is:unread newer_than:1d', returns "
+                    "ids + sender + subject + snippet), read_email (full body by "
+                    "message_id). Requires the user to have connected Google "
+                    "(google_auth). If the user asks you to send or reply to an "
+                    "email, say you can pull up the thread but they'll need to send "
+                    "from their own Mail app. Personal — refuses in group chats."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "action": {
                             "type": "string",
-                            "enum": ["list_emails", "read_email", "create_draft", "send"],
+                            "enum": ["list_emails", "read_email"],
                         },
                         "query": {"type": "string", "description": "Gmail search query, e.g. 'is:unread newer_than:1d'"},
                         "max_results": {"type": "integer", "description": "Default 10"},
                         "message_id": {"type": "string", "description": "Message id (for read_email)"},
-                        "to": {"type": "string", "description": "Recipient email address (for create_draft/send)"},
-                        "subject": {"type": "string", "description": "Email subject (for create_draft/send)"},
-                        "body": {"type": "string", "description": "Email body, plain text (for create_draft/send)"},
-                        "cc": {"type": "string", "description": "CC address(es), comma-separated (for create_draft/send)"},
-                        "confirmed": {"type": "boolean", "description": "Must be true to actually send, and only after the user has seen the exact recipient/subject/body and said yes (for send)"},
                     },
                     "required": ["action"],
                 },

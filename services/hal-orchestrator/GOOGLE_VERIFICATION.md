@@ -22,18 +22,17 @@ Steps below, in order.
 - **Redirect URI:** `https://hal-orchestrator-production.up.railway.app/api/google/callback`
 - **Scopes requested** (`services/google.py`):
 
+**DECIDED (2026-07-03): Calendar read/write + Gmail read.** Email send/draft
+scopes were dropped; the code (`services/google.py` SCOPES + the gmail tool/prompt)
+now requests exactly the set below. `gmail.readonly` is still a restricted scope,
+so the CASA assessment is still required — that's the cost of inbox features.
+
 | Scope | Tier | Verification burden |
 |---|---|---|
 | `openid`, `email` | none | none |
 | `calendar.readonly` | sensitive | verification, no security audit |
-| `calendar.events` | sensitive | verification, no security audit |
-| `gmail.send` | sensitive | verification, no security audit |
+| `calendar.events` (read + write events) | sensitive | verification, no security audit |
 | `gmail.readonly` | **restricted** | verification **+ CASA security assessment** |
-| `gmail.compose` | **restricted** | verification **+ CASA security assessment** |
-
-The two **restricted** Gmail scopes are what trigger the slow/costly part (CASA).
-`gmail.readonly` powers inbox reading (heartbeat, unread summaries, first-win scan);
-`gmail.compose` powers drafts. See "Decision: scopes" below.
 
 ---
 
@@ -81,17 +80,16 @@ granted. Restricted scopes still cap you at 100 users until verified.)
 
 ---
 
-## Decision: scopes (pick before submitting)
+## Scopes — DECIDED
 
-- **Keep full Gmail (recommended if inbox features matter):** submit all scopes,
-  do the CASA assessment. HAL keeps every feature. Slower.
-- **Launch lighter, skip CASA:** drop `gmail.readonly` + `gmail.compose`, keep
-  `calendar.*` + `gmail.send`. Only sensitive scopes → verification but **no
-  security assessment** → much faster/cheaper. HAL loses inbox reading + drafts.
-  (Edit `SCOPES` in `services/google.py` and redeploy; existing users reconnect.)
+Calendar read/write + Gmail read. Email send/draft (`gmail.send`, `gmail.compose`)
+were dropped, so HAL reads and summarizes email but does not send or draft it (the
+gmail tool refuses those actions gracefully). Keeping `gmail.readonly` means the
+CASA assessment is still required. If you ever want to skip CASA entirely, you'd
+also have to drop `gmail.readonly` (losing inbox reading) — not the current plan.
 
 Google reviewers reject apps that request more than they demonstrably use, so
-request exactly the set you ship.
+request exactly the set the code ships.
 
 ---
 
@@ -117,9 +115,7 @@ request exactly the set you ship.
   messages to answer in chat. It also powers an opt-in proactive check that flags
   genuinely time-sensitive email. Email content is used only to respond to the
   user and is never used for ads or model training."
-- **gmail.compose / gmail.send —** "When the user asks HAL to draft or send an
-  email, HAL creates the draft or sends it. Sending always requires the user to
-  confirm the exact recipient, subject, and body in chat first."
+(Email send/draft scopes were dropped — no justification needed.)
 
 ### Demo video (record with QuickTime/Loom; ~2–3 min, no login shown)
 
@@ -128,8 +124,7 @@ request exactly the set you ship.
    screen (show the scopes) → approve → the "connected" confirmation.
 3. Demonstrate each scope: "what's on my calendar today?" (calendar.readonly);
    "add lunch with Sam tomorrow at 1" (calendar.events); "any urgent unread
-   email?" (gmail.readonly); "draft a reply saying I'll be 10 min late" then
-   "send it" with the confirmation step (gmail.compose/send).
+   email?" (gmail.readonly). HAL reads/summarizes email but cannot send it.
 4. Show "disconnect google" revoking access.
 
 ---
