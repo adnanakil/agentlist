@@ -218,7 +218,7 @@ def create_app() -> FastAPI:
     # Admin dashboard (token-protected, read-only)
     application.include_router(build_admin_router())
 
-    # Public landing page (tryhal.com)
+    # Public landing page (tryhal.xyz)
     application.include_router(build_landing_router())
 
     # Stripe payment webhook (pay -> auto-unlock the message cap)

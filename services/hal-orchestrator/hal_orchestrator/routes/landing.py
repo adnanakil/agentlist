@@ -1,4 +1,4 @@
-"""GET / — the tryhal.com landing page.
+"""GET / — the tryhal.xyz landing page.
 
 Deliberately minimal: the wordmark, one line, HAL's phone number — tappable
 into Messages on iOS/macOS via an sms: link. No signup flow, no JS, no nav.
@@ -73,7 +73,7 @@ def render_landing(number: str) -> str:
   <div class="mark">HAL</div>
   <h1>A personal assistant that lives in your texts.</h1>
   {hero}
-  <footer>tryhal.com</footer>
+  <footer>tryhal.xyz</footer>
 </body></html>"""
 
 

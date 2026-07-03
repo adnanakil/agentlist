@@ -22,7 +22,7 @@ from hal_orchestrator.state import get_settings
 # TODO(owner): replace with your legal name or LLC once formed, a working
 # contact inbox, and your governing-law state.
 OPERATOR = "HAL"
-CONTACT_EMAIL = "privacy@tryhal.com"
+CONTACT_EMAIL = "privacy@tryhal.xyz"
 GOVERNING_LAW = "the United States"
 LAST_UPDATED = "July 3, 2026"
 

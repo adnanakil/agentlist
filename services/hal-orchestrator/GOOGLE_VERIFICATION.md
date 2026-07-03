@@ -37,21 +37,36 @@ The two **restricted** Gmail scopes are what trigger the slow/costly part (CASA)
 
 ---
 
-## ⚠️ Blocker 0 — you need a domain you own
+## ⚠️ Blocker 0 — point tryhal.xyz at HAL, then verify it
 
 Google will **not** verify an app whose homepage/privacy/redirect live on
-`*.up.railway.app` (you can't prove you own `railway.app`). You must:
+`*.up.railway.app` (you can't prove you own `railway.app`). Domain: **tryhal.xyz**.
 
-1. Point a domain you own (e.g. **tryhal.com**) at the orchestrator (Railway →
-   service → Settings → Networking → Custom Domain; add the CNAME it gives you).
-2. Verify that domain in **Google Search Console** (https://search.google.com/search-console)
-   — add it as a property and complete DNS/TXT verification. This is what lets you
-   list it as an "authorized domain" on the consent screen.
-3. Once live, `/privacy` and `/terms` resolve at `https://tryhal.com/privacy` etc.
-   (they already work at the Railway URL now).
+**Already done (by Claude):** `tryhal.xyz` + `www.tryhal.xyz` are attached to the
+hal-orchestrator Railway service (the stale `tryhal.com` entries were removed).
 
-Optionally move `GOOGLE_REDIRECT_URI` to the custom domain too and add it to the
-OAuth client's authorized redirect URIs (keep the Railway one until you cut over).
+**You do — set DNS at Namecheap** (Domain List → tryhal.xyz → Advanced DNS):
+1. DELETE the existing `CNAME www → parkingpage.namecheap.com`.
+2. DELETE the existing `URL Redirect @ → http://www.tryhal.xyz/`.
+3. ADD `CNAME` — Host `www` — Value `bk523lyv.up.railway.app`.
+4. ADD `ALIAS` — Host `@` — Value `7u4dul25.up.railway.app`.
+   (Namecheap BasicDNS has an "ALIAS Record" type that works at the root. If it's
+   not offered, keep an apex `URL Redirect @ → https://www.tryhal.xyz` and treat
+   `www.tryhal.xyz` as canonical instead.)
+
+Railway auto-issues the SSL cert once DNS resolves (minutes to a couple hours).
+`/privacy` and `/terms` already work at the Railway URL; after DNS they resolve at
+`https://tryhal.xyz/privacy` too.
+
+**Then verify ownership** in **Google Search Console**
+(https://search.google.com/search-console): add `tryhal.xyz` as a Domain property
+and complete the TXT-record verification (another record at Namecheap). This is
+what lets you list it as an authorized domain on the consent screen.
+
+**Then move the OAuth redirect onto the domain:** in the Cloud Console OAuth
+client, add `https://tryhal.xyz/api/google/callback` to Authorized redirect URIs
+(keep the Railway one too), then set Railway `GOOGLE_REDIRECT_URI` to the new
+value. Do this only after DNS + SSL are live, or the connect flow breaks.
 
 ---
 
@@ -84,9 +99,9 @@ request exactly the set you ship.
 
 1. **User type:** External. **Publishing status:** In production (see Blocker 1).
 2. **App info:** name "HAL", user support email, an app logo (120×120 PNG),
-   app homepage `https://tryhal.com`, privacy `https://tryhal.com/privacy`,
-   terms `https://tryhal.com/terms`.
-3. **Authorized domains:** `tryhal.com` (must be Search-Console-verified).
+   app homepage `https://tryhal.xyz`, privacy `https://tryhal.xyz/privacy`,
+   terms `https://tryhal.xyz/terms`.
+3. **Authorized domains:** `tryhal.xyz` (must be Search-Console-verified).
 4. **Scopes:** add exactly the set you chose above.
 5. **Submit for verification.** For each sensitive/restricted scope, paste a
    justification (drafts below). Attach a **demo video** (script below).
@@ -108,7 +123,7 @@ request exactly the set you ship.
 
 ### Demo video (record with QuickTime/Loom; ~2–3 min, no login shown)
 
-1. Show `tryhal.com` (homepage) and the `/privacy` page with the Limited Use line.
+1. Show `tryhal.xyz` (homepage) and the `/privacy` page with the Limited Use line.
 2. In Messages, text HAL "connect google" → tap the link → the Google consent
    screen (show the scopes) → approve → the "connected" confirmation.
 3. Demonstrate each scope: "what's on my calendar today?" (calendar.readonly);
@@ -150,7 +165,7 @@ Google-user-data turns through does **not** train on API data:
 
 ## Order of operations
 
-1. Point tryhal.com at HAL + verify it in Search Console (Blocker 0).
+1. Point tryhal.xyz at HAL + verify it in Search Console (Blocker 0).
 2. Set publishing status → In production (Blocker 1).
 3. Fill in the `TODO(owner)` fields in `routes/legal.py`; redeploy.
 4. Pick your scope set; trim `SCOPES` if launching lighter.
