@@ -15,6 +15,18 @@ async def tool_browser(args: dict, ctx: ToolContext) -> str:
     if not url:
         return "Error: url is required"
 
+    # SSRF guard: the browser service (Playwright/Chromium) will fetch and even
+    # run JS against whatever URL we hand it, so an internal/private target is
+    # strictly worse here than in web_fetch. Refuse before dispatching.
+    from hal_orchestrator.services.url_guard import check_url
+
+    reason = await check_url(
+        url, allow_private=ctx.settings.allow_private_network_fetch
+    )
+    if reason:
+        log.warning("tool.browser.blocked", url=url[:120], reason=reason)
+        return f"Can't browse that URL ({reason})."
+
     action = args.get("action", "extract")
     payload: dict = {"url": url, "action": action}
 

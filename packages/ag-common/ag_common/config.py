@@ -170,3 +170,40 @@ class HalOrchestratorConfig(BaseConfig):
     resy_api_key: str = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
     # Public base URL of this service (for the Resy connect web form link).
     public_base_url: str = "https://hal-orchestrator-production.up.railway.app"
+
+    # --- Security / privacy hardening ------------------------------------- #
+    # Dedicated token for the read-only /admin dashboard. Keep it DISTINCT from
+    # hal_bridge_secret so a leaked admin URL (query strings land in proxy/access
+    # logs) can't be replayed as bridge auth. Falls back to hal_bridge_secret
+    # only when unset, to preserve existing single-secret deploys.
+    admin_token: str = ""
+    # SSRF guard: web_fetch / browser refuse URLs that resolve to loopback,
+    # private, link-local, or reserved IP space (cloud metadata, *.internal
+    # Railway hosts, localhost). Set true ONLY for a trusted single-tenant
+    # self-host where reaching internal hosts is intended.
+    allow_private_network_fetch: bool = False
+    # Privacy: when false (default in production), operational logs omit the
+    # actual text of user messages, memories, reminders, and outbound sends —
+    # only lengths/metadata are logged. Flip true locally to debug content.
+    log_message_content: bool = False
+
+    # --- Per-user message quota (free tier -> paid) ----------------------- #
+    # Free user-initiated messages per calendar month, per 1:1 silo. Over the
+    # cap, HAL replies with the funding message instead of running the model.
+    # Heartbeats/proactive turns and group chats are never metered. 0 = no cap
+    # (unlimited — the pre-billing default). A paid user's profile plan overrides
+    # this (services/usage.py). Reset is by calendar month (UTC).
+    free_message_limit: int = 0
+    # Funding link shown when a user hits the cap — a Stripe Checkout / payment
+    # link URL. On an iPhone this surfaces Apple Pay as a one-tap option in the
+    # browser. Unset -> a graceful "coming soon" message with no link.
+    payment_url: str = ""
+    # Stripe webhook signing secret (whsec_...) for POST /api/stripe/webhook.
+    # Set it to auto-unlock a user the moment they pay (checkout.session.completed
+    # → lift their cap). Unset -> the webhook 503s and you unlock manually via
+    # /api/admin/grant. The pay link carries a signed client_reference_id that
+    # binds the payment back to the silo (see services/billing.py).
+    stripe_webhook_secret: str = ""
+    # Stripe secret key (sk_...) — only needed if you later create dynamic
+    # per-user checkout sessions via the API. The payment-link flow doesn't use it.
+    stripe_secret_key: str = ""

@@ -64,5 +64,10 @@ async def tool_send_message(args: dict, ctx: ToolContext) -> str:
         to = resolved
 
     ctx.side_messages.append({"to": to, "text": text})
-    log.info("send_message.queued", to=to, text=text[:50])
+    log.info(
+        "send_message.queued",
+        to=to,
+        text=text[:50] if ctx.settings.log_message_content else None,
+        text_len=len(text),
+    )
     return f"Message queued for {to}: {text}"

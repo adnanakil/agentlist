@@ -18,6 +18,7 @@ from hal_orchestrator.prompts.system import (
     USER_TZ,
     _now_block,
     _onboarding_block,
+    is_onboarding_complete,
     resolve_tz,
 )
 from hal_orchestrator.services.profiles import _empty, get_profile, update_profile
@@ -87,6 +88,22 @@ b5 = _onboarding_block({**base, **complete, "google_offered": True})
 check("step6 completes after offer", b5 and "onboarded=true" in b5)
 b5b = _onboarding_block({**base, **complete, "google_connected": True})
 check("step6 completes after connect", b5b and "onboarded=true" in b5b)
+
+print("is_onboarding_complete:")
+check("empty -> incomplete", not is_onboarding_complete(None))
+check("name only -> incomplete", not is_onboarding_complete({**base, "name": "Sarah"}))
+check(
+    "missing google offer/connect -> incomplete",
+    not is_onboarding_complete({**base, **complete}),
+)
+check(
+    "complete after google offered",
+    is_onboarding_complete({**base, **complete, "google_offered": True}),
+)
+check(
+    "complete after google connected",
+    is_onboarding_complete({**base, **complete, "google_connected": True}),
+)
 
 
 # --- profiles.py extra_data routing (fake session, no DB) ------------------- #

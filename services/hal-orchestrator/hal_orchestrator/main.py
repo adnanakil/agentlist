@@ -22,6 +22,7 @@ from hal_orchestrator.routes.admin import build_admin_router
 from hal_orchestrator.routes.google import build_google_router
 from hal_orchestrator.routes.landing import build_landing_router
 from hal_orchestrator.routes.message import build_message_router
+from hal_orchestrator.routes.stripe import build_stripe_router
 from hal_orchestrator.services.baby_watch import baby_watch_loop
 from hal_orchestrator.services.cron import run_cron_checker
 from hal_orchestrator.services.curator import curator_loop
@@ -61,9 +62,42 @@ log = structlog.get_logger()
 # --------------------------------------------------------------------------- #
 
 
+def _validate_production_config(settings) -> None:
+    """Fail closed on an insecure production boot.
+
+    In production a missing bridge secret leaves the message API open, and a
+    missing/invalid Fernet key means OAuth tokens can't be encrypted at rest.
+    Refuse to start rather than run silently insecure. Outside production these
+    are warnings so local dev keeps working.
+    """
+    problems: list[str] = []
+    if not settings.hal_bridge_secret:
+        problems.append("HAL_BRIDGE_SECRET is not set (message API would be unauthenticated)")
+    if settings.encryption_key:
+        try:
+            from cryptography.fernet import Fernet
+
+            Fernet(settings.encryption_key.encode())
+        except Exception:
+            problems.append("ENCRYPTION_KEY is not a valid Fernet key")
+    else:
+        problems.append("ENCRYPTION_KEY is not set (OAuth tokens can't be encrypted)")
+
+    is_prod = (settings.environment or "").lower() in ("production", "prod")
+    if problems and is_prod:
+        raise RuntimeError(
+            "Refusing to start in production with insecure config: "
+            + "; ".join(problems)
+        )
+    for p in problems:
+        log.warning("hal_orchestrator.config_warning", issue=p)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = state.settings
+
+    _validate_production_config(settings)
 
     log.info("hal_orchestrator.startup", database_url=settings.database_url[:30] + "...")
     engine, _ = create_engine_and_session(settings.database_url)
@@ -185,6 +219,9 @@ def create_app() -> FastAPI:
 
     # Public landing page (tryhal.com)
     application.include_router(build_landing_router())
+
+    # Stripe payment webhook (pay -> auto-unlock the message cap)
+    application.include_router(build_stripe_router())
 
     return application
 

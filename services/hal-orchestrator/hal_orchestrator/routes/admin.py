@@ -17,14 +17,13 @@ import html
 from datetime import datetime, timedelta, timezone
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.models import HalConversation, HalMessage, HalUserProfile
 from ag_db.session import get_session
-
 from hal_orchestrator.prompts.system import USER_TZ
 from hal_orchestrator.services.identity import is_group_id
 from hal_orchestrator.state import get_settings
@@ -111,7 +110,11 @@ def build_admin_router() -> APIRouter:
     router = APIRouter()
 
     def _check_token(token: str) -> None:
-        secret = get_settings().hal_bridge_secret
+        settings = get_settings()
+        # Prefer a dedicated admin token so a leaked dashboard URL can't be
+        # replayed as bridge auth; fall back to the bridge secret for existing
+        # single-secret deploys. Fails closed when neither is configured.
+        secret = settings.admin_token or settings.hal_bridge_secret
         if not secret or not hmac.compare_digest(token or "", secret):
             raise HTTPException(status_code=403, detail="Bad token")
 
@@ -119,9 +122,16 @@ def build_admin_router() -> APIRouter:
     async def admin_dashboard(
         token: str = Query(""),
         format: str = Query("html"),
+        authorization: str = Header(""),
         session: AsyncSession = Depends(get_session),
     ):
-        _check_token(token)
+        # Accept the token via Authorization: Bearer <token> (preferred — stays
+        # out of proxy/access logs) or the ?token= query param (browser
+        # convenience). The header wins when both are present.
+        bearer = ""
+        if authorization.startswith("Bearer "):
+            bearer = authorization[len("Bearer ") :].strip()
+        _check_token(bearer or token)
         now = datetime.now(timezone.utc)
         day_ago = now - timedelta(hours=24)
 
@@ -207,5 +217,29 @@ def build_admin_router() -> APIRouter:
 
         now_local = datetime.now(USER_TZ).strftime("%a %b %-d, %-I:%M %p %Z")
         return HTMLResponse(render_dashboard(rows, totals, now_local))
+
+    @router.post("/api/admin/grant")
+    async def grant_plan(
+        silo: str = Query(..., description="user handle/phone to grant"),
+        unlimited: bool = Query(True),
+        limit: int = Query(0, description="monthly cap when not unlimited"),
+        token: str = Query(""),
+        authorization: str = Header(""),
+        session: AsyncSession = Depends(get_session),
+    ):
+        """Lift a user's message cap after they pay. Admin-tokened; sets the
+        profile plan (unlimited, or a higher monthly limit) and resets the
+        current period's counter so they're unblocked immediately. This is the
+        manual/webhook hook that closes the pay -> unlock loop."""
+        bearer = ""
+        if authorization.startswith("Bearer "):
+            bearer = authorization[len("Bearer ") :].strip()
+        _check_token(bearer or token)
+
+        from hal_orchestrator.services.usage import set_plan
+
+        plan = await set_plan(session, silo, unlimited=unlimited, limit=limit)
+        await session.commit()
+        return JSONResponse({"ok": True, "silo": silo, "plan": plan})
 
     return router

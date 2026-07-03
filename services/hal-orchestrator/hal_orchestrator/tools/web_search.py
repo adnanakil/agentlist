@@ -123,6 +123,17 @@ async def tool_web_fetch(args: dict, ctx: ToolContext) -> str:
     if "reddit.com/" in url and "old.reddit.com" not in url:
         url = url.replace("www.reddit.com", "old.reddit.com").replace("://reddit.com", "://old.reddit.com")
 
+    # SSRF guard: refuse fetches to internal/private hosts (cloud metadata,
+    # *.railway.internal, localhost). The model picks this URL from user text.
+    from hal_orchestrator.services.url_guard import check_url
+
+    reason = await check_url(
+        url, allow_private=ctx.settings.allow_private_network_fetch
+    )
+    if reason:
+        log.warning("web_fetch.blocked", url=url[:120], reason=reason)
+        return f"Can't fetch that URL ({reason})."
+
     try:
         resp = await ctx.http_client.get(
             url,

@@ -88,7 +88,12 @@ def build_google_router() -> APIRouter:
         )
         await update_profile(session, silo, google_connected=True)
         await session.commit()
-        log.info("google.connected", silo=silo, email=email, first=first_connect)
+        log.info(
+            "google.connected",
+            silo=silo,
+            email=email if settings.log_message_content else bool(email),
+            first=first_connect,
+        )
 
         # First win: HAL just gained calendar+inbox sight — immediately scan
         # and text ONE useful concrete thing, so the connection pays off while

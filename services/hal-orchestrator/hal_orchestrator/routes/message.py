@@ -740,11 +740,25 @@ class MessageResponse(BaseModel):
 # --------------------------------------------------------------------------- #
 
 
+import hmac as _hmac
+
+
 async def verify_bridge_auth(authorization: str = Header(...)) -> None:
-    """Verify the bridge shared secret."""
+    """Verify the bridge shared secret.
+
+    Fails CLOSED: an unset secret rejects every request instead of matching
+    'Bearer ' (the empty-secret bypass). Constant-time compare avoids leaking
+    the secret through response timing. This check is what makes it safe to
+    trust the caller-supplied `phone`/silo in the request body — only the
+    bridge holds the secret, so no one can impersonate another user's silo.
+    """
     settings = get_settings()
-    expected = f"Bearer {settings.hal_bridge_secret}"
-    if authorization != expected:
+    secret = settings.hal_bridge_secret
+    if not secret:
+        log.error("message.auth_no_secret")
+        raise HTTPException(status_code=503, detail="Service not configured")
+    expected = f"Bearer {secret}"
+    if not _hmac.compare_digest(authorization or "", expected):
         raise HTTPException(status_code=401, detail="Invalid authorization")
 
 
@@ -799,7 +813,8 @@ def build_message_router() -> APIRouter:
             silo=silo,
             sender=sender_phone,
             is_group=is_group,
-            text=user_text[:80],
+            text=user_text[:80] if settings.log_message_content else None,
+            text_len=len(user_text),
             images=len(body.images),
         )
 
@@ -817,6 +832,38 @@ def build_message_router() -> APIRouter:
         if user_text.strip() in FALLBACK_REPLIES:
             log.warning("message.echo_suppressed", silo=silo)
             return MessageResponse(reply="")
+
+        # Per-user message quota. A metered (1:1, real, non-admin) user over the
+        # monthly free cap gets a funding prompt instead of a model run — this is
+        # the free-tier -> paid boundary. Checked before any expensive work so a
+        # capped user costs us nothing. Best-effort: a quota error must never
+        # block a legitimate reply, so we fail open.
+        from hal_orchestrator.services.usage import (
+            enforce_quota,
+            funding_message,
+            is_metered,
+        )
+
+        if is_metered(silo, is_group, body.internal, settings):
+            try:
+                quota = await enforce_quota(session, silo, settings)
+            except Exception:
+                log.exception("message.quota_check_failed", silo=silo)
+                quota = None
+            if quota is not None and not quota.allowed:
+                # Give this user a pay link that binds a completed payment back to
+                # their silo (auto-unlock via the Stripe webhook). Falls back to
+                # the static message when no payment link is configured.
+                from hal_orchestrator.services.billing import pay_url_for
+
+                pay_url = pay_url_for(settings, silo)
+                reply_text = (
+                    funding_message(settings, quota.limit, pay_url=pay_url)
+                    if pay_url
+                    else quota.message
+                )
+                await session.commit()  # persist the admin-notify marker, if any
+                return MessageResponse(reply=reply_text)
 
         # Load the silo's profile (the user's in 1:1; the group's shared notes
         # in groups) and build context. In groups we deliberately do NOT load
@@ -1197,7 +1244,10 @@ def build_message_router() -> APIRouter:
                 log.exception("message.archive_failed", silo=silo)
             await session.commit()
             log.info(
-                "message.reply", silo=silo, reply=reply[:80], gemini_failed=True
+                "message.reply",
+                silo=silo,
+                reply=reply[:80] if settings.log_message_content else None,
+                gemini_failed=True,
             )
             return MessageResponse(
                 reply=reply,
@@ -1482,7 +1532,7 @@ def build_message_router() -> APIRouter:
         log.info(
             "message.reply",
             silo=silo,
-            reply=reply[:80],
+            reply=reply[:80] if settings.log_message_content else None,
             suppressed=not outbound_reply,
             tool_calls=total_tool_calls,
         )

@@ -35,7 +35,15 @@ async def remember(
     session.add(memory)
     await session.flush()
 
-    log.info("memory.remember", phone=phone, content=content[:50], embedded=embedding is not None)
+    import hal_orchestrator.state as _state
+
+    log.info(
+        "memory.remember",
+        phone=phone,
+        content=content[:50] if _state.settings.log_message_content else None,
+        content_len=len(content or ""),
+        embedded=embedding is not None,
+    )
     return f"Remembered: {content}"
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from zoneinfo import ZoneInfo
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.models import HalUserProfile
@@ -28,6 +28,11 @@ EXTRA_KEYS = (
     # Saved address book: {lowercased name: {"phone": "+1...", "name": "..."}}
     # — lets "text my wife" resolve without the user re-typing numbers.
     "contacts",
+    # Message-quota bookkeeping (services/usage.py):
+    #   usage: {"period": "YYYY-MM", "count": int, "capped_notified": "YYYY-MM"}
+    #   plan:  {"unlimited": bool, "limit": int}  (set when a user pays)
+    "usage",
+    "plan",
 )
 
 
@@ -76,6 +81,27 @@ async def get_profile(session: AsyncSession, phone: str) -> dict:
         return _empty(phone)
 
     return _serialize(profile)
+
+
+async def find_by_stripe(
+    session: AsyncSession,
+    *,
+    customer_id: str | None = None,
+    subscription_id: str | None = None,
+) -> str | None:
+    """Return the silo (phone) whose plan carries the given Stripe subscription or
+    customer id, else None. Maps a subscription webhook (which has no
+    client_reference_id) back to the user who paid."""
+    plan = HalUserProfile.extra_data["plan"]
+    conds = []
+    if subscription_id:
+        conds.append(plan["stripe_subscription_id"].astext == subscription_id)
+    if customer_id:
+        conds.append(plan["stripe_customer_id"].astext == customer_id)
+    if not conds:
+        return None
+    stmt = select(HalUserProfile.phone).where(or_(*conds)).limit(1)
+    return (await session.execute(stmt)).scalar_one_or_none()
 
 
 async def update_profile(session: AsyncSession, phone: str, **fields: object) -> dict:

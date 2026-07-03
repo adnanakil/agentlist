@@ -44,7 +44,15 @@ async def create_reminder(
     session.add(reminder)
     await session.flush()
 
-    log.info("reminder.created", phone=phone, text=text[:50], due_at=str(due_at))
+    import hal_orchestrator.state as _state
+
+    log.info(
+        "reminder.created",
+        phone=phone,
+        text=text[:50] if _state.settings.log_message_content else None,
+        text_len=len(text or ""),
+        due_at=str(due_at),
+    )
     return {
         "id": str(reminder.id),
         "text": text,
@@ -342,7 +350,12 @@ async def _send_reminder_via_bridge(
 
     message = f"Reminder: {reminder.text}"
     await state.outbox.put({"to": reminder.phone, "text": message})
-    log.info("reminder.queued", phone=reminder.phone, text=reminder.text[:50])
+    log.info(
+        "reminder.queued",
+        phone=reminder.phone,
+        text=reminder.text[:50] if state.settings.log_message_content else None,
+        text_len=len(reminder.text or ""),
+    )
 
 
 def _next_occurrence(current: datetime, recurrence: str) -> datetime | None:
