@@ -59,7 +59,13 @@ async def tool_google_auth(args: dict, ctx: ToolContext) -> str:
         return "Google is not connected. Use action=start to get a connect link."
 
     if action == "start":
-        url = gsvc.build_auth_url(ctx.settings, ctx.phone)
+        # Send a SHORT link (…/connect/<token>) that 302s to Google — the full
+        # Google consent URL contains our redirect_uri with an embedded domain,
+        # which iMessage's link detector truncates (dropping response_type and
+        # causing a 400 on tap). The short opaque token has no embedded URL.
+        base = (ctx.settings.public_base_url or "").rstrip("/")
+        token = gsvc.sign_state(ctx.settings, ctx.phone)
+        url = f"{base}/connect/{token}"
         return (
             "Send the user EXACTLY this link on its own line and tell them to tap it, "
             "sign in, and approve calendar + email access, then text you back:\n"

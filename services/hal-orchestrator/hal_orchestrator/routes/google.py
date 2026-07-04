@@ -11,7 +11,7 @@ import asyncio
 
 import structlog
 from fastapi import APIRouter, Depends
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.session import get_session
@@ -38,6 +38,22 @@ box-shadow:0 4px 24px rgba(0,0,0,.08)}}h1{{font-size:22px;margin:0 0 8px}}p{{col
 
 def build_google_router() -> APIRouter:
     router = APIRouter()
+
+    @router.get("/connect/{token}")
+    async def connect_start(token: str):
+        """Short, iMessage-safe entry point: HAL texts /connect/<signed-token>
+        (no giant Google URL with an embedded domain for iMessage to truncate),
+        we verify the token -> silo and 302 to the real Google consent URL."""
+        settings = get_settings()
+        silo = gsvc.verify_state(settings, token)
+        if not silo:
+            return _page(
+                "Link expired",
+                '<div class="e">⏱️</div><h1>Link expired</h1>'
+                "<p>These links are valid for 10 minutes. Text HAL "
+                '"connect google" for a new one.</p>',
+            )
+        return RedirectResponse(gsvc.build_auth_url(settings, silo), status_code=302)
 
     @router.get("/api/google/callback")
     async def google_callback(
