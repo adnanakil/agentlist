@@ -51,10 +51,9 @@ def render_landing(number: str) -> str:
     font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
     text-align:center; padding:24px; gap:0;
   }}
-  .logo {{ width:94px; height:94px; border-radius:21px; background:#fff;
-           display:flex; align-items:center; justify-content:center;
-           margin-bottom:22px; overflow:hidden; box-shadow:0 6px 28px rgba(0,0,0,.45); }}
-  .logo img {{ width:100%; height:100%; object-fit:contain; }}
+  .logo {{ width:94px; height:94px; border-radius:21px; overflow:hidden;
+           margin-bottom:22px; box-shadow:0 6px 28px rgba(0,0,0,.45); }}
+  .logo img {{ width:100%; height:100%; object-fit:cover; display:block; }}
   .mark {{
     font-size:15px; font-weight:600; letter-spacing:.42em; text-indent:.42em;
     color:#8b8b93; text-transform:uppercase; margin-bottom:28px;
