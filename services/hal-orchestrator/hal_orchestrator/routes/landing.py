@@ -12,6 +12,7 @@ import re
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
+from hal_orchestrator.routes.logo_data import LOGO_DATA_URI
 from hal_orchestrator.state import get_settings
 
 
@@ -50,7 +51,10 @@ def render_landing(number: str) -> str:
     font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
     text-align:center; padding:24px; gap:0;
   }}
-  .logo {{ margin-bottom:22px; line-height:0; }}
+  .logo {{ width:94px; height:94px; border-radius:21px; background:#fff;
+           display:flex; align-items:center; justify-content:center;
+           margin-bottom:22px; overflow:hidden; box-shadow:0 6px 28px rgba(0,0,0,.45); }}
+  .logo img {{ width:100%; height:100%; object-fit:contain; }}
   .mark {{
     font-size:15px; font-weight:600; letter-spacing:.42em; text-indent:.42em;
     color:#8b8b93; text-transform:uppercase; margin-bottom:28px;
@@ -71,7 +75,7 @@ def render_landing(number: str) -> str:
   footer {{ position:fixed; bottom:22px; color:#3a3a42; font-size:12px; letter-spacing:.02em; }}
 </style></head>
 <body>
-  <div class="logo"><svg viewBox="0 0 200 190" width="82" height="78" role="img" aria-label="HAL logo" xmlns="http://www.w3.org/2000/svg"><path d="M65 20 L135 20 A45 45 0 0 1 180 65 L180 85 A45 45 0 0 1 135 130 L95 130 L58 166 L72 130 L65 130 A45 45 0 0 1 20 85 L20 65 A45 45 0 0 1 65 20 Z" fill="none" stroke="#34c759" stroke-width="13" stroke-linejoin="round"/><circle cx="78" cy="80" r="11" fill="#34c759"/><circle cx="122" cy="80" r="11" fill="#34c759"/><path d="M76 104 Q100 124 124 104" fill="none" stroke="#34c759" stroke-width="12" stroke-linecap="round"/></svg></div>
+  <div class="logo"><img src="{LOGO_DATA_URI}" alt="HAL logo"></div>
   <div class="mark">HAL</div>
   <h1>A personal assistant that lives in your texts.</h1>
   {hero}
