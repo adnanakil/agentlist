@@ -71,14 +71,16 @@ def render_landing(number: str) -> str:
   .number:hover {{ color:#34c759; }}
   .number.soon {{ color:#3a3a42; border-color:#3a3a42; }}
   .hint {{ color:#6b6b73; font-size:14px; margin-top:22px; }}
-  footer {{ position:fixed; bottom:22px; color:#3a3a42; font-size:12px; letter-spacing:.02em; }}
+  footer {{ position:fixed; bottom:22px; color:#6b6b73; font-size:13px; letter-spacing:.02em; }}
+  footer a {{ color:#8b8b93; text-decoration:none; }}
+  footer a:hover {{ color:#34c759; }}
 </style></head>
 <body>
   <div class="logo"><img src="{LOGO_DATA_URI}" alt="HAL logo"></div>
   <div class="mark">HAL</div>
   <h1>A personal assistant that lives in your texts.</h1>
   {hero}
-  <footer>tryhal.xyz</footer>
+  <footer><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></footer>
 </body></html>"""
 
 
