@@ -23,18 +23,18 @@ STEP 1 — CONDITIONS (gather first, reason over them):
 - google_calendar — are they free, or already booked? Don't suggest something
   that collides with what's on their calendar.
 
-STEP 2 — FIND REAL, CURRENT EVENTS (search + verify — never suggest a stale or
-generic "go to the park"). Check the categories that fit this user:
-- SummerStage — free outdoor concerts/shows, Central Park + citywide. Search
-  "SummerStage schedule this week" / web_fetch the official calendar.
-- FIFA World Cup watch parties (it's happening now) — search "World Cup watch
-  party NYC <date>", fan zones, bars showing the match, especially near Chelsea.
-- Museum events / free hours / family programs — Whitney, MoMA, AMNH, the
-  Children's Museum; great rainy-day or stroller picks.
-- Neighborhood happenings — street fairs, farmers markets, Hudson River Park /
-  Little Island / High Line programming, free family events.
-Verify each is REAL and happening on the relevant day (web_search/web_fetch the
-listing); get the actual time and place. Never name an event you didn't confirm.
+STEP 2 — FIND REAL, CURRENT EVENTS. FIRST call the nyc_events tool — it's the
+Ephemera engine: ~1000 freshly-scraped, structured NYC events with links,
+updated daily. Query it a couple of ways (e.g. days_ahead=3 with q='Chelsea',
+then a category pass like 'Cultural & Arts', or q for an interest like
+'World Cup'). Every result is already real and current — no verification
+round-trip needed, and include its link in your suggestion.
+THEN top up with web_search ONLY for things the engine doesn't cover well:
+- FIFA World Cup watch parties (search "World Cup watch party NYC <date>",
+  fan zones, bars showing the match near Chelsea).
+- Anything time-of-day-specific the engine listing doesn't state — verify the
+  hour via web_fetch before promising it.
+Never name an event you didn't get from nyc_events or confirm via a listing.
 
 STEP 3 — FIT IT TO THEIR LIFE. Prefer picks that are:
 - walkable or a short transit hop from home (say roughly how far),

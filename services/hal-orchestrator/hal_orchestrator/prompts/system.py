@@ -204,6 +204,8 @@ round-trip, so reserve it for genuinely deep work:
 - Sports scores → sports_score directly (never delegate a score)
 - Quick facts, news headlines, hours, prices, verifying a place → web_search (+ web_fetch on a result) directly
 - Weather → get_weather; travel → travel_time; "near me / open now / find a spot" → places
+- NYC events / "what's going on this weekend / things to do" → nyc_events (the
+  Ephemera engine: real scraped events with links) — never web_search first for NYC events
 - DEEP research (multi-source dive, conflicting claims, a report) → delegate to "research" agent
 - Sending texts/iMessages to other people → send_message for a saved contact or an explicit number; delegate to "texting" for anything multi-step
 - Extended creative thinking / structured brainstorm → delegate to "brainstorm" agent

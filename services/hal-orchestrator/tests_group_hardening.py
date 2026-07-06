@@ -191,6 +191,27 @@ check("listed silo allowed", allowed_silo("+12017570419", "+12017570419, chat99"
 check("unlisted silo blocked", not allowed_silo("chat123", "+12017570419"))
 
 # --------------------------------------------------------------------------- #
+print("nyc_events — formatting:")
+from hal_orchestrator.tools.nyc_events import format_event, format_events  # noqa: E402
+
+ev = {"title": "Jazz at Lincoln Center", "date": "2026-07-08", "time": "7:30 PM",
+      "location": "10 Columbus Cir", "neighborhood": "Columbus Circle",
+      "link": "https://jazz.org/x", "ticketLink": "https://tix.example/y"}
+block = format_event(ev)
+check("date rendered as weekday", "Wed Jul 8" in block, block)
+check("time kept", "7:30 PM" in block)
+check("ticketLink preferred over link", "tix.example" in block and "jazz.org" not in block)
+check("venue + neighborhood on one line", "10 Columbus Cir — Columbus Circle" in block)
+check("no-date event shows time string",
+      "Friday 9 PM" in format_event({"title": "x", "time": "Friday 9 PM"}))
+check("no time at all → Date TBA", "Date TBA" in format_event({"title": "x"}))
+payload = {"events": [ev] * 30, "lastFetched": "2026-07-06T09:05:00Z"}
+out = format_events(payload, 5)
+check("limit respected", out.count("Jazz at Lincoln Center") == 5)
+check("source footer with scrape date", "scraped 2026-07-06" in out)
+check("empty result message", "No matching NYC events" in format_events({"events": []}, 5))
+
+# --------------------------------------------------------------------------- #
 print("playbook — scope plumbing:")
 from hal_orchestrator.services import playbook as pb  # noqa: E402
 

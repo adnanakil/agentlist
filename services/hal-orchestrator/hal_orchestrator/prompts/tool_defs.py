@@ -577,6 +577,46 @@ MAIN_TOOLS: list[dict] = [
                 },
             },
             {
+                "name": "nyc_events",
+                "description": (
+                    "Real, freshly-scraped NYC events (concerts, art, culture, "
+                    "nightlife, markets — ~1000 events across all boroughs, "
+                    "updated daily by the Ephemera engine). Use for ANY 'what's "
+                    "going on / events this weekend / things to do in NYC' "
+                    "question instead of web_search — every result is current, "
+                    "structured, and has a link. Filter by date window, "
+                    "category, keyword, or proximity to coordinates."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "days_ahead": {
+                            "type": "integer",
+                            "description": "Window from today (default 7, max 30). Or pass since/until.",
+                        },
+                        "since": {"type": "string", "description": "YYYY-MM-DD window start"},
+                        "until": {"type": "string", "description": "YYYY-MM-DD window end (inclusive)"},
+                        "q": {
+                            "type": "string",
+                            "description": "Keyword over title/description/location (e.g. 'jazz', 'Chelsea', 'rooftop')",
+                        },
+                        "category": {
+                            "type": "string",
+                            "description": "One of the engine's category buckets, e.g. 'Cultural & Arts'",
+                        },
+                        "near": {
+                            "type": "string",
+                            "description": "'lat,lng' to sort/filter by proximity (pair with radius_km, default 3)",
+                        },
+                        "radius_km": {"type": "number"},
+                        "limit": {
+                            "type": "integer",
+                            "description": "Max results (default 12, cap 25)",
+                        },
+                    },
+                },
+            },
+            {
                 "name": "group_quiet",
                 "description": (
                     "Group chats only. When a member tells you to butt out, keep "

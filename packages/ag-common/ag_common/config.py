@@ -156,6 +156,10 @@ class HalOrchestratorConfig(BaseConfig):
     # Lets follow-ups run in e.g. the owner's own DMs before group chats with
     # other people get proactive texts: FOLLOWUP_SILOS="+12015551234".
     followup_silos: str = ""
+    # Base URL of the Ephemera NYC events engine (nyc_events tool). On Railway
+    # same-project private networking: http://ephemera.railway.internal:{port}.
+    # Unset -> the tool reports itself unavailable.
+    ephemera_url: str = ""
     # Helpful mode: an OPT-IN proactive concierge (distinct from the heartbeat).
     # Once a day it sends a short brief tailored to the user's situation +
     # location (weather, local events, news, today's agenda), plus a few capped
