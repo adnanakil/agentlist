@@ -155,6 +155,12 @@ async def apply_changes(
         content = (add.get("content") or "").strip()[:MAX_ENTRY_CHARS]
         if not content:
             continue
+        # The synthesis prompt makes scope REQUIRED; silently defaulting a
+        # missing scope to 'all' would inject an unvetted behavioral rule
+        # into both contexts — the exact failure mode scoping exists to stop.
+        if add.get("scope") not in SCOPES:
+            rejected.append(f"add: missing/invalid scope for {content[:40]!r}")
+            continue
         reason = lint_violation(content, denylist)
         if reason:
             rejected.append(f"add: {reason}")
@@ -166,7 +172,7 @@ async def apply_changes(
             HalPlaybookEntry(
                 content=content,
                 hypothesis=(add.get("hypothesis") or "")[:500],
-                scope=add.get("scope") if add.get("scope") in SCOPES else "all",
+                scope=add["scope"],
                 target_category=(add.get("target_category") or None),
                 target_detail=(add.get("target_detail") or "")[:200] or None,
                 origin_reflection_id=reflection_id,

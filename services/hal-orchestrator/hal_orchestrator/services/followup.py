@@ -128,13 +128,14 @@ def build_checkin_prompt(summary: str, when_local: str) -> str:
         "feature pitches, at most one emoji.\n\n"
         "Reply with EXACTLY \"...\" ONLY if one of these CLEARLY holds in the "
         "conversation: it already covered how the event went; the plan fell "
-        "through; or members told you to stay out of this chat IN GENERAL "
-        "('stop chiming in here', an ongoing mute). A 'keep it to yourself' "
-        "or 'butt out' said around the event itself meant quiet DURING their "
-        "get-together — it does not forbid one brief, friendly 'how was it?' "
-        "afterwards; that's you respecting the moment, then caring after. "
-        "Otherwise, SEND the check-in — that's the entire point of this "
-        "check."
+        "through; the user asked you to stop texting them unprompted / stop "
+        "proactive check-ins; or members told you to stay out of this chat "
+        "IN GENERAL ('stop chiming in here', an ongoing mute). A 'keep it to "
+        "yourself' or 'butt out' said around the event itself meant quiet "
+        "DURING their get-together — it does not forbid one brief, friendly "
+        "'how was it?' afterwards; that's you respecting the moment, then "
+        "caring after. Otherwise, SEND the check-in — that's the entire "
+        "point of this check."
     )
 
 
@@ -157,11 +158,11 @@ def build_suggest_prompt(summary: str, when_local: str) -> str:
         "suggest a road-trip town they only visited once). Keep it light: "
         "one message, no pressure, no question barrage.\n\n"
         "Reply with EXACTLY \"...\" ONLY if one of these CLEARLY holds: they "
-        "already made their next plan; members told you to stay out of this "
-        "chat IN GENERAL ('stop chiming in here', an ongoing mute — a 'butt "
-        "out' scoped to the event itself expired with the event); or you "
-        "already sent a suggestion like this since the event. Otherwise, "
-        "SEND it."
+        "already made their next plan; the user asked you to stop texting "
+        "them unprompted; members told you to stay out of this chat IN "
+        "GENERAL ('stop chiming in here', an ongoing mute — a 'butt out' "
+        "scoped to the event itself expired with the event); or you already "
+        "sent a suggestion like this since the event. Otherwise, SEND it."
     )
 
 
@@ -380,6 +381,7 @@ async def sweep_silo(
     silo: str,
 ) -> int:
     """Scan one silo and send at most ONE due follow-up. Returns sends."""
+    import hal_orchestrator.state as state
     from hal_orchestrator.services.conversation import get_summary
     from hal_orchestrator.services.identity import is_group_id
     from hal_orchestrator.services.watched import is_muted
@@ -391,6 +393,11 @@ async def sweep_silo(
         return 0
     if await _recently_followed_up(session, silo):
         return 0
+    # Cross-daemon courtesy: if anything (heartbeat/reminder/cron/brief) just
+    # texted this silo unprompted, don't stack a follow-up on top of it.
+    since = state.minutes_since_proactive_send(silo)
+    if since is not None and since < settings.heartbeat_alert_cooldown_minutes:
+        return 0
 
     summary = await get_summary(session, silo)
     events = await scan_silo_events(settings, http, session, silo, summary)
@@ -401,15 +408,42 @@ async def sweep_silo(
         tz = resolve_tz(await get_profile(session, silo))
 
     for ev in events:
-        if ev["followed_up"]:
-            continue
         key = event_key(ev["summary"], ev["ended_at"])
         have_checkin, have_suggest = await _existing_phases(
             session, silo, ev["summary"], ev["ended_at"]
         )
+        # A debriefed/already-checked-in event skips ONLY the check-in — the
+        # later "want to do something like it again?" is still worth one shot.
+        # (The check-in HAL itself sends makes the scanner report
+        # followed_up=true on every later scan; without this, phase 2 could
+        # never fire.)
+        if ev["followed_up"]:
+            have_checkin = True
         phase = pick_phase(ev["ended_at"], now, have_checkin, have_suggest)
         if phase is None:
             continue
+
+        # CLAIM the event before sending: the row (unique on silo/key/phase)
+        # is the idempotency token, so a crash between send and record — or
+        # two overlapping sweeps — can never double-text. The cost of the
+        # claim-first order is that a failed draft burns the attempt; for
+        # proactive messages, silence beats a duplicate.
+        row = HalFollowup(
+            silo=silo,
+            event_key=key,
+            event_summary=ev["summary"],
+            event_at=ev["ended_at"],
+            phase=phase,
+            sent_at=None,
+        )
+        session.add(row)
+        try:
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            log.info("followup.already_claimed", silo=silo, phase=phase)
+            continue
+
         when_local = f"{ev['ended_at'].astimezone(tz):%A %b %-d, %-I:%M %p}"
         prompt = (
             build_checkin_prompt(ev["summary"], when_local)
@@ -420,24 +454,16 @@ async def sweep_silo(
             reply = await _draft_and_send(settings, http, silo, prompt)
         except Exception:
             log.exception("followup.draft_failed", silo=silo, phase=phase)
-            continue
-        session.add(
-            HalFollowup(
-                silo=silo,
-                event_key=key,
-                event_summary=ev["summary"],
-                event_at=ev["ended_at"],
-                phase=phase,
-                sent_at=now if reply else None,
-            )
-        )
-        await session.flush()
+            return 0
+        if reply:
+            row.sent_at = datetime.now(timezone.utc)
+            await session.commit()
         log.info(
             "followup.recorded",
             silo=silo,
             phase=phase,
             sent=bool(reply),
-            key=key[:60],
+            key=key[:60] if settings.log_message_content else None,
         )
         return 1 if reply else 0
     return 0

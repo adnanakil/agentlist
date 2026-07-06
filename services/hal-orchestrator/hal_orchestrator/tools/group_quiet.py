@@ -40,8 +40,11 @@ async def tool_group_quiet(args: dict, ctx: ToolContext) -> str:
         return (
             f"Muted in this group until {local:%a %b %-d, %-I:%M %p}. Until "
             "then you will ONLY see/answer messages that explicitly mention "
-            "'Hal' — everything else is auto-silenced. Acknowledge in a few "
-            "words at most (or not at all if you already did), then stop."
+            "'Hal' — everything else is auto-silenced. Scheduled reminders "
+            "and cron jobs members explicitly asked for still fire (a mute "
+            "stops volunteering, not alarms), and active trip-plan message "
+            "parsing is paused while muted. Acknowledge in a few words at "
+            "most (or not at all if you already did), then stop."
         )
 
     if action == "unmute":

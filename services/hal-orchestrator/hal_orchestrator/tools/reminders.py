@@ -93,7 +93,13 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
         nearby_notes: list[str] = []
         try:
             for other in await find_nearby_pending(ctx.session, ctx.phone, due_at):
-                if is_probable_duplicate(text, other.text):
+                # Auto-delete only clear re-negotiations: near-duplicate text
+                # AND due within ±3h. Anything looser is listed for the model
+                # to judge — deleting a real reminder is worse than a dupe.
+                close_in_time = abs(
+                    (other.due_at - due_at).total_seconds()
+                ) <= 3 * 3600
+                if close_in_time and is_probable_duplicate(text, other.text):
                     local_other = other.due_at.astimezone(user_tz)
                     await delete_reminder(ctx.session, str(other.id), ctx.phone)
                     superseded.append(f"'{other.text[:60]}' ({local_other:%-I:%M %p})")

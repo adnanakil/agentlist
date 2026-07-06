@@ -456,6 +456,25 @@ def _unbacked_action_claims(reply: str, tools_used: set[str]) -> list[str]:
     ]
 
 
+# An honest non-claim ("I couldn't log it — was that a bottle?") re-uses the
+# claim vocabulary, so the bare _ACTION_CLAIMS regexes match it too. The
+# enforcer's re-verify must not bounce a correction that is plainly saying
+# the action did NOT happen.
+_NEGATION_RX = re.compile(
+    r"\b(couldn'?t|could not|can'?t|cannot|didn'?t|did not|haven'?t|"
+    r"wasn'?t able|was not able|unable to|failed to|won'?t be able|"
+    r"not (?:been )?(?:logged|set|created|sent|scheduled|saved)|"
+    r"no(?:t yet|thing was))\b",
+    re.I,
+)
+
+
+def _looks_like_honest_correction(text: str) -> bool:
+    """True when the rewrite carries an explicit negation — it's describing a
+    failure/limitation, not re-claiming the action. Pure so it's testable."""
+    return bool(_NEGATION_RX.search(text))
+
+
 async def _enforce_claimed_actions(
     http_client,
     settings,
@@ -503,6 +522,7 @@ async def _enforce_claimed_actions(
     )
     extra_calls = 0
     mini_used: set[str] = set(tools_used or set())
+    last_text: str | None = None
     for _ in range(3):
         try:
             response = await call_gemini(
@@ -550,11 +570,12 @@ async def _enforce_claimed_actions(
         text = "\n".join(p.get("text", "") for p in parts if "text" in p).strip()
         if text:
             still = _unbacked_action_claims(text, mini_used)
-            if still:
+            if still and not _looks_like_honest_correction(text):
                 # Reworded, still claiming, still no tool call — push again.
                 log.warning(
                     "message.claim_still_unbacked", silo=silo, claims=still
                 )
+                last_text = text
                 history.append({"role": "model", "parts": [{"text": text}]})
                 history.append(
                     {
@@ -575,6 +596,15 @@ async def _enforce_claimed_actions(
             history.append({"role": "model", "parts": [{"text": text}]})
             return text, extra_calls
         return None, extra_calls
+    # Iterations exhausted with the model still using claim wording. Ship its
+    # LAST rewrite rather than None: the caller keeps the ORIGINAL reply when
+    # we return None, and the original is the confirmed-unbacked claim — the
+    # one thing that must not ship. Trim the dangling SELF-CHECK user turn so
+    # history ends on the model turn the user actually received.
+    if last_text is not None:
+        if history and history[-1].get("role") == "user":
+            history.pop()
+        return last_text, extra_calls
     return None, extra_calls
 
 
@@ -955,18 +985,33 @@ def build_message_router() -> APIRouter:
             from hal_orchestrator.services.history_search import archive_turn
 
             history = await load_conversation(session, silo)
+            # Same self-echo guard as the main path: a bounced HAL send must
+            # not be archived as if a member wrote it.
+            if len(user_text.strip()) >= 20 and history and history[-1].get("role") == "model":
+                last_text = "\n".join(
+                    p.get("text", "") for p in history[-1].get("parts", []) if "text" in p
+                ).strip()
+                if last_text and user_text.strip() == last_text:
+                    log.warning("message.self_echo_suppressed", silo=silo)
+                    return MessageResponse(reply="")
+            # Image-only messages persist a placeholder, mirroring the history
+            # sanitizer — an empty text turn would be dropped on next load.
+            visible = user_text.strip()
+            if body.images:
+                visible = f"{visible} [image]".strip()
             stamp = datetime.now(user_tz).strftime("%a %b %-d %-I:%M %p")
             history.append(
-                {"role": "user", "parts": [{"text": f"[{stamp}] {user_text}"}]}
+                {"role": "user", "parts": [{"text": f"[{stamp}] {visible}"}]}
             )
             history.append({"role": "model", "parts": [{"text": "..."}]})
             await save_conversation(
                 session, silo, history, max_turns=settings.max_conversation_turns
             )
             try:
-                await archive_turn(session, silo, "user", user_text)
+                if visible:
+                    await archive_turn(session, silo, "user", visible)
                 await _capture_turn(
-                    session, silo, sender_phone, user_text, "...", [], "muted"
+                    session, silo, sender_phone, visible, "...", [], "muted"
                 )
             except Exception:
                 log.exception("message.mute_hooks_failed", silo=silo)
@@ -1648,10 +1693,13 @@ def build_message_router() -> APIRouter:
             side_messages=[
                 SideMessage(to=m["to"], text=m["text"]) for m in ctx.side_messages
             ],
+            # A suppressed reply (quiet sentinel / tact-gate drop) must not
+            # ship orphan attachments — a bare photo landing in a group HAL
+            # chose to stay silent in is worse than the interjection itself.
             result_images=[
                 ResultImage(mime_type=img["mime_type"], data=img["data"], ext=img["ext"])
                 for img in ctx.result_images
-            ],
+            ] if outbound_reply else [],
         )
 
     @router.get(

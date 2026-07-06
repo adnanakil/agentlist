@@ -42,12 +42,17 @@ def _content_words(text: str) -> set[str]:
     }
 
 
-def is_probable_duplicate(a: str, b: str, thr: float = 0.5) -> bool:
+def is_probable_duplicate(
+    a: str, b: str, thr: float = 0.5, min_shared: int = 3
+) -> bool:
     """Jaccard over content words — 'check with Seth about lunch day' vs
     'ask Seth what day works for lunch' land well above thr; unrelated
-    reminders land below. Pure so it's unit-testable."""
+    reminders land below. min_shared guards the short-text trap: two 4-word
+    reminders that share 2 topical words hit thr=0.5 while being genuinely
+    different tasks ('call dentist re crown' / 'pick up crown at dentist') —
+    auto-deleting one of those would eat a real reminder. Pure."""
     aw, bw = _content_words(a), _content_words(b)
-    if not aw or not bw:
+    if not aw or not bw or len(aw & bw) < min_shared:
         return False
     return len(aw & bw) / len(aw | bw) >= thr
 
@@ -217,17 +222,6 @@ async def _check_and_send_reminders(
                         if not drop and verdict.text:
                             reminder.text = verdict.text
 
-                if drop:
-                    log.info(
-                        "reminder.gated_out",
-                        reminder_id=str(reminder.id),
-                        phone=reminder.phone,
-                        text=original_text[:60],
-                    )
-                else:
-                    await _send_reminder_via_bridge(
-                        settings, http_client, session, reminder
-                    )
                 reminder.sent = True
 
                 # Handle recurrence (independent of send/drop — a daily reminder
@@ -247,15 +241,38 @@ async def _check_and_send_reminders(
                         )
                         session.add(new_reminder)
 
-                await session.flush()
+                # COMMIT BEFORE DELIVERY, one reminder per transaction. The old
+                # order (queue to outbox, mark sent, commit the whole batch at
+                # the end) meant any DB error late in the batch rolled back
+                # sent=True for reminders whose texts were ALREADY delivered —
+                # the entire batch re-fired next tick as duplicates. A crash in
+                # the new order loses at most one send, which beats double-
+                # texting a batch. (expire_on_commit=False keeps the row's
+                # attributes readable for the delivery below.)
+                await session.commit()
             except Exception:
                 log.exception(
-                    "reminder.send_failed",
+                    "reminder.mark_failed",
                     reminder_id=str(reminder.id),
                     phone=reminder.phone,
                 )
+                # A failed statement aborts the transaction; without rollback
+                # every later reminder in this batch would die on
+                # PendingRollbackError.
+                await session.rollback()
+                continue
 
-        await session.commit()
+            if drop:
+                log.info(
+                    "reminder.gated_out",
+                    reminder_id=str(reminder.id),
+                    phone=reminder.phone,
+                    text=original_text[:60] if settings.log_message_content else None,
+                )
+            else:
+                await _send_reminder_via_bridge(
+                    settings, http_client, session, reminder
+                )
 
 
 # --------------------------------------------------------------------------- #
@@ -407,7 +424,14 @@ async def _send_reminder_via_bridge(
     persist the send into the silo's conversation + archive. Before this,
     reminder sends were invisible to HAL itself (and to anyone auditing the
     transcript): the model would re-promise or re-send nudges it had no record
-    of, and a fired reminder couldn't inform later turns."""
+    of, and a fired reminder couldn't inform later turns.
+
+    Called AFTER the reminder's own transaction committed. The history write
+    runs in its own short transaction with a lock_timeout: load_conversation
+    takes the silo's hal_conversations row FOR UPDATE, and an in-flight
+    message turn holds that lock for its whole (possibly multi-minute) model
+    loop — the checker must skip the nicety rather than stall every other
+    silo's due reminders behind one busy chat."""
     import hal_orchestrator.state as state
 
     message = f"Reminder: {reminder.text}"
@@ -421,14 +445,19 @@ async def _send_reminder_via_bridge(
     )
 
     # Best-effort persistence — a logging failure must never block the send
-    # (the outbox already has it).
+    # (the outbox already has it) and never poison the checker's session.
     try:
+        from sqlalchemy import text as sa_text
+
         from hal_orchestrator.prompts.system import USER_TZ
         from hal_orchestrator.services.conversation import (
             load_conversation,
             save_conversation,
         )
         from hal_orchestrator.services.history_search import archive_turn
+
+        # Give up fast if the conversation row is locked by a live turn.
+        await session.execute(sa_text("SET LOCAL lock_timeout = '3000'"))
 
         stamp = datetime.now(USER_TZ).strftime("%a %b %-d %-I:%M %p")
         history = await load_conversation(session, reminder.phone)
@@ -446,8 +475,13 @@ async def _send_reminder_via_bridge(
             max_turns=settings.max_conversation_turns,
         )
         await archive_turn(session, reminder.phone, "assistant", message)
+        await session.commit()
     except Exception:
-        log.exception("reminder.log_send_failed", reminder_id=str(reminder.id))
+        log.warning("reminder.log_send_skipped", reminder_id=str(reminder.id))
+        try:
+            await session.rollback()
+        except Exception:
+            log.exception("reminder.log_rollback_failed", reminder_id=str(reminder.id))
 
 
 def _next_occurrence(current: datetime, recurrence: str) -> datetime | None:
