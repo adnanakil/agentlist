@@ -25,6 +25,11 @@ import httpx  # noqa: E402
 SILO = sys.argv[1] if len(sys.argv) > 1 else "chat957723300680920907"
 GROUP_NAME = os.environ.get("DRYRUN_GROUP_NAME", "group chat")
 
+def _is_group(s):
+    return s.startswith("chat")
+
+IS_GROUP = _is_group(SILO)
+
 # Read-only tools the draft turn may really execute; everything else is
 # stubbed so a dry-run can never mutate state or text anyone.
 SAFE_TOOLS = {
@@ -41,7 +46,7 @@ async def run_draft(http, settings, session, sysp, hist, prompt):
 
     ctx = ToolContext(
         phone=SILO, session=session, settings=settings, http_client=http,
-        chat_id=SILO, is_group=True,
+        chat_id=SILO if IS_GROUP else None, is_group=IS_GROUP,
     )
     history = hist + [{"role": "user", "parts": [{"text": prompt}]}]
     tool_calls = []
@@ -182,8 +187,9 @@ async def main():
 
             profile = await get_profile(session, SILO)
             sysp = SYSTEM_PROMPT + build_user_context(
-                silo=SILO, profile=profile, is_group=True,
-                group_name=GROUP_NAME, ambient_watch=False,
+                silo=SILO, profile=profile, is_group=IS_GROUP,
+                group_name=GROUP_NAME if IS_GROUP else None,
+                ambient_watch=False,
             )
             if summary:
                 sysp += (

@@ -22,6 +22,45 @@ from hal_orchestrator.services import google as gsvc
 from hal_orchestrator.services.profiles import get_profile
 from hal_orchestrator.tools.registry import ToolContext
 
+
+def format_event_when(start_iso: str | None, now: datetime, tz) -> str:
+    """Human calendar-line timestamp with the relative day computed IN CODE.
+
+    The old rendering handed the model a raw ISO string and left "is that
+    tomorrow?" to model arithmetic — which shipped "shots are tomorrow (7/8)"
+    on 7/6 to a real user. Day math is calendar-date subtraction in the
+    user's own timezone, so the label is always right and the model just
+    repeats it. Pure so it's unit-testable."""
+    if not start_iso:
+        return "?"
+    try:
+        if "T" in start_iso:
+            dt = datetime.fromisoformat(start_iso)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=tz)
+            local = dt.astimezone(tz)
+            when = f"{local:%a %b %-d, %-I:%M %p}"
+            event_date = local.date()
+        else:
+            # All-day event: a bare date, already calendar-local.
+            event_date = datetime.fromisoformat(start_iso).date()
+            when = f"{event_date:%a %b %-d} (all day)"
+    except ValueError:
+        return start_iso
+
+    days = (event_date - now.astimezone(tz).date()).days
+    if days == 0:
+        rel = "TODAY"
+    elif days == 1:
+        rel = "TOMORROW"
+    elif days == -1:
+        rel = "yesterday"
+    elif days > 1:
+        rel = f"in {days} days"
+    else:
+        rel = f"{-days} days ago"
+    return f"{when} ({rel})"
+
 log = structlog.get_logger()
 
 _GROUP_REFUSAL = (
@@ -180,9 +219,8 @@ async def tool_google_calendar(args: dict, ctx: ToolContext) -> str:
             return "No events found in that window."
         lines = []
         for e in events:
-            when = e["start"] or "?"
             loc = f" @ {e['location']}" if e.get("location") else ""
-            lines.append(f"- {when}: {e['summary']}{loc}")
+            lines.append(f"- {format_event_when(e['start'], now, tz)}: {e['summary']}{loc}")
         return "Calendar events:\n" + "\n".join(lines)
 
     return (

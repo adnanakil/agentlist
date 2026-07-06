@@ -162,6 +162,35 @@ check("places field mask requests photos", "places.photos.name" in FIELD_MASK)
 check("photo attach cap is sane", 1 <= MAX_PHOTOS <= 3)
 
 # --------------------------------------------------------------------------- #
+print("calendar — relative day labels computed in code (the 7/6 'tomorrow' bug):")
+from zoneinfo import ZoneInfo  # noqa: E402
+
+from hal_orchestrator.tools.google import format_event_when  # noqa: E402
+
+_ET = ZoneInfo("America/New_York")
+_now = datetime(2026, 7, 6, 8, 0, tzinfo=_ET)
+w = format_event_when("2026-07-08T15:10:00-04:00", _now, _ET)
+check("7/8 seen from 7/6 is 'in 2 days', never tomorrow", "(in 2 days)" in w, w)
+check("absolute time still shown", "Jul 8" in w and "3:10 PM" in w, w)
+check("7/7 is TOMORROW", "(TOMORROW)" in format_event_when("2026-07-07T09:00:00-04:00", _now, _ET))
+check("7/6 evening is TODAY", "(TODAY)" in format_event_when("2026-07-06T19:00:00-04:00", _now, _ET))
+check("all-day event labeled", "(all day)" in format_event_when("2026-07-08", _now, _ET))
+check("all-day 7/8 also 'in 2 days'", "(in 2 days)" in format_event_when("2026-07-08", _now, _ET))
+check("late-night tz boundary: 7/7 4am UTC = 7/7 0am ET is TOMORROW",
+      "(TOMORROW)" in format_event_when("2026-07-07T04:00:00+00:00", _now, _ET))
+check("naive datetime anchored to user tz",
+      "(TOMORROW)" in format_event_when("2026-07-07T09:00:00", _now, _ET))
+check("garbage start survives", format_event_when("not-a-date", _now, _ET) == "not-a-date")
+check("missing start survives", format_event_when(None, _now, _ET) == "?")
+
+print("followup — silo allowlist:")
+from hal_orchestrator.services.followup import allowed_silo  # noqa: E402
+
+check("empty allowlist allows all", allowed_silo("chat123", ""))
+check("listed silo allowed", allowed_silo("+12017570419", "+12017570419, chat99"))
+check("unlisted silo blocked", not allowed_silo("chat123", "+12017570419"))
+
+# --------------------------------------------------------------------------- #
 print("playbook — scope plumbing:")
 from hal_orchestrator.services import playbook as pb  # noqa: E402
 

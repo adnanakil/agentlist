@@ -152,6 +152,10 @@ class HalOrchestratorConfig(BaseConfig):
     # behavior, so a deploy never starts proactively texting unreviewed.
     followup_enabled: bool = False
     followup_interval_minutes: int = 45
+    # Comma-separated silo allowlist for the sweep ("" = all active silos).
+    # Lets follow-ups run in e.g. the owner's own DMs before group chats with
+    # other people get proactive texts: FOLLOWUP_SILOS="+12015551234".
+    followup_silos: str = ""
     # Helpful mode: an OPT-IN proactive concierge (distinct from the heartbeat).
     # Once a day it sends a short brief tailored to the user's situation +
     # location (weather, local events, news, today's agenda), plus a few capped

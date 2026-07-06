@@ -285,8 +285,15 @@ def pick_phase(
 # --------------------------------------------------------------------------- #
 
 
+def allowed_silo(silo: str, allowlist_csv: str) -> bool:
+    """True when the sweep may touch this silo. Empty allowlist = all. Pure."""
+    allow = {s.strip() for s in (allowlist_csv or "").split(",") if s.strip()}
+    return not allow or silo in allow
+
+
 async def _active_silos(settings: HalOrchestratorConfig) -> list[str]:
-    """Silos (groups INCLUDED — that's the point) with real turns recently."""
+    """Silos (groups INCLUDED — that's the point) with real turns recently,
+    filtered through the followup_silos allowlist when one is set."""
     from sqlalchemy import func
 
     from hal_orchestrator.services.skills import SHARED_OWNER
@@ -300,7 +307,11 @@ async def _active_silos(settings: HalOrchestratorConfig) -> list[str]:
                 .group_by(HalTurn.phone)
             )
         ).all()
-        return sorted(p for p, _ in rows if p != SHARED_OWNER)
+        return sorted(
+            p
+            for p, _ in rows
+            if p != SHARED_OWNER and allowed_silo(p, settings.followup_silos)
+        )
     return []
 
 
