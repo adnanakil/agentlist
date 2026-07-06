@@ -168,6 +168,21 @@ async def _check_and_run(
         await session.commit()
 
 
+# One delayed retry rides out a transient model outage (gemini_failed blanked
+# /morning-brief on 06-16 and 06-18); 45s is enough for a provider blip to
+# clear. Cron volume is a handful of jobs/day, so blocking the checker here is
+# fine — anything else due runs on its next tick.
+_SLASH_RETRY_DELAY_SECONDS = 45
+
+
+def should_retry_blank(prompt: str, reply: str | None) -> bool:
+    """An empty reply is ambiguous — deliberate '...' silence vs model failure.
+    Slash-command jobs resolve the ambiguity: skills always produce output, so
+    a blank one IS a failure and earns the retry. Free-form prompts keep the
+    benefit of the doubt (silence may be the right answer)."""
+    return (prompt or "").lstrip().startswith("/") and not (reply or "").strip()
+
+
 async def _run_job(
     settings: HalOrchestratorConfig, http: httpx.AsyncClient, job: HalCronJob
 ) -> None:
@@ -185,17 +200,28 @@ async def _run_job(
     if job.is_group and job.chat_id:
         payload["chat_id"] = job.chat_id
 
-    resp = await http.post(
-        url,
-        json=payload,
-        headers={"Authorization": f"Bearer {settings.hal_bridge_secret}"},
-        timeout=300.0,
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    async def _turn() -> dict:
+        resp = await http.post(
+            url,
+            json=payload,
+            headers={"Authorization": f"Bearer {settings.hal_bridge_secret}"},
+            timeout=300.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    data = await _turn()
+    reply = (data.get("reply") or "").strip()
+    if should_retry_blank(job.prompt, reply):
+        log.warning("cron.slash_retry", job_id=str(job.id), prompt=job.prompt[:40])
+        await asyncio.sleep(_SLASH_RETRY_DELAY_SECONDS)
+        data = await _turn()
+        reply = (data.get("reply") or "").strip()
+        if not reply:
+            # No apology text — a blank brief beats "sorry, something broke".
+            log.warning("cron.slash_blank", job_id=str(job.id), prompt=job.prompt[:40])
 
     to = job.chat_id if (job.is_group and job.chat_id) else job.phone
-    reply = (data.get("reply") or "").strip()
     if reply:
         await state.outbox.put({"to": to, "text": reply})
         state.mark_proactive_send(to)
