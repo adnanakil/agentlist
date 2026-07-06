@@ -32,7 +32,7 @@ def render_landing(number: str) -> str:
     sms = re.sub(r"[^\d+]", "", number or "")
     hero = (
         f'<a class="number" href="sms:{sms}&body=hey%20HAL">{pretty}</a>\n'
-        '<p class="hint">text anything to get started</p>'
+        '<p class="hint">text me to get started</p>'
         if number
         else '<p class="number soon">coming soon</p>'
     )
@@ -46,7 +46,7 @@ def render_landing(number: str) -> str:
   :root {{ color-scheme: dark; }}
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   body {{
-    background:#0a0a0c; color:#f2f2f4; min-height:100vh; min-height:100dvh;
+    background:#1B4D3E; color:#B9F8D3; min-height:100vh; min-height:100dvh;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
     text-align:center; padding:24px; gap:0;
@@ -64,13 +64,13 @@ def render_landing(number: str) -> str:
   }}
   .number {{
     font-size:clamp(30px, 7.5vw, 58px); font-weight:700; letter-spacing:-.01em;
-    color:#f2f2f4; text-decoration:none; font-variant-numeric:tabular-nums;
+    color:#B9F8D3; text-decoration:none; font-variant-numeric:tabular-nums;
     border-bottom:2px solid #34c759; padding-bottom:6px;
     transition:color .15s ease, border-color .15s ease;
   }}
   .number:hover {{ color:#34c759; }}
   .number.soon {{ color:#3a3a42; border-color:#3a3a42; }}
-  .hint {{ color:#6b6b73; font-size:14px; margin-top:22px; }}
+  .hint {{ color:#ffffff; font-size:14px; margin-top:22px; }}
   footer {{ position:fixed; bottom:22px; color:#6b6b73; font-size:13px; letter-spacing:.02em; }}
   footer a {{ color:#8b8b93; text-decoration:none; }}
   footer a:hover {{ color:#34c759; }}
