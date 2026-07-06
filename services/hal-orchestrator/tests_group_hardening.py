@@ -80,6 +80,24 @@ check("different events don't match",
       not same_event("Lunch with Seth at Market 57",
                      "Bronx Zoo trip with Bazzy and Joyce"))
 
+print("supersede — min_shared guard (review finding):")
+check("2-shared-word short reminders NOT auto-dup",
+      not is_probable_duplicate("call dentist about the crown",
+                                "pick up crown from dentist office"))
+check("Seth pair still detected with min_shared",
+      is_probable_duplicate(a, b))
+
+print("enforcer — honest-correction negation matcher:")
+from hal_orchestrator.routes.message import _looks_like_honest_correction  # noqa: E402
+
+for t in ["I couldn't log it — was that a bottle or nursing?",
+          "I wasn't able to set the reminder, what time did you mean?",
+          "Nothing was logged yet — nap or feed?",
+          "I haven't texted him yet — what's his number?"]:
+    check(f"negated: {t[:40]!r}", _looks_like_honest_correction(t))
+for t in ["Logged ✅ wake at 7:15", "Reminder set for 9 AM", "Texted him just now"]:
+    check(f"claim not negated: {t[:35]!r}", not _looks_like_honest_correction(t))
+
 # --------------------------------------------------------------------------- #
 print("followup — pick_phase windows:")
 now = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)

@@ -236,13 +236,25 @@ try:
     ctx = SimpleNamespace(
         phone="+1000", session=None, is_group=False, chat_id=None, sender_phone=None
     )
+    # The due_time must stay in the future or tool_schedule's past-due guard
+    # rejects it before create_cron runs (a hard-coded 2026-07-02 rotted here).
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    _naive = (datetime.now() + timedelta(days=2)).replace(
+        hour=8, minute=0, second=0, microsecond=0
+    )
+    _expected = _naive.replace(tzinfo=ZoneInfo("America/Los_Angeles")).astimezone(
+        timezone.utc
+    )
     asyncio.run(cron_tool.tool_schedule(
-        {"action": "create", "prompt": "morning brief", "due_time": "2030-07-02T08:00:00"},
+        {"action": "create", "prompt": "morning brief",
+         "due_time": _naive.strftime("%Y-%m-%dT%H:%M:%S")},
         ctx,
     ))
     due = _captured["next_run_at"]
-    check("naive 8am stored as 8am PDT (15:00 UTC)",
-          due.utcoffset().total_seconds() == 0 and due.hour == 15,
+    check("naive 8am stored as 8am LA time (UTC row)",
+          due.utcoffset().total_seconds() == 0 and due == _expected,
           f"got {due.isoformat()}")
 finally:
     cron_tool.create_cron = _orig_create
