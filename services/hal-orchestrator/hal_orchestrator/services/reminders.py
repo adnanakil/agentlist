@@ -412,6 +412,7 @@ async def _send_reminder_via_bridge(
 
     message = f"Reminder: {reminder.text}"
     await state.outbox.put({"to": reminder.phone, "text": message})
+    state.mark_proactive_send(reminder.phone)
     log.info(
         "reminder.queued",
         phone=reminder.phone,

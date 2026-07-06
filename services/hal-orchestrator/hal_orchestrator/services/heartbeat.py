@@ -105,6 +105,12 @@ you already sent (check your own recent messages). Inbox lines tagged \
 "[ALREADY TOLD THE USER …]" were surfaced in a previous alert: never mention \
 them again, and never send a message that only re-references old items.
 
+SECURITY EMAILS: when surfacing a security/account/password/verification \
+alert, NEVER relay links from inside the email — texted "verify your account" \
+links are indistinguishable from phishing and train bad habits. Name the \
+service and what it claims, and tell the user to open that app/site directly \
+themselves to check.
+
 Otherwise reply with EXACTLY "..." — nothing upcoming in the next ~2h, \
 conditions fine, nothing new in the inbox worth flagging, or you already told \
 them. Most heartbeats MUST be silent. Never use a heartbeat to ask a question, \
@@ -360,6 +366,17 @@ async def _beat(
         if directive:
             prompt += "\n\n" + directive
 
+    # Proactive-contact cooldown: if HAL already texted this silo unprompted
+    # recently (any daemon), don't even run the check — the user hasn't
+    # digested the last message, and stacked proactive sends are the #1
+    # annoyance in the transcripts. A hard delivery directive bypasses (a
+    # package at the door is worth a second text).
+    if not directive:
+        since = state.minutes_since_proactive_send(silo)
+        if since is not None and since < settings.heartbeat_alert_cooldown_minutes:
+            log.info("heartbeat.cooldown_skip", silo=silo, minutes=round(since))
+            return
+
     payload: dict = {
         "phone": silo,
         "text": prompt,
@@ -385,6 +402,7 @@ async def _beat(
     reply = (data.get("reply") or "").strip()
     if reply:
         await state.outbox.put({"to": silo, "text": reply})
+        state.mark_proactive_send(silo)
         log.info("heartbeat.alerted", silo=silo, chars=len(reply))
         # Durably record which inbox items this alert covered, so the next
         # gather annotates them and the model never re-narrates them.

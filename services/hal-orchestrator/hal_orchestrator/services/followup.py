@@ -368,6 +368,7 @@ async def _draft_and_send(
     reply = (data.get("reply") or "").strip()
     if reply:
         await state.outbox.put({"to": silo, "text": reply})
+        state.mark_proactive_send(silo)
         log.info("followup.sent", silo=silo, chars=len(reply))
     return reply
 

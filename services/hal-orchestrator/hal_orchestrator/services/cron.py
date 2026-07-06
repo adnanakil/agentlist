@@ -198,6 +198,7 @@ async def _run_job(
     reply = (data.get("reply") or "").strip()
     if reply:
         await state.outbox.put({"to": to, "text": reply})
+        state.mark_proactive_send(to)
         log.info("cron.delivered", job_id=str(job.id), to=to, chars=len(reply))
     for sm in data.get("side_messages", []):
         if sm.get("to") and sm.get("text"):

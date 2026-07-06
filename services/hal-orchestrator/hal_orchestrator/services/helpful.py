@@ -329,6 +329,7 @@ async def _deliver(silo: str, text: str) -> None:
     import hal_orchestrator.state as state
 
     await state.outbox.put({"to": silo, "text": text})
+    state.mark_proactive_send(silo)
 
 
 async def helpful_loop(

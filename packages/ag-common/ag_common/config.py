@@ -139,6 +139,12 @@ class HalOrchestratorConfig(BaseConfig):
     heartbeat_active_hour_end: int = 22    # local hour, exclusive
     heartbeat_include_groups: bool = False  # group tools can't see calendar/gmail
     heartbeat_max_silos_per_tick: int = 10
+    # Hard floor between proactive contacts per silo: if HAL texted this silo
+    # unprompted (heartbeat/reminder/cron/brief/follow-up) within this window,
+    # the next heartbeat SKIPS instead of piling on — the deterministic fix
+    # for the 15-near-identical-sends bursts that content-similarity gates
+    # kept missing. A deterministic delivery alert still bypasses it.
+    heartbeat_alert_cooldown_minutes: int = 60
     # Post-event follow-up sweep: after an event HAL helped plan has happened,
     # one low-key "how did it go?" and (days later) one "want to do something
     # like it again?" — model-gated, groups included, mute-respecting. OFF by

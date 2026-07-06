@@ -111,6 +111,8 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
             text=text,
             due_at=due_at,
             recurrence=recur,
+            sender_phone=getattr(ctx, "sender_phone", None),
+            is_group=bool(getattr(ctx, "is_group", False)),
             cancel_if=cancel_if,
         )
         local = due_at.astimezone(user_tz)
