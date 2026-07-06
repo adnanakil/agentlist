@@ -467,10 +467,17 @@ async def _enforce_claimed_actions(
     thinking_level: str | None,
     unbacked: list[str],
     trajectory_steps: list[dict],
+    tools_used: set[str] | None = None,
 ) -> tuple[str | None, int]:
     """One corrective mini-loop (<=3 iterations, tools enabled). Returns
     (corrected_reply or None on failure, tool_calls_made). Mutates `history`
-    in place — the correction becomes part of the persisted turn."""
+    in place — the correction becomes part of the persisted turn.
+
+    The corrected text is RE-CHECKED before being accepted: a model that
+    answers the self-check with a reworded reply still claiming the action
+    (and still no tool call) gets pushed again instead of shipping the same
+    lie twice (the exact hole behind the 07-01 'logged ✅ but never saved'
+    incident)."""
     from hal_orchestrator.prompts.tool_defs import MAIN_TOOLS
     from hal_orchestrator.services.gemini import call_gemini
 
@@ -495,6 +502,7 @@ async def _enforce_claimed_actions(
         }
     )
     extra_calls = 0
+    mini_used: set[str] = set(tools_used or set())
     for _ in range(3):
         try:
             response = await call_gemini(
@@ -522,6 +530,7 @@ async def _enforce_claimed_actions(
                 tool_name = call["name"]
                 tool_args = call.get("args", {})
                 extra_calls += 1
+                mini_used.add(tool_name)
                 trajectory_steps.append(
                     {"tool": tool_name, "args": list(tool_args.keys())[:8]}
                 )
@@ -540,6 +549,29 @@ async def _enforce_claimed_actions(
             continue
         text = "\n".join(p.get("text", "") for p in parts if "text" in p).strip()
         if text:
+            still = _unbacked_action_claims(text, mini_used)
+            if still:
+                # Reworded, still claiming, still no tool call — push again.
+                log.warning(
+                    "message.claim_still_unbacked", silo=silo, claims=still
+                )
+                history.append({"role": "model", "parts": [{"text": text}]})
+                history.append(
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": (
+                                    "[SELF-CHECK — automated] Your rewrite STILL "
+                                    f"claims: {', '.join(still)} — and you still "
+                                    "made no matching tool call. Either CALL THE "
+                                    "TOOL now, or remove the claim entirely."
+                                )
+                            }
+                        ],
+                    }
+                )
+                continue
             history.append({"role": "model", "parts": [{"text": text}]})
             return text, extra_calls
         return None, extra_calls
@@ -1364,7 +1396,7 @@ def build_message_router() -> APIRouter:
                     corrected, extra_calls = await _enforce_claimed_actions(
                         http_client, settings, history, system_prompt, ctx,
                         silo, body.model, body.thinking_level, unbacked,
-                        trajectory_steps,
+                        trajectory_steps, tools_used=tools_used,
                     )
                     total_tool_calls += extra_calls
                     if corrected:
