@@ -233,17 +233,28 @@ profiles_mod.get_profile = _fake_get_profile_la
 _orig_create = cron_tool.create_cron
 cron_tool.create_cron = _fake_create_cron
 try:
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    _la = ZoneInfo("America/Los_Angeles")
+    # due_time must stay in the future or the past-due guard rejects it before
+    # create_cron is ever called (a hardcoded date rotted this test once).
+    _naive_due = (datetime.now(_la) + timedelta(days=2)).replace(
+        hour=8, minute=0, second=0, microsecond=0
+    )
+    _expected_utc = _naive_due.replace(tzinfo=_la).astimezone(timezone.utc)
     ctx = SimpleNamespace(
         phone="+1000", session=None, is_group=False, chat_id=None, sender_phone=None
     )
     asyncio.run(cron_tool.tool_schedule(
-        {"action": "create", "prompt": "morning brief", "due_time": "2026-07-02T08:00:00"},
+        {"action": "create", "prompt": "morning brief",
+         "due_time": _naive_due.isoformat()},
         ctx,
     ))
     due = _captured["next_run_at"]
-    check("naive 8am stored as 8am PDT (15:00 UTC)",
-          due.utcoffset().total_seconds() == 0 and due.hour == 15,
-          f"got {due.isoformat()}")
+    check("naive 8am stored as 8am user-local, normalized to UTC",
+          due.utcoffset().total_seconds() == 0 and due == _expected_utc,
+          f"got {due.isoformat()}, want {_expected_utc.isoformat()}")
 finally:
     cron_tool.create_cron = _orig_create
     profiles_mod.get_profile = _orig_get_profile
