@@ -66,6 +66,27 @@ def _fmt_local_time(iso: str) -> str:
         return iso or "?"
 
 
+_DIR_MODES = {
+    "drive": "driving",
+    "walk": "walking",
+    "bicycle": "bicycling",
+    "bike": "bicycling",
+    "transit": "transit",
+}
+
+
+def directions_link(origin: str, destination: str, mode: str) -> str:
+    """A tappable Google Maps directions deep link — opens the Maps app on
+    iOS with the route preloaded. Pure so it's unit-testable."""
+    from urllib.parse import quote_plus
+
+    return (
+        "https://www.google.com/maps/dir/?api=1"
+        f"&origin={quote_plus(origin)}&destination={quote_plus(destination)}"
+        f"&travelmode={_DIR_MODES.get(mode, 'driving')}"
+    )
+
+
 def format_route(route: dict, mode: str, origin: str, destination: str) -> str:
     dur = _seconds(route.get("duration"))
     static = _seconds(route.get("staticDuration"))
@@ -97,6 +118,9 @@ def format_route(route: dict, mode: str, origin: str, destination: str) -> str:
                     f"{(stops.get('arrivalStop') or {}).get('name', '?')} "
                     f"{_fmt_local_time(stops.get('arrivalTime'))}"
                 )
+    # Tappable directions link — include it on its own line when relaying the
+    # route so the user can one-tap into Maps navigation.
+    lines.append(f"  Directions: {directions_link(origin, destination, mode)}")
     return "\n".join(lines)
 
 

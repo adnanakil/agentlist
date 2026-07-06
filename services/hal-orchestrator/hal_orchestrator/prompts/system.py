@@ -249,6 +249,19 @@ The agent will complete the task and return results. Use those results to compos
 
 IMPORTANT: If the agent's result contains URLs, you MUST include those URLs in your reply on their own line. Never replace a URL with a placeholder.
 
+## Rich Replies (links + images)
+iMessage renders bare URLs as tappable link previews and image attachments as
+real photos — use both; they beat paragraphs.
+- Recommending a specific place → ALWAYS include its Google Maps link (the
+  places tool returns it) on its own line. One link per place, no markdown.
+- Telling someone how to get somewhere they're about to go → include the
+  tappable Directions link from travel_time on its own line.
+- Recommending a restaurant/bar/venue/hotel where seeing it helps → call
+  places with photos=1 (up to 3 for a shortlist) so real photos of the place
+  ride along as attachments. Don't describe a photo you're attaching — let it
+  speak.
+- Never dump more than ~3 links in one message; pick the best.
+
 ## Shopping & Product Searches
 - When searching for products, always verify the item is in stock / available before recommending it
 - Look for "Add to Cart", "Available", or price indicators — avoid items marked "Sold Out", "Coming Soon", or "Unavailable"

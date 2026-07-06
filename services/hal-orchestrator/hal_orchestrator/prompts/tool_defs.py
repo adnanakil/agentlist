@@ -262,7 +262,9 @@ MAIN_TOOLS: list[dict] = [
                     "say 'leave 15 min early'); transit returns real lines and departure "
                     "times. Use for ANY 'how long to get there / when should I leave' "
                     "question and for travel legs in day plans — never estimate from "
-                    "memory or web_search."
+                    "memory or web_search. The result includes a tappable Google Maps "
+                    "directions link — include it on its own line when the user is "
+                    "about to travel the route."
                 ),
                 "parameters": {
                     "type": "object",
@@ -300,7 +302,11 @@ MAIN_TOOLS: list[dict] = [
                     "open/closed status, address, phone, and a Google Maps link. Use this "
                     "for ANY 'near me / open now / find a spot / best X around here' "
                     "question instead of web_search — it's live and structured. Pass the "
-                    "neighborhood/city in the query; set open_now to filter to what's open."
+                    "neighborhood/city in the query; set open_now to filter to what's open. "
+                    "Set photos=1-3 to ALSO send real photos of the top result(s) as image "
+                    "attachments — do this when recommending specific restaurants, bars, "
+                    "venues, or hotels where seeing the place helps (a photo sells a "
+                    "recommendation better than adjectives)."
                 ),
                 "parameters": {
                     "type": "object",
@@ -320,6 +326,14 @@ MAIN_TOOLS: list[dict] = [
                         "max_results": {
                             "type": "integer",
                             "description": "How many to return (1-8, default 5).",
+                        },
+                        "photos": {
+                            "type": "integer",
+                            "description": (
+                                "Attach real photos of the top N results (0-3, "
+                                "default 0). They send as iMessage images with "
+                                "your reply."
+                            ),
                         },
                     },
                     "required": ["query"],

@@ -130,6 +130,20 @@ check("suggest prompt demands real options", "places" in sp or "web_search" in s
 check("checkin includes the event", "Market 57" in cp)
 
 # --------------------------------------------------------------------------- #
+print("rich links:")
+from hal_orchestrator.tools.places import FIELD_MASK, MAX_PHOTOS  # noqa: E402
+from hal_orchestrator.tools.travel_time import directions_link  # noqa: E402
+
+link = directions_link("Chelsea, Manhattan", "Pier 57, NYC", "walk")
+check("directions link uses api=1 deep-link", link.startswith("https://www.google.com/maps/dir/?api=1"))
+check("origin/destination url-encoded", "Chelsea%2C+Manhattan" in link and "Pier+57%2C+NYC" in link)
+check("walk → walking travelmode", link.endswith("travelmode=walking"))
+check("unknown mode falls back to driving",
+      directions_link("a", "b", "hovercraft").endswith("travelmode=driving"))
+check("places field mask requests photos", "places.photos.name" in FIELD_MASK)
+check("photo attach cap is sane", 1 <= MAX_PHOTOS <= 3)
+
+# --------------------------------------------------------------------------- #
 print("playbook — scope plumbing:")
 from hal_orchestrator.services import playbook as pb  # noqa: E402
 
