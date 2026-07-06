@@ -67,6 +67,7 @@ async def execute_tool(
         tool_google_calendar,
         tool_google_gmail,
     )
+    from hal_orchestrator.tools.group_quiet import tool_group_quiet
     from hal_orchestrator.tools.image_edit import tool_image_edit
     from hal_orchestrator.tools.memory import tool_memory
     from hal_orchestrator.tools.places import tool_places
@@ -121,6 +122,7 @@ async def execute_tool(
         "watch": lambda: tool_watch(args, ctx),
         "sports_score": lambda: tool_sports_score(args, ctx),
         "helpful_mode": lambda: tool_helpful(args, ctx),
+        "group_quiet": lambda: tool_group_quiet(args, ctx),
     }
 
     handler = handlers.get(name)

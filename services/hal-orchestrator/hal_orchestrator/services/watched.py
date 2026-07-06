@@ -80,3 +80,67 @@ async def remove_watched(session: AsyncSession, chat_id: str) -> bool:
     )
     await session.flush()
     return bool(res.rowcount)
+
+
+# --------------------------------------------------------------------------- #
+# Mute — "butt out" made durable.
+#
+# When a member tells HAL to keep out of it ("stfu", "keep it to yourself",
+# "you're not invited"), the model calls group_quiet and this persists. While
+# muted, the message route force-silences every non-@Hal message BEFORE the
+# model can draft an interjection; explicit mentions still get through (so
+# "Hal, what's the weather" works mid-mute). Orthogonal to the watch itself:
+# a muted group keeps accumulating context, HAL just doesn't speak into it.
+# --------------------------------------------------------------------------- #
+
+
+async def is_muted(session: AsyncSession, chat_id: str | None) -> bool:
+    if not chat_id:
+        return False
+    now = datetime.now(timezone.utc)
+    stmt = select(HalWatchedGroup.id).where(
+        HalWatchedGroup.chat_id == chat_id,
+        HalWatchedGroup.muted_until.isnot(None),
+        HalWatchedGroup.muted_until > now,
+    )
+    return (await session.execute(stmt)).scalar_one_or_none() is not None
+
+
+async def muted_until(session: AsyncSession, chat_id: str | None) -> datetime | None:
+    """The active mute's expiry, or None when not muted."""
+    if not chat_id:
+        return None
+    now = datetime.now(timezone.utc)
+    stmt = select(HalWatchedGroup.muted_until).where(
+        HalWatchedGroup.chat_id == chat_id
+    )
+    until = (await session.execute(stmt)).scalar_one_or_none()
+    return until if until is not None and until > now else None
+
+
+async def set_muted(
+    session: AsyncSession, chat_id: str, days: float | None
+) -> datetime | None:
+    """Mute the group for `days` (creating the row if the group was never
+    watched — the mute must hold even for tag-only groups). days None/<=0 →
+    unmute. Returns the new muted_until (None when unmuted). Never touches
+    expires_at: a permanent family watch stays permanent through a mute."""
+    now = datetime.now(timezone.utc)
+    new_until = now + timedelta(days=days) if days and days > 0 else None
+    row = (
+        await session.execute(
+            select(HalWatchedGroup).where(HalWatchedGroup.chat_id == chat_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        # Expired-watch shell: carries the mute without turning on ambient
+        # forwarding for a group that wasn't being watched.
+        row = HalWatchedGroup(
+            chat_id=chat_id, note="mute state", expires_at=now, muted_until=new_until
+        )
+        session.add(row)
+    else:
+        row.muted_until = new_until
+    await session.flush()
+    log.info("watched.muted", chat_id=chat_id, until=str(new_until))
+    return new_until

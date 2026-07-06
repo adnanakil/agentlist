@@ -30,14 +30,31 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
             due_at = datetime.fromisoformat(due_time_str)
         except ValueError:
             return f"Error: invalid due_time format: {due_time_str}. Use ISO format like 2026-02-10T09:00:00"
+        from hal_orchestrator.prompts.system import resolve_tz
+        from hal_orchestrator.services.profiles import get_profile
+
+        try:
+            user_tz = resolve_tz(await get_profile(ctx.session, ctx.phone))
+        except Exception:
+            # A profile read failure must not block the reminder; fall back to
+            # the default zone (what resolve_tz returns for an empty profile).
+            user_tz = resolve_tz(None)
+        offset_note = ""
         if due_at.tzinfo is None:
             # A bare time means the USER'S local time, not UTC — otherwise a
             # naive "9am" is stored as 9am UTC (5am ET) and pings them at dawn.
-            from hal_orchestrator.prompts.system import resolve_tz
-            from hal_orchestrator.services.profiles import get_profile
-
-            user_tz = resolve_tz(await get_profile(ctx.session, ctx.phone))
             due_at = due_at.replace(tzinfo=user_tz)
+        elif due_at.utcoffset() != due_at.astimezone(user_tz).utcoffset():
+            # The model passed an explicit offset that isn't this chat's local
+            # offset. Legit when it truly computed UTC — but the live failure
+            # mode is a wall-clock slip ("7 PM" sent as 19:00Z → fired 3 PM
+            # ET). Flag it loudly so the model verifies against user intent.
+            offset_note = (
+                " ⚠️ You passed a non-local UTC offset. If the user asked for "
+                "a LOCAL wall-clock time and the local time shown here is not "
+                "what they said, delete this reminder and recreate it with a "
+                "naive local ISO time (no offset)."
+            )
         due_at = due_at.astimezone(timezone.utc)
 
         # Past-due guard: a one-shot reminder in the past fires INSTANTLY,
@@ -62,6 +79,32 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
                     "LOCAL time, and create the reminder again."
                 )
 
+        # Supersede check BEFORE creating: an unsent one-shot in the same
+        # window about the same thing is almost always the version this one
+        # replaces (a re-negotiated time). Auto-cancel near-duplicates so the
+        # stale one can't fire; surface anything else nearby for the model to
+        # judge.
+        from hal_orchestrator.services.reminders import (
+            find_nearby_pending,
+            is_probable_duplicate,
+        )
+
+        superseded: list[str] = []
+        nearby_notes: list[str] = []
+        try:
+            for other in await find_nearby_pending(ctx.session, ctx.phone, due_at):
+                if is_probable_duplicate(text, other.text):
+                    local_other = other.due_at.astimezone(user_tz)
+                    await delete_reminder(ctx.session, str(other.id), ctx.phone)
+                    superseded.append(f"'{other.text[:60]}' ({local_other:%-I:%M %p})")
+                else:
+                    local_other = other.due_at.astimezone(user_tz)
+                    nearby_notes.append(
+                        f"[id: {other.id}] '{other.text[:60]}' at {local_other:%-I:%M %p}"
+                    )
+        except Exception:
+            superseded, nearby_notes = [], []
+
         result = await create_reminder(
             ctx.session,
             phone=ctx.phone,
@@ -70,7 +113,20 @@ async def tool_set_reminder(args: dict, ctx: ToolContext) -> str:
             recurrence=recur,
             cancel_if=cancel_if,
         )
-        return f"Reminder set: {json.dumps(result)}"
+        local = due_at.astimezone(user_tz)
+        reply = (
+            f"Reminder set for {local:%a %b %-d, %-I:%M %p} ({user_tz}). "
+            f"Confirm THIS local time to the user. {json.dumps(result)}"
+            f"{offset_note}"
+        )
+        if superseded:
+            reply += " Auto-cancelled superseded reminder(s): " + "; ".join(superseded)
+        if nearby_notes:
+            reply += (
+                " Other pending reminders near this time (delete any this one "
+                "replaces): " + "; ".join(nearby_notes)
+            )
+        return reply
 
     elif action == "list":
         reminders = await list_reminders(ctx.session, ctx.phone)

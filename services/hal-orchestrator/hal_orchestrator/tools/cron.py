@@ -35,15 +35,28 @@ async def tool_schedule(args: dict, ctx: ToolContext) -> str:
             due = datetime.fromisoformat(due_str)
         except ValueError:
             return f"Error: invalid due_time '{due_str}'. Use ISO, e.g. 2026-06-11T08:00:00-04:00."
+        from hal_orchestrator.prompts.system import resolve_tz
+        from hal_orchestrator.services.profiles import get_profile
+
+        try:
+            user_tz = resolve_tz(await get_profile(ctx.session, ctx.phone))
+        except Exception:
+            user_tz = resolve_tz(None)
+        offset_note = ""
         if due.tzinfo is None:
             # A bare time means the USER'S local time, not UTC — otherwise
             # "brief me at 8am" fires at 8am UTC (4am ET). Same rule as
             # set_reminder.
-            from hal_orchestrator.prompts.system import resolve_tz
-            from hal_orchestrator.services.profiles import get_profile
-
-            user_tz = resolve_tz(await get_profile(ctx.session, ctx.phone))
             due = due.replace(tzinfo=user_tz)
+        elif due.utcoffset() != due.astimezone(user_tz).utcoffset():
+            # Explicit non-local offset: legit for true UTC math, but the live
+            # failure mode is a wall-clock slip (local time sent with Z).
+            offset_note = (
+                " ⚠️ You passed a non-local UTC offset. If the user asked for "
+                "a LOCAL wall-clock time and the local time shown here is not "
+                "what they said, delete this job and recreate it with a naive "
+                "local ISO time (no offset)."
+            )
         due = due.astimezone(timezone.utc)
 
         # Past-due guard (same as set_reminder): a past one-shot runs
@@ -72,9 +85,11 @@ async def tool_schedule(args: dict, ctx: ToolContext) -> str:
             chat_id=ctx.chat_id,
             sender_phone=ctx.sender_phone,
         )
+        local = due.astimezone(user_tz)
         return (
             f"Scheduled task ({recur}): \"{prompt[:80]}\" — next run "
-            f"{due.isoformat()}. [id: {job.id}]"
+            f"{local:%a %b %-d, %-I:%M %p} ({user_tz}). Confirm THIS local "
+            f"time to the user. [id: {job.id}]{offset_note}"
         )
 
     if action == "list":

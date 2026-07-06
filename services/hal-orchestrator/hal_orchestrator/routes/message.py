@@ -584,9 +584,15 @@ def _needs_group_tact_gate(
     )
 
 
-def build_tact_prompt(recent: str, sender: str, user_text: str, draft: str) -> str:
+def build_tact_prompt(
+    recent: str, sender: str, user_text: str, draft: str, summary: str = ""
+) -> str:
     """The user-turn handed to the tact-gate model. Pure so it's unit-testable."""
+    summary_block = (
+        f"What HAL knows about this group so far:\n{summary}\n\n" if summary else ""
+    )
     return (
+        f"{summary_block}"
         "Recent group conversation (oldest first):\n"
         f"{recent or '(none)'}\n\n"
         f"Newest message (from {sender or 'a member'}): {user_text}\n\n"
@@ -596,8 +602,20 @@ def build_tact_prompt(recent: str, sender: str, user_text: str, draft: str) -> s
         "needed factual correction, or concrete logistics they're actively "
         "trying to figure out. DROP anything that is: agreement, sympathy, "
         "banter, a reaction, commentary on a shared photo, a curiosity "
-        "question, generic tips, or restating what members said. A tactful "
-        "human assistant interrupts a group RARELY. When in doubt, DROP.\n"
+        "question, generic tips, or restating what members said.\n"
+        "Two hard DROP rules that override everything above:\n"
+        "- The newest message reports the sender's OWN on-the-ground situation "
+        "(what's happening around them right now — a line they're standing in, "
+        "a check-in they're going through, something they're watching happen). "
+        "They are THERE and have better information than HAL; correcting or "
+        "reassuring them about their own live situation is presumptuous. DROP, "
+        "even if HAL's facts seem right.\n"
+        "- The members told HAL to stay out of it (any 'butt out', 'keep it to "
+        "yourself', 'stfu', 'not invited', 'please chill' in the conversation "
+        "or the group context above). After that, ONLY a direct question to "
+        "HAL warrants a reply — and that case never reaches this filter. DROP.\n"
+        "A tactful human assistant interrupts a group RARELY. When in doubt, "
+        "DROP.\n"
         "- Reply exactly DROP to not send it.\n"
         "- Reply exactly SEND to send it as written.\n"
         "- Reply 'SEND: <tighter text>' to send a trimmed version.\n"
@@ -607,7 +625,7 @@ def build_tact_prompt(recent: str, sender: str, user_text: str, draft: str) -> s
 
 async def _run_tact_gate(
     http_client, settings, history: list, sender: str, user_text: str,
-    draft: str, silo: str,
+    draft: str, silo: str, summary: str = "",
 ):
     """Gate verdict for an unprompted group interjection, or None on model
     failure (caller fails open = send; the in-prompt default is DROP)."""
@@ -622,7 +640,9 @@ async def _run_tact_gate(
         if text:
             who = "HAL" if entry.get("role") == "model" else "member"
             lines.append(f"{who}: {text[:200]}")
-    prompt = build_tact_prompt("\n".join(lines[-8:]), sender, user_text, draft)
+    prompt = build_tact_prompt(
+        "\n".join(lines[-8:]), sender, user_text, draft, summary=summary[:1200]
+    )
 
     resp = await call_gemini(
         client=http_client,
@@ -887,6 +907,41 @@ def build_message_router() -> APIRouter:
 
             ambient_watch = await is_watched(session, chat_id)
 
+        # Persistent mute — a member told HAL to butt out of this group (the
+        # group_quiet tool made it durable). Non-mention messages are force-
+        # silenced HERE, before any model call, so an interjection can't even
+        # be drafted; the transcript still lands in history so context stays
+        # complete for when HAL is summoned. Explicit "Hal" mentions go through
+        # (with a quiet-mode note added to the prompt below). Internal turns
+        # (heartbeat/cron) pass through — their own restraint gates apply.
+        group_muted_until = None
+        if is_group and not body.internal:
+            from hal_orchestrator.services.watched import muted_until as _muted_until
+
+            group_muted_until = await _muted_until(session, chat_id)
+        if group_muted_until is not None and not _HAL_MENTION_RX.search(user_text or ""):
+            from hal_orchestrator.services.history_search import archive_turn
+
+            history = await load_conversation(session, silo)
+            stamp = datetime.now(user_tz).strftime("%a %b %-d %-I:%M %p")
+            history.append(
+                {"role": "user", "parts": [{"text": f"[{stamp}] {user_text}"}]}
+            )
+            history.append({"role": "model", "parts": [{"text": "..."}]})
+            await save_conversation(
+                session, silo, history, max_turns=settings.max_conversation_turns
+            )
+            try:
+                await archive_turn(session, silo, "user", user_text)
+                await _capture_turn(
+                    session, silo, sender_phone, user_text, "...", [], "muted"
+                )
+            except Exception:
+                log.exception("message.mute_hooks_failed", silo=silo)
+            await session.commit()
+            log.info("message.muted_silent", silo=silo, until=str(group_muted_until))
+            return MessageResponse(reply="")
+
         user_context = build_user_context(
             silo=silo,
             profile=profile,
@@ -898,12 +953,30 @@ def build_message_router() -> APIRouter:
         )
         system_prompt = SYSTEM_PROMPT + user_context
 
+        # Muted but explicitly addressed: answer, then get back out of the way.
+        if group_muted_until is not None:
+            until_local = group_muted_until.astimezone(user_tz)
+            system_prompt += (
+                "\n\n## QUIET MODE (muted in this group until "
+                f"{until_local:%a %b %-d %-I:%M %p})\n"
+                "Members asked you to step back from this thread, so you're only "
+                "seeing this message because you were addressed directly. Answer "
+                "exactly what was asked, briefly, then go quiet again — no "
+                "follow-up questions, no unsolicited suggestions, nothing about "
+                "the thing you were asked to stay out of. If a member explicitly "
+                "asks you to rejoin the conversation, call "
+                "group_quiet(action=unmute) first."
+            )
+
         # Self-authored playbook (growth loop) — operating notes HAL learned
         # from its own past failures. Additive guidance; lint-checked at write.
+        # Scoped: rules learned from 1:1 failures don't leak into group turns
+        # (and vice versa) — an "always acknowledge reports" lesson from baby
+        # logging must not become a group-chat interjection.
         try:
             from hal_orchestrator.services.playbook import get_block
 
-            system_prompt += await get_block(session)
+            system_prompt += await get_block(session, "group" if is_group else "dm")
         except Exception:
             log.exception("message.playbook_failed", silo=silo)
 
@@ -1321,7 +1394,7 @@ def build_message_router() -> APIRouter:
             try:
                 verdict = await _run_tact_gate(
                     http_client, settings, history, sender_display or "",
-                    user_text, reply, silo,
+                    user_text, reply, silo, summary=convo_summary or "",
                 )
             except Exception:
                 log.exception("message.tact_gate_failed", silo=silo)

@@ -27,6 +27,7 @@ from hal_orchestrator.routes.stripe import build_stripe_router
 from hal_orchestrator.services.baby_watch import baby_watch_loop
 from hal_orchestrator.services.cron import run_cron_checker
 from hal_orchestrator.services.curator import curator_loop
+from hal_orchestrator.services.followup import followup_loop
 from hal_orchestrator.services.profile_enricher import profile_enricher_loop
 from hal_orchestrator.services.growth import growth_loop
 from hal_orchestrator.services.heartbeat import heartbeat_loop
@@ -166,6 +167,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         run_watch_checker(settings, state.http_client)
     )
 
+    # Post-event follow-up sweep: the backward-looking sibling of the heartbeat
+    # ("how was the lunch I planned for you?"). No-op unless followup_enabled.
+    followup_task = asyncio.create_task(
+        followup_loop(settings, state.http_client)
+    )
+
     yield
 
     log.info("hal_orchestrator.shutdown")
@@ -181,6 +188,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         heartbeat_task,
         helpful_task,
         watch_task,
+        followup_task,
     ):
         task.cancel()
         try:

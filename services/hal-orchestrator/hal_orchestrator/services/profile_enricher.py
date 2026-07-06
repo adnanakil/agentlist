@@ -83,6 +83,11 @@ Capture what helps the assistant understand and serve THIS GROUP:
 - Members & dynamics: who's in it, their roles/relationships, how they interact.
 - Shared interests & recurring topics: what they care about and discuss.
 - Norms & style: tone, in-jokes, communication patterns, when to chime in.
+- Assistant conduct in THIS group: how the members want the assistant to
+  behave here. Feedback like "please chill", "keep it to yourself", "dial it
+  back", or "stfu" is a durable norm — record it prominently (e.g. "Members
+  want the assistant low-key: answer only when addressed, no chiming into
+  their back-and-forth"), and keep it until members clearly invite more.
 - Ongoing plans: trips, projects, decisions in progress.
 
 Rules:
@@ -108,6 +113,10 @@ Rules for observations:
   observations for anyone else are dropped.
 - Things about that member's own life only — never another member's private
   info, never baby feed/nap logging (already shared), never chit-chat.
+- Style feedback a member gave the ASSISTANT also counts ("asked the
+  assistant to be less enthusiastic / more brief with them") — it should
+  follow that member into their 1:1 so the assistant matches their energy
+  everywhere.
 - 0-3 per member, one sentence each, self-contained (name the thing, the
   when, the where). Most runs: an empty array.
 Format: [{"handle": "+1XXXXXXXXXX", "observation": "..."}] or []"""

@@ -1,0 +1,144 @@
+"""Tests for the 2026-07-05 group-restraint + follow-up hardening pass.
+
+Covers the deterministic pieces: tact-gate prompt content, reminder supersede
+matching, follow-up event keys / phase windows / scan parsing, and the
+follow-up prompts' silence escape. The model-judgment halves (tact verdicts,
+scan quality, draft tone) are exercised live, not here.
+
+Run: python3 services/hal-orchestrator/tests_group_hardening.py
+"""
+
+import os
+import sys
+from datetime import datetime, timedelta, timezone
+
+_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+sys.path.insert(0, os.path.join(_ROOT, "packages", "ag-db"))
+sys.path.insert(0, os.path.join(_ROOT, "packages", "ag-common"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+failures = []
+
+
+def check(name, cond, detail=""):
+    if cond:
+        print(f"  ok: {name}")
+    else:
+        failures.append(name)
+        print(f"  FAIL: {name} {detail}")
+
+
+# --------------------------------------------------------------------------- #
+print("tact gate prompt — hardened DROP rules:")
+from hal_orchestrator.routes.message import build_tact_prompt  # noqa: E402
+
+p = build_tact_prompt("A: hi", "Adnan", "They're checking us in lol", "Actually no check-in is needed")
+check("on-the-ground rule present", "on-the-ground" in p.lower() or "own on-the-ground" in p.lower())
+check("butt-out rule present", "butt out" in p.lower())
+check("stfu listed as stay-out signal", "stfu" in p.lower())
+check("no summary block when none given", "What HAL knows about this group" not in p)
+p2 = build_tact_prompt("A: hi", "Adnan", "msg", "draft", summary="Users prefer the assistant to step back.")
+check("summary block included when given", "What HAL knows about this group" in p2)
+check("summary text reaches the gate", "step back" in p2)
+
+# --------------------------------------------------------------------------- #
+print("reminder supersede — is_probable_duplicate:")
+from hal_orchestrator.services.reminders import is_probable_duplicate  # noqa: E402
+
+a = "Hey Seth! What day this week works for lunch with Adnan? Somewhere near Pier 57"
+b = "Hey Seth! Time to lock in a day for lunch with Adnan next week. What day works for you?"
+check("re-negotiated ping detected as duplicate", is_probable_duplicate(a, b))
+check("unrelated reminders NOT duplicates",
+      not is_probable_duplicate("Call the dentist about the crown", "Pick up the dry cleaning downtown"))
+check("empty text never duplicate", not is_probable_duplicate("", "call mom"))
+
+# --------------------------------------------------------------------------- #
+print("followup — event_key:")
+from hal_orchestrator.services.followup import (  # noqa: E402
+    build_checkin_prompt,
+    build_suggest_prompt,
+    event_key,
+    parse_scan_reply,
+    pick_phase,
+)
+
+t0 = datetime(2026, 6, 30, 17, 30, tzinfo=timezone.utc)
+k1 = event_key("Adnan and Seth had lunch at Market 57 (Pier 57)", t0)
+check("key starts with the date", k1.startswith("2026-06-30:"))
+check("same summary → stable key",
+      k1 == event_key("Adnan and Seth had lunch at Market 57 (Pier 57)", t0))
+check("different day → different key",
+      k1 != event_key("Adnan and Seth had lunch at Market 57 (Pier 57)", t0 + timedelta(days=1)))
+
+print("followup — same_event fuzzy dedup:")
+from hal_orchestrator.services.followup import same_event  # noqa: E402
+
+check("reworded rescan matches",
+      same_event("Adnan and Seth had lunch at Market 57 (Pier 57)",
+                 "Lunch at Market 57 for Seth and Adnan"))
+check("different events don't match",
+      not same_event("Lunch with Seth at Market 57",
+                     "Bronx Zoo trip with Bazzy and Joyce"))
+
+# --------------------------------------------------------------------------- #
+print("followup — pick_phase windows:")
+now = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+check("mid-event (1h ago) → None",
+      pick_phase(now - timedelta(hours=1), now, False, False) is None)
+check("5h after → checkin",
+      pick_phase(now - timedelta(hours=5), now, False, False) == "checkin")
+check("5h after, already checked in → None",
+      pick_phase(now - timedelta(hours=5), now, True, False) is None)
+check("3 days after, checked in → suggest",
+      pick_phase(now - timedelta(days=3), now, True, False) == "suggest")
+check("3 days after, never checked in → suggest (too late for checkin)",
+      pick_phase(now - timedelta(days=3), now, False, False) == "suggest")
+check("both phases done → None",
+      pick_phase(now - timedelta(days=3), now, True, True) is None)
+check("10 days after → None (event too old)",
+      pick_phase(now - timedelta(days=10), now, True, False) is None)
+
+# --------------------------------------------------------------------------- #
+print("followup — parse_scan_reply:")
+good = '{"events": [{"summary": "Lunch at Market 57", "ended_at": "2026-06-30T17:30:00+00:00", "followed_up": false}]}'
+evs = parse_scan_reply(good)
+check("valid JSON parsed", len(evs) == 1 and evs[0]["summary"] == "Lunch at Market 57")
+check("tz preserved", evs[0]["ended_at"].tzinfo is not None)
+
+fenced = "```json\n" + good + "\n```"
+check("code-fenced JSON parsed", len(parse_scan_reply(fenced)) == 1)
+
+naive = '{"events": [{"summary": "x y z long", "ended_at": "2026-06-30T13:30:00", "followed_up": true}]}'
+evs = parse_scan_reply(naive)
+check("naive datetime treated as UTC",
+      evs and evs[0]["ended_at"].utcoffset() == timedelta(0))
+check("followed_up carried through", evs and evs[0]["followed_up"] is True)
+
+check("garbage → empty", parse_scan_reply("no json here") == [])
+check("missing ended_at dropped",
+      parse_scan_reply('{"events": [{"summary": "x"}]}') == [])
+check("empty events ok", parse_scan_reply('{"events": []}') == [])
+
+# --------------------------------------------------------------------------- #
+print("followup — prompts keep the silence escape:")
+cp = build_checkin_prompt("Lunch at Market 57", "Tuesday Jun 30, 1:30 PM")
+sp = build_suggest_prompt("Lunch at Market 57", "Tuesday Jun 30, 1:30 PM")
+check("checkin prompt has '...' escape", '"..."' in cp)
+check("checkin prompt honors butt-out", "stay out" in cp)
+check("suggest prompt has '...' escape", '"..."' in sp)
+check("suggest prompt demands real options", "places" in sp or "web_search" in sp)
+check("checkin includes the event", "Market 57" in cp)
+
+# --------------------------------------------------------------------------- #
+print("playbook — scope plumbing:")
+from hal_orchestrator.services import playbook as pb  # noqa: E402
+
+check("scopes defined", pb.SCOPES == ("dm", "group", "all"))
+check("cache is per-scope dict", isinstance(pb._cache.get("blocks"), dict))
+
+# --------------------------------------------------------------------------- #
+print()
+if failures:
+    print(f"{len(failures)} FAILURES: {failures}")
+    sys.exit(1)
+print("all tests passed")

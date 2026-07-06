@@ -139,6 +139,13 @@ class HalOrchestratorConfig(BaseConfig):
     heartbeat_active_hour_end: int = 22    # local hour, exclusive
     heartbeat_include_groups: bool = False  # group tools can't see calendar/gmail
     heartbeat_max_silos_per_tick: int = 10
+    # Post-event follow-up sweep: after an event HAL helped plan has happened,
+    # one low-key "how did it go?" and (days later) one "want to do something
+    # like it again?" — model-gated, groups included, mute-respecting. OFF by
+    # default: flip FOLLOWUP_ENABLED=true only after reviewing the dry-run
+    # behavior, so a deploy never starts proactively texting unreviewed.
+    followup_enabled: bool = False
+    followup_interval_minutes: int = 45
     # Helpful mode: an OPT-IN proactive concierge (distinct from the heartbeat).
     # Once a day it sends a short brief tailored to the user's situation +
     # location (weather, local events, news, today's agenda), plus a few capped

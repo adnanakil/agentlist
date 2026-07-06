@@ -37,8 +37,14 @@ MAX_ADDS_PER_NIGHT = 3
 _PHONE_RX = re.compile(r"\+?\d[\d\-\(\)\s]{7,}\d")
 _EMAIL_RX = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 
-# 5-minute prompt-block cache: one query per window, invalidated on publish.
-_cache: dict = {"block": None, "at": 0.0}
+# Where a rule may apply. Rules are learned from context-specific failures;
+# a DM lesson injected into group turns caused real interjection bugs (the
+# "always acknowledge reports" rule vs the ambient-watch silence default).
+SCOPES = ("dm", "group", "all")
+
+# 5-minute prompt-block cache per scope: one query per window, invalidated on
+# publish.
+_cache: dict = {"blocks": {}, "at": 0.0}
 _CACHE_TTL = 300.0
 
 
@@ -64,12 +70,20 @@ async def live_entries(session: AsyncSession) -> list[HalPlaybookEntry]:
     return list((await session.execute(stmt)).scalars().all())
 
 
-async def get_block(session: AsyncSession) -> str:
-    """Prompt block of live entries ('' when empty). Cached briefly."""
+async def get_block(session: AsyncSession, scope: str = "all") -> str:
+    """Prompt block of live entries that apply in `scope` ('dm' for 1:1 turns,
+    'group' for group turns; entries with scope 'all' always apply). '' when
+    empty. Cached briefly, per scope."""
+    if scope not in SCOPES:
+        scope = "all"
     now = time.monotonic()
-    if _cache["block"] is not None and now - _cache["at"] < _CACHE_TTL:
-        return _cache["block"]
-    entries = await live_entries(session)
+    if scope in _cache["blocks"] and now - _cache["at"] < _CACHE_TTL:
+        return _cache["blocks"][scope]
+    entries = [
+        e
+        for e in await live_entries(session)
+        if scope == "all" or (getattr(e, "scope", "all") or "all") in ("all", scope)
+    ]
     if not entries:
         block = ""
     else:
@@ -78,13 +92,15 @@ async def get_block(session: AsyncSession) -> str:
             "\n\n## Operating Notes (lessons HAL learned from its own past "
             "failures — follow these)\n" + lines
         )
-    _cache["block"] = block
-    _cache["at"] = now
+    if now - _cache["at"] >= _CACHE_TTL:
+        _cache["blocks"] = {}
+        _cache["at"] = now
+    _cache["blocks"][scope] = block
     return block
 
 
 def invalidate_cache() -> None:
-    _cache["block"] = None
+    _cache["blocks"] = {}
     _cache["at"] = 0.0
 
 
@@ -95,8 +111,9 @@ async def apply_changes(
     denylist: list[str],
 ) -> dict:
     """Apply a nightly synthesis's playbook changes through the lint + caps.
-    changes = {add: [{content, hypothesis, target_category, target_detail}],
-               revise: [{id, content?, hypothesis?}], retire: [ids]}.
+    changes = {add: [{content, hypothesis, target_category, target_detail,
+               scope}], revise: [{id, content?, hypothesis?, scope?}],
+               retire: [ids]}. scope ∈ {dm, group, all} (default all).
     Returns a report of what happened (for the digest)."""
     added: list[str] = []
     revised: list[str] = []
@@ -124,6 +141,8 @@ async def apply_changes(
         e.content = content
         if rev.get("hypothesis"):
             e.hypothesis = rev["hypothesis"][:500]
+        if rev.get("scope") in SCOPES:
+            e.scope = rev["scope"]
         # A revised entry restarts verification.
         e.status = "active"
         e.clean_nights = 0
@@ -147,6 +166,7 @@ async def apply_changes(
             HalPlaybookEntry(
                 content=content,
                 hypothesis=(add.get("hypothesis") or "")[:500],
+                scope=add.get("scope") if add.get("scope") in SCOPES else "all",
                 target_category=(add.get("target_category") or None),
                 target_detail=(add.get("target_detail") or "")[:200] or None,
                 origin_reflection_id=reflection_id,

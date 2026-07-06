@@ -563,6 +563,40 @@ MAIN_TOOLS: list[dict] = [
                 },
             },
             {
+                "name": "group_quiet",
+                "description": (
+                    "Group chats only. When a member tells you to butt out, keep "
+                    "quiet, stop chiming in, or that you're 'not invited' "
+                    "('stfu', 'keep it to yourself', 'please stop'), call this "
+                    "with action=mute — it durably silences you in this group: "
+                    "only messages that explicitly say 'Hal' will reach you "
+                    "until the mute expires (default 3 days). Also use "
+                    "action=mute when YOU decide to bow out of an event the "
+                    "members are heading into (you said \"I'll butt out\" — make "
+                    "it real). action=unmute only when a member explicitly "
+                    "invites you back into the conversation."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["mute", "unmute", "status"],
+                        },
+                        "days": {
+                            "type": "number",
+                            "description": (
+                                "How long to stay muted, in days (default 3, "
+                                "max 30). Use ~0.5 for 'just during this "
+                                "event/lunch', 3 for a general 'stop chiming "
+                                "in', longer if they were emphatic."
+                            ),
+                        },
+                    },
+                    "required": ["action"],
+                },
+            },
+            {
                 "name": "helpful_mode",
                 "description": (
                     "Turn the user's proactive 'helpful mode' on/off or tune it. "

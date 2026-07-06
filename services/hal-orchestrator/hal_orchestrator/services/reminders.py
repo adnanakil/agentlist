@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -17,6 +18,60 @@ from ag_db.models import HalReminder
 from ag_db.session import get_session
 
 log = structlog.get_logger()
+
+
+# --------------------------------------------------------------------------- #
+# Supersede detection — a reminder that replaces one just created for the same
+# thing should kill the old one. Seen live 2026-06-23: "ping at 9:30" was
+# re-negotiated to 10:00, both were created, and the 9:30 fired at exactly the
+# moment the user had said not to ping him.
+# --------------------------------------------------------------------------- #
+
+_DUP_STOP = frozenset(
+    "the a an to of for and or in on at is it you your me my with about что "
+    "remind reminder check ask tell ping text this that next week today "
+    "tomorrow am pm".split()
+)
+
+
+def _content_words(text: str) -> set[str]:
+    return {
+        w
+        for w in re.findall(r"[a-z0-9]+", (text or "").lower())
+        if w not in _DUP_STOP and len(w) > 1
+    }
+
+
+def is_probable_duplicate(a: str, b: str, thr: float = 0.5) -> bool:
+    """Jaccard over content words — 'check with Seth about lunch day' vs
+    'ask Seth what day works for lunch' land well above thr; unrelated
+    reminders land below. Pure so it's unit-testable."""
+    aw, bw = _content_words(a), _content_words(b)
+    if not aw or not bw:
+        return False
+    return len(aw & bw) / len(aw | bw) >= thr
+
+
+async def find_nearby_pending(
+    session: AsyncSession,
+    phone: str,
+    due_at: datetime,
+    exclude_id=None,
+    window_hours: float = 6.0,
+) -> list[HalReminder]:
+    """Other unsent one-shot reminders in this silo due within ±window of
+    `due_at` — candidates the new reminder may be superseding."""
+    lo = due_at - timedelta(hours=window_hours)
+    hi = due_at + timedelta(hours=window_hours)
+    stmt = select(HalReminder).where(
+        HalReminder.phone == phone,
+        HalReminder.sent == False,  # noqa: E712
+        HalReminder.recurrence.is_(None),
+        HalReminder.due_at >= lo,
+        HalReminder.due_at <= hi,
+    )
+    rows = list((await session.execute(stmt)).scalars().all())
+    return [r for r in rows if exclude_id is None or r.id != exclude_id]
 
 
 async def create_reminder(
@@ -170,7 +225,9 @@ async def _check_and_send_reminders(
                         text=original_text[:60],
                     )
                 else:
-                    await _send_reminder_via_bridge(settings, http_client, reminder)
+                    await _send_reminder_via_bridge(
+                        settings, http_client, session, reminder
+                    )
                 reminder.sent = True
 
                 # Handle recurrence (independent of send/drop — a daily reminder
@@ -343,9 +400,14 @@ async def _gate_reminder(
 async def _send_reminder_via_bridge(
     settings: HalOrchestratorConfig,
     http_client: httpx.AsyncClient,
+    session: AsyncSession,
     reminder: HalReminder,
 ) -> None:
-    """Queue a reminder message in the outbox for the bridge to pick up."""
+    """Queue a reminder message in the outbox for the bridge to pick up, and
+    persist the send into the silo's conversation + archive. Before this,
+    reminder sends were invisible to HAL itself (and to anyone auditing the
+    transcript): the model would re-promise or re-send nudges it had no record
+    of, and a fired reminder couldn't inform later turns."""
     import hal_orchestrator.state as state
 
     message = f"Reminder: {reminder.text}"
@@ -356,6 +418,35 @@ async def _send_reminder_via_bridge(
         text=reminder.text[:50] if state.settings.log_message_content else None,
         text_len=len(reminder.text or ""),
     )
+
+    # Best-effort persistence — a logging failure must never block the send
+    # (the outbox already has it).
+    try:
+        from hal_orchestrator.prompts.system import USER_TZ
+        from hal_orchestrator.services.conversation import (
+            load_conversation,
+            save_conversation,
+        )
+        from hal_orchestrator.services.history_search import archive_turn
+
+        stamp = datetime.now(USER_TZ).strftime("%a %b %-d %-I:%M %p")
+        history = await load_conversation(session, reminder.phone)
+        history.append(
+            {
+                "role": "user",
+                "parts": [{"text": f"[{stamp}] [scheduled reminder fired — you sent:]"}],
+            }
+        )
+        history.append({"role": "model", "parts": [{"text": message}]})
+        await save_conversation(
+            session,
+            reminder.phone,
+            history,
+            max_turns=settings.max_conversation_turns,
+        )
+        await archive_turn(session, reminder.phone, "assistant", message)
+    except Exception:
+        log.exception("reminder.log_send_failed", reminder_id=str(reminder.id))
 
 
 def _next_occurrence(current: datetime, recurrence: str) -> datetime | None:

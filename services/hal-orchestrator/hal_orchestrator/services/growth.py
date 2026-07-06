@@ -376,10 +376,16 @@ async def build_scorecard(
         .scalars()
         .all()
     )
+    # Context matters for the fix: a failure in a group chat usually needs a
+    # different (often opposite) rule than the same failure in a 1:1 — so
+    # every example is tagged and the synthesizer scopes its playbook rules.
+    from hal_orchestrator.services.identity import is_group_id
+
     failures = [
         {
             "category": t.failure_category,
             "grade": t.grade,
+            "context": "group" if is_group_id(t.phone) else "dm",
             "goal": scrub(t.user_text, denylist, 160),
             "note": scrub(t.grade_note, denylist, 200),
             "signals": t.signals or [],
@@ -416,6 +422,8 @@ async def build_scorecard(
 
 
 async def verify_playbook(session: AsyncSession) -> dict:
+    from hal_orchestrator.services.identity import is_group_id
+
     now = datetime.now(timezone.utc)
     today_since = now - timedelta(hours=GRADE_LOOKBACK_HOURS)
     verified: list[str] = []
@@ -424,29 +432,31 @@ async def verify_playbook(session: AsyncSession) -> dict:
     for entry in await playbook_svc.live_entries(session):
         if not entry.target_category:
             continue
-        stmt = select(func.count()).select_from(HalTurn).where(
-            HalTurn.created_at >= today_since,
-            HalTurn.grade.in_(["partial", "failed"]),
-            HalTurn.failure_category == entry.target_category,
-        )
-        recurrences = int((await session.execute(stmt)).scalar_one())
+        # A rule is verified against failures IN ITS OWN SCOPE: a dm-scoped
+        # rule shouldn't be failed by group turns it was never injected into.
+        rows = (
+            await session.execute(
+                select(HalTurn.phone, HalTurn.user_text, HalTurn.grade_note).where(
+                    HalTurn.created_at >= today_since,
+                    HalTurn.grade.in_(["partial", "failed"]),
+                    HalTurn.failure_category == entry.target_category,
+                )
+            )
+        ).all()
+        scope = getattr(entry, "scope", "all") or "all"
+        if scope in ("dm", "group"):
+            rows = [
+                r for r in rows
+                if ("group" if is_group_id(r[0]) else "dm") == scope
+            ]
+        recurrences = len(rows)
         if recurrences and entry.target_detail:
             # Narrow by detail substring when the entry targets something specific.
-            rows = (
-                (
-                    await session.execute(
-                        select(HalTurn.user_text, HalTurn.grade_note).where(
-                            HalTurn.created_at >= today_since,
-                            HalTurn.grade.in_(["partial", "failed"]),
-                            HalTurn.failure_category == entry.target_category,
-                        )
-                    )
-                )
-                .all()
-            )
             needle = entry.target_detail.lower()
             recurrences = sum(
-                1 for u, n in rows if needle in (u or "").lower() + (n or "").lower()
+                1
+                for _, u, n in rows
+                if needle in (u or "").lower() + (n or "").lower()
             )
         if recurrences == 0:
             entry.clean_nights += 1
@@ -491,8 +501,17 @@ has. Decide tonight's improvements.
      specifics — they will be rejected). Each must target a failure seen in
      the data, with a hypothesis: which failure_category (and optional detail
      keyword) this should eliminate. Don't add notes for one-off flukes.
+   - scope (REQUIRED on every add): DMs and group chats are DIFFERENT operating
+     contexts with near-opposite norms — in a 1:1, engaging with everything the
+     user says is right; in a group, silence-unless-addressed is right. Each
+     failure example carries "context": "dm" or "group". Set scope to the
+     context where the targeted failures actually occurred. Use "all" ONLY for
+     context-free mechanics (tool fallbacks, formatting) that provably apply in
+     both; behavioral/tone/when-to-speak rules must NEVER be "all".
    - revise/retire: fix or remove FAILING entries (they didn't work) and
-     near-duplicates. Quality over quantity — an empty night is fine.
+     near-duplicates. You may also re-scope an existing entry (set scope on a
+     revise) when its failures are confined to one context. Quality over
+     quantity — an empty night is fine.
 2. shared_skills (≤3/night) — reusable multi-step workflow templates only if a
    recurring procedure is clearly visible. Most nights: none.
 3. backlog — capabilities needing CODE (missing_tool / missing_data_access /
@@ -507,9 +526,9 @@ the whole change rejected.
 
 Output STRICT JSON only:
 {"summary": "2-3 sentences",
- "playbook": {"add": [{"content": "...", "hypothesis": "...",
+ "playbook": {"add": [{"content": "...", "hypothesis": "...", "scope": "dm|group|all",
    "target_category": "...", "target_detail": "..."}],
-  "revise": [{"id": "...", "content": "...", "hypothesis": "..."}],
+  "revise": [{"id": "...", "content": "...", "hypothesis": "...", "scope": "dm|group|all"}],
   "retire": ["id"]},
  "shared_skills": [{"name": "kebab-name", "description": "...",
    "keywords": ["..."], "body": "..."}],
@@ -535,6 +554,7 @@ async def run_synthesis(
         {
             "id": str(e.id),
             "content": e.content,
+            "scope": getattr(e, "scope", "all") or "all",
             "status": e.status,
             "clean_nights": e.clean_nights,
             "fail_nights": e.fail_nights,

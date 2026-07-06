@@ -574,6 +574,12 @@ class HalWatchedGroup(Base):
     # actively coordinating in this group); reads ignore it once past, so the
     # group lapses back to tag-only unless HAL engages again and refreshes it.
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A member told HAL to butt out ("stfu", "keep it to yourself"): until this
+    # timestamp, non-@Hal messages in the group are code-forced silent — the
+    # model never gets to draft an interjection. Mentions still get answered.
+    # NULL = not muted. Orthogonal to expires_at (a permanently-watched family
+    # thread can be temporarily muted without losing its watch).
+    muted_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (Index("ix_hal_watched_groups_chat_id", "chat_id"),)
 
@@ -820,6 +826,11 @@ class HalPlaybookEntry(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     hypothesis: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Where this rule applies: 'dm' (1:1 silos), 'group' (group-chat silos), or
+    # 'all'. Rules are learned from context-specific failures — a lesson from
+    # baby logging ("always acknowledge reports") is actively harmful in a
+    # watched group, so the injector filters by the current silo's type.
+    scope: Mapped[str] = mapped_column(String(8), nullable=False, default="all")
     target_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
     target_detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
@@ -834,6 +845,31 @@ class HalPlaybookEntry(Base):
     )
 
     __table_args__ = (Index("ix_hal_playbook_status", "status"),)
+
+
+class HalFollowup(Base):
+    """A post-event follow-up the sweep has sent (or decided on) for one silo,
+    keyed so an event is never followed up twice. phase 'checkin' = the "how
+    did it go?" shortly after the event; phase 'suggest' = the later "want to
+    do something like that again?" ping."""
+
+    __tablename__ = "hal_followups"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    silo: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    event_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    event_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    phase: Mapped[str] = mapped_column(String(16), nullable=False)  # checkin | suggest
+    # When the message actually went out. NULL = the sweep drafted but the
+    # gate chose silence — recorded so we don't keep re-scanning the event.
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_hal_followups_silo_event", "silo", "event_at"),
+        UniqueConstraint("silo", "event_key", "phase", name="uq_hal_followups_silo_key_phase"),
+    )
 
 
 class HalFeatureRequest(Base):
