@@ -199,6 +199,14 @@ async def _run_job(
     }
     if job.is_group and job.chat_id:
         payload["chat_id"] = job.chat_id
+    # Slash-command skills (baby-digest, morning-brief, nyc-events…) are
+    # deterministic formatting from tool data — they don't need HIGH extended
+    # thinking, and on a thinking model HIGH reasoning eats the shared output
+    # budget and truncates the reply (the 07-06 header-only baby digest). Cap
+    # their thinking at MEDIUM so the visible answer always fits; the message
+    # loop's truncation guard is the backstop.
+    if job.prompt.lstrip().startswith("/"):
+        payload["thinking_level"] = "MEDIUM"
 
     async def _turn() -> dict:
         resp = await http.post(

@@ -280,6 +280,12 @@ async def _finalize_answer(
             history=history,
             tools=None,  # force a text answer
             system=system_prompt + "\n\n## FINALIZE NOW\n" + _FINALIZE_DIRECTIVE,
+            # The reasoning is already done — this call just writes the answer
+            # from what's in history. Force thinking LOW so it can't spend the
+            # shared token budget re-thinking and truncate again (finalize is
+            # also the repair path for a MAX_TOKENS turn, so it MUST NOT be
+            # prone to the same failure it's fixing).
+            thinking_level="LOW",
         )
         parts = (
             (resp.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
@@ -1323,14 +1329,30 @@ def build_message_router() -> APIRouter:
             text_parts = [p.get("text", "") for p in parts if "text" in p]
             reply = "\n".join(text_parts).strip()
 
-            if not reply:
-                # Degenerate turn: parts existed but carried no text (thinking-
-                # only / truncated). This is NOT the model deliberately choosing
-                # silence (that's an explicit "..." text) — in a 1:1 collapsing
-                # it to the sentinel meant the user got dead air. Route it
-                # through the stalled path: internal turns stay silent,
-                # real turns get a synthesized answer.
-                log.warning("message.empty_text_turn", silo=silo, iteration=iteration)
+            # Truncation guard: on a HIGH-thinking model the reasoning is
+            # deducted from the shared output budget, so a heavy think can cut
+            # the visible answer off after a few words (finishReason
+            # MAX_TOKENS). The 07-06 baby digest shipped as JUST its header
+            # this way. A truncated fragment must never ship — route it through
+            # the repair path (finalize re-synthesizes with thinking LOW so the
+            # full answer fits; internal turns stay silent).
+            truncated = (
+                candidates[0].get("finishReason") == "MAX_TOKENS" if candidates else False
+            )
+
+            if not reply or truncated:
+                # Degenerate turn: no text (thinking-only) OR truncated
+                # mid-output. Either way NOT a deliberate silence (that's an
+                # explicit "..." text); shipping it meant dead air or a
+                # header-only digest. Route through the stalled path: internal
+                # turns stay silent, real turns get re-synthesized.
+                log.warning(
+                    "message.empty_or_truncated_turn",
+                    silo=silo,
+                    iteration=iteration,
+                    truncated=truncated,
+                    reply_len=len(reply),
+                )
                 stalled = True
                 break
 
