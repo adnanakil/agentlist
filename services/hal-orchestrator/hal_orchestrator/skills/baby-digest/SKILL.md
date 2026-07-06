@@ -27,6 +27,13 @@ vs his pattern: <ONE short line — e.g. "lighter nap day than usual (2h05 vs ~3
 
 Tomorrow: <expected wake time and first-nap window from the weekly pattern, e.g. "expect a ~6:15 AM wake-up, first nap ~8:00">
 
+COUNTS MUST MATCH THE LIST: write out the times first, then count them — the
+"N" you state and the times you list must be the same number (a "Feeds: 7"
+that lists 6 times makes the whole log untrustworthy). Never state a total
+without enumerating it. If two logged events look like accidental duplicates
+(e.g. feeds 9 minutes apart), keep both in the count but flag them:
+"4:50p + 4:59p — duplicate?".
+
 If stats reports a possible sleep regression flag, add one final line starting
 with ⚠️ stating it plainly and one practical suggestion.
 
