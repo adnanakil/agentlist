@@ -117,36 +117,28 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         )
 
         # Card-on-log: a feed/nap/wake/bedtime update gets the visual status
-        # card attached automatically (user preference: a card on every nap &
-        # eating update). The card already shows last/next feed & nap, so the
-        # tool result then asks for a SHORT text caption instead of the full
-        # forecast — no redundant time-listing next to the image.
+        # card automatically (user preference: a card on every nap & eating
+        # update). Delivered as a signed image URL iMessage renders inline —
+        # an event was just logged, so data exists; no need to pre-render.
         CARD_KINDS = {"feed", "nap_start", "wake", "bedtime"}
-        card_attached = False
+        card_link = None
         if kind in CARD_KINDS:
             try:
-                import base64
+                from hal_orchestrator.services.baby_card import card_url
 
-                from hal_orchestrator.services.baby_card import render_for_silo
-
-                png = await render_for_silo(ctx.session, ctx.phone)
-                if png:
-                    # Keep exactly one card (the latest state) — logging two
-                    # events in one message shouldn't stack two cards.
-                    ctx.result_images.clear()
-                    ctx.result_images.append(
-                        {"mime_type": "image/png", "data": base64.b64encode(png).decode(), "ext": "png"}
-                    )
-                    card_attached = True
+                card_link = card_url(
+                    ctx.settings.public_base_url, ctx.phone, ctx.settings.hal_bridge_secret
+                )
             except Exception:
                 log.exception("baby.card_on_log_failed", silo=ctx.phone)
 
-        if card_attached:
+        if card_link:
             lines = [
                 f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
-                "[Attached the updated status-card IMAGE — it shows last/next feed "
-                "& nap. Reply with just ONE short, warm line (e.g. \"Down he goes "
-                "💤\" / \"logged ✅\"); do NOT re-list the times, the card has them.]",
+                "[Put THIS URL on its OWN LINE so the updated status card renders "
+                f"as an image:\n{card_link}\nReply with just ONE short, warm line "
+                "above it (e.g. \"Down he goes 💤\" / \"logged ✅\"); do NOT re-list "
+                "the times, the card has them.]",
             ]
         else:
             lines = [
@@ -170,28 +162,25 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         return format_forecast(forecast_next(events, tz, now), tz, baby)
 
     if action == "card":
-        # Render the visual baby-monitor card (last/next feed & nap) and attach
-        # it as an image. The bridge sends ctx.result_images as iMessage
-        # attachments (same path as image_edit).
-        import base64
-
-        from hal_orchestrator.services.baby_card import render_for_silo
+        # The visual baby-monitor card. Delivered as a signed image URL that
+        # iMessage renders inline (the live send path is text-only and can't
+        # attach files). Confirm there's data first so HAL never sends a URL
+        # that 404s.
+        from hal_orchestrator.services.baby_card import card_url, render_for_silo
 
         try:
-            png = await render_for_silo(ctx.session, ctx.phone)
+            has_data = await render_for_silo(ctx.session, ctx.phone) is not None
         except Exception:
             log.exception("baby.card_render_failed", silo=ctx.phone)
-            png = None
-        if not png:
+            has_data = False
+        if not has_data:
             return f"No events logged yet for {baby} — nothing to put on a card."
-        ctx.result_images.clear()
-        ctx.result_images.append(
-            {"mime_type": "image/png", "data": base64.b64encode(png).decode(), "ext": "png"}
-        )
+        url = card_url(ctx.settings.public_base_url, ctx.phone, ctx.settings.hal_bridge_secret)
         return (
-            f"[Rendered {baby}'s status card — it will be sent as an image with "
-            "your reply. Add at most ONE short friendly line; do NOT re-list the "
-            "feed/nap times, the card already shows them.]"
+            f"[{baby}'s status card is ready. Put THIS URL on its OWN LINE in your "
+            f"reply so it renders as an image:\n{url}\nAdd at most ONE short "
+            "friendly line above it; do NOT re-list the feed/nap times — the card "
+            "shows them.]"
         )
 
     if action == "stats":

@@ -222,6 +222,20 @@ try:
 except ImportError:
     check("Pillow available for card test", False, "(pip install Pillow)")
 
+from hal_orchestrator.services.baby_card import (  # noqa: E402
+    card_url, verify_card_token,
+)
+u = card_url("https://x.example", "chat783794800760957500", "s3cr3t")
+check("card url points at /card.png", "/card.png?s=" in u and "sig=" in u and "t=" in u)
+import urllib.parse as _up  # noqa: E402
+q = _up.parse_qs(_up.urlparse(u).query)
+check("valid token decodes back to the silo",
+      verify_card_token(q["s"][0], q["sig"][0], "s3cr3t") == "chat783794800760957500")
+check("wrong secret rejected",
+      verify_card_token(q["s"][0], q["sig"][0], "other") is None)
+check("tampered sig rejected",
+      verify_card_token(q["s"][0], "deadbeef", "s3cr3t") is None)
+
 # --------------------------------------------------------------------------- #
 print("proactive in-flight registry (the 07-07 double-brief race):")
 import hal_orchestrator.state as st  # noqa: E402

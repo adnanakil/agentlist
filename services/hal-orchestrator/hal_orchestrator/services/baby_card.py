@@ -13,8 +13,12 @@ without Pillow.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import io
 import math
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -158,6 +162,35 @@ def render_card_png(data: dict) -> bytes:
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
+
+# --------------------------------------------------------------------------- #
+# Hosted-URL delivery. The live iMessage send path is text-only (it drives a
+# phone; it can't attach a file), so the card is also served at a public,
+# HMAC-signed URL that HAL drops into the reply — iMessage renders it inline.
+# The `t` (timestamp) cache-busts so each send fetches a fresh render instead
+# of iMessage reusing a cached preview for the same URL.
+# --------------------------------------------------------------------------- #
+
+
+def _sign(silo: str, secret: str) -> str:
+    return hmac.new(secret.encode(), silo.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def card_url(base_url: str, silo: str, secret: str) -> str:
+    s = base64.urlsafe_b64encode(silo.encode()).decode().rstrip("=")
+    return f"{base_url.rstrip('/')}/card.png?s={s}&sig={_sign(silo, secret)}&t={int(time.time())}"
+
+
+def verify_card_token(s: str, sig: str, secret: str) -> str | None:
+    """Return the silo if the signature is valid, else None. Prevents anyone
+    from rendering an arbitrary silo's card by guessing the URL."""
+    try:
+        pad = "=" * (-len(s) % 4)
+        silo = base64.urlsafe_b64decode(s + pad).decode()
+    except Exception:
+        return None
+    return silo if hmac.compare_digest(_sign(silo, secret), sig or "") else None
 
 
 async def render_for_silo(session, silo: str) -> bytes | None:

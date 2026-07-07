@@ -19,6 +19,7 @@ from ag_db.session import create_engine_and_session
 
 import hal_orchestrator.state as state
 from hal_orchestrator.routes.admin import build_admin_router
+from hal_orchestrator.routes.card import build_card_router
 from hal_orchestrator.routes.google import build_google_router
 from hal_orchestrator.routes.landing import build_landing_router
 from hal_orchestrator.routes.legal import build_legal_router
@@ -234,6 +235,9 @@ def create_app() -> FastAPI:
 
     # Privacy Policy + Terms (required + linked from the Google consent screen)
     application.include_router(build_legal_router())
+
+    # Public signed baby-status card image (iMessage inline preview).
+    application.include_router(build_card_router())
 
     return application
 
