@@ -347,6 +347,14 @@ async def _beat(
     port = os.environ.get("PORT", "8005")
     is_group = is_group_id(silo)
 
+    # Another proactive turn (a scheduled brief/digest cron) is mid-flight for
+    # this silo right now — defer to it rather than racing out a duplicate.
+    # This is the cheap early exit; the pre-delivery re-check below is the
+    # belt-and-suspenders for the reverse ordering.
+    if state.is_proactive_inflight(silo):
+        log.info("heartbeat.inflight_skip", silo=silo)
+        return
+
     # Hand the model real anticipation material up front (the cheap model won't
     # go fetch it on its own).
     prompt = HEARTBEAT_PROMPT
@@ -401,6 +409,16 @@ async def _beat(
     data = resp.json()
     reply = (data.get("reply") or "").strip()
     if reply:
+        # Race-closer: another proactive turn may have DELIVERED while this
+        # heartbeat was gathering + thinking (the cron marks "sent" only at
+        # delivery, ~16s after this heartbeat first checked the cooldown). Re-
+        # check right before sending so a brief that just went out suppresses
+        # this duplicate. A hard delivery directive still bypasses.
+        if not directive:
+            since = state.minutes_since_proactive_send(silo)
+            if since is not None and since < settings.heartbeat_alert_cooldown_minutes:
+                log.info("heartbeat.cooldown_skip_late", silo=silo, minutes=round(since))
+                return
         await state.outbox.put({"to": silo, "text": reply})
         state.mark_proactive_send(silo)
         log.info("heartbeat.alerted", silo=silo, chars=len(reply))

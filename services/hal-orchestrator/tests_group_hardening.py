@@ -191,6 +191,21 @@ check("listed silo allowed", allowed_silo("+12017570419", "+12017570419, chat99"
 check("unlisted silo blocked", not allowed_silo("chat123", "+12017570419"))
 
 # --------------------------------------------------------------------------- #
+print("proactive in-flight registry (the 07-07 double-brief race):")
+import hal_orchestrator.state as st  # noqa: E402
+
+st.proactive_inflight.clear()
+check("silo not in-flight initially", not st.is_proactive_inflight("+1x"))
+st.begin_proactive("+1x")
+check("in-flight after begin", st.is_proactive_inflight("+1x"))
+check("a different silo unaffected", not st.is_proactive_inflight("+1y"))
+st.end_proactive("+1x")
+check("cleared after end", not st.is_proactive_inflight("+1x"))
+st.begin_proactive("+1z")
+check("stale in-flight expires past max_age", not st.is_proactive_inflight("+1z", max_age_seconds=0))
+st.end_proactive("+1z")
+
+# --------------------------------------------------------------------------- #
 print("nyc_events — formatting:")
 from hal_orchestrator.tools.nyc_events import format_event, format_events  # noqa: E402
 

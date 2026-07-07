@@ -38,6 +38,31 @@ def minutes_since_proactive_send(silo: str) -> float | None:
     return (datetime.now(timezone.utc) - at).total_seconds() / 60.0
 
 
+# In-flight registry: silo -> when a proactive turn STARTED but hasn't delivered
+# yet. The sent-registry above only marks at DELIVERY, so two proactive turns
+# firing seconds apart (the 07-07 /morning-brief cron + heartbeat, 16s apart)
+# each pass their cooldown check before the other's mark lands. This closes
+# that race: an explicit sender (cron/reminder/followup) marks in-flight the
+# moment it starts, and the opportunistic heartbeat defers to it. Bounded age
+# so a crashed turn can't block a silo forever.
+proactive_inflight: dict[str, datetime] = {}
+
+
+def begin_proactive(silo: str) -> None:
+    proactive_inflight[silo] = datetime.now(timezone.utc)
+
+
+def end_proactive(silo: str) -> None:
+    proactive_inflight.pop(silo, None)
+
+
+def is_proactive_inflight(silo: str, max_age_seconds: float = 240.0) -> bool:
+    at = proactive_inflight.get(silo)
+    if at is None:
+        return False
+    return (datetime.now(timezone.utc) - at).total_seconds() < max_age_seconds
+
+
 def get_http_client() -> httpx.AsyncClient:
     assert http_client is not None, "HTTP client not initialized"
     return http_client

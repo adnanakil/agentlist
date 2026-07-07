@@ -218,22 +218,30 @@ async def _run_job(
         resp.raise_for_status()
         return resp.json()
 
-    data = await _turn()
-    reply = (data.get("reply") or "").strip()
-    if should_retry_blank(job.prompt, reply):
-        log.warning("cron.slash_retry", job_id=str(job.id), prompt=job.prompt[:40])
-        await asyncio.sleep(_SLASH_RETRY_DELAY_SECONDS)
+    # Mark this silo in-flight from start through delivery (incl. the slash
+    # retry) so a concurrent heartbeat defers to the scheduled brief instead
+    # of duplicating it (the 07-07 double morning brief). The delivery key
+    # (group chat id vs phone) is what the heartbeat keys off.
+    to = job.chat_id if (job.is_group and job.chat_id) else job.phone
+    state.begin_proactive(to)
+    try:
         data = await _turn()
         reply = (data.get("reply") or "").strip()
-        if not reply:
-            # No apology text — a blank brief beats "sorry, something broke".
-            log.warning("cron.slash_blank", job_id=str(job.id), prompt=job.prompt[:40])
+        if should_retry_blank(job.prompt, reply):
+            log.warning("cron.slash_retry", job_id=str(job.id), prompt=job.prompt[:40])
+            await asyncio.sleep(_SLASH_RETRY_DELAY_SECONDS)
+            data = await _turn()
+            reply = (data.get("reply") or "").strip()
+            if not reply:
+                # No apology text — a blank brief beats "sorry, something broke".
+                log.warning("cron.slash_blank", job_id=str(job.id), prompt=job.prompt[:40])
 
-    to = job.chat_id if (job.is_group and job.chat_id) else job.phone
-    if reply:
-        await state.outbox.put({"to": to, "text": reply})
-        state.mark_proactive_send(to)
-        log.info("cron.delivered", job_id=str(job.id), to=to, chars=len(reply))
-    for sm in data.get("side_messages", []):
-        if sm.get("to") and sm.get("text"):
-            await state.outbox.put({"to": sm["to"], "text": sm["text"]})
+        if reply:
+            await state.outbox.put({"to": to, "text": reply})
+            state.mark_proactive_send(to)
+            log.info("cron.delivered", job_id=str(job.id), to=to, chars=len(reply))
+        for sm in data.get("side_messages", []):
+            if sm.get("to") and sm.get("text"):
+                await state.outbox.put({"to": sm["to"], "text": sm["text"]})
+    finally:
+        state.end_proactive(to)
