@@ -116,11 +116,44 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             ctx.session, family, kind, event_at, ctx.phone, forecast, now
         )
 
-        lines = [
-            f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
-            "",
-            format_forecast(forecast, tz, baby),
-        ]
+        # Card-on-log: a feed/nap/wake/bedtime update gets the visual status
+        # card attached automatically (user preference: a card on every nap &
+        # eating update). The card already shows last/next feed & nap, so the
+        # tool result then asks for a SHORT text caption instead of the full
+        # forecast — no redundant time-listing next to the image.
+        CARD_KINDS = {"feed", "nap_start", "wake", "bedtime"}
+        card_attached = False
+        if kind in CARD_KINDS:
+            try:
+                import base64
+
+                from hal_orchestrator.services.baby_card import render_for_silo
+
+                png = await render_for_silo(ctx.session, ctx.phone)
+                if png:
+                    # Keep exactly one card (the latest state) — logging two
+                    # events in one message shouldn't stack two cards.
+                    ctx.result_images.clear()
+                    ctx.result_images.append(
+                        {"mime_type": "image/png", "data": base64.b64encode(png).decode(), "ext": "png"}
+                    )
+                    card_attached = True
+            except Exception:
+                log.exception("baby.card_on_log_failed", silo=ctx.phone)
+
+        if card_attached:
+            lines = [
+                f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
+                "[Attached the updated status-card IMAGE — it shows last/next feed "
+                "& nap. Reply with just ONE short, warm line (e.g. \"Down he goes "
+                "💤\" / \"logged ✅\"); do NOT re-list the times, the card has them.]",
+            ]
+        else:
+            lines = [
+                f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
+                "",
+                format_forecast(forecast, tz, baby),
+            ]
         if auto_set:
             lines.append("Auto-set reminders (standing preference): " + "; ".join(auto_set))
             lines.append(
@@ -151,6 +184,7 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             png = None
         if not png:
             return f"No events logged yet for {baby} — nothing to put on a card."
+        ctx.result_images.clear()
         ctx.result_images.append(
             {"mime_type": "image/png", "data": base64.b64encode(png).decode(), "ext": "png"}
         )
