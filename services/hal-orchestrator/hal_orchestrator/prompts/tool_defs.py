@@ -73,7 +73,11 @@ MAIN_TOOLS: list[dict] = [
                     "auto-sets standing-preference reminders), forecast (next "
                     "wake/nap/feed/bedtime predicted from the baby's OWN recent "
                     "pattern), stats (today/yesterday/week summary + patterns + "
-                    "regression flags), recent (raw recent events), undo (remove "
+                    "regression flags), card (render a VISUAL status-card IMAGE — "
+                    "current state + last/next feed & nap + bedtime, sent as an "
+                    "iMessage picture; use when the user asks to SEE the monitor, "
+                    "'how's Bazzy', 'send a card/picture', or wants at-a-glance "
+                    "status), recent (raw recent events), undo (remove "
                     "a mislogged event), setup (first-time: create the baby "
                     "profile for this chat), configure (auto-reminder prefs, nap "
                     "cap, routines like 'tummy time 30min after feeds', "
@@ -87,7 +91,7 @@ MAIN_TOOLS: list[dict] = [
                         "action": {
                             "type": "string",
                             "enum": [
-                                "log", "forecast", "stats", "recent",
+                                "log", "forecast", "stats", "card", "recent",
                                 "undo", "setup", "configure",
                             ],
                         },

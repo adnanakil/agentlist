@@ -204,6 +204,25 @@ check("listed silo allowed", allowed_silo("+12017570419", "+12017570419, chat99"
 check("unlisted silo blocked", not allowed_silo("chat123", "+12017570419"))
 
 # --------------------------------------------------------------------------- #
+print("baby card renderer (visual monitor image):")
+try:
+    from hal_orchestrator.services.baby_card import render_card_png  # noqa: E402
+    sample = {
+        "baby": "Bazzy", "now": "11:35 AM", "state": "napping",
+        "asleep_since": "10:12 AM", "last_feed": "9:20 AM", "next_feed": "12:17 PM",
+        "expected_wake": "10:49 AM", "next_nap": None, "last_nap_end": "9:00 AM",
+        "expected_bedtime": "7:30 PM",
+    }
+    png = render_card_png(sample)
+    check("renders PNG bytes", isinstance(png, bytes) and png[:8] == b"\x89PNG\r\n\x1a\n")
+    check("non-trivial image size", len(png) > 5000)
+    # awake state path renders too (different sleep row)
+    png2 = render_card_png({**sample, "state": "awake", "next_nap": "1:00 PM"})
+    check("awake-state card also renders", png2[:4] == b"\x89PNG")
+except ImportError:
+    check("Pillow available for card test", False, "(pip install Pillow)")
+
+# --------------------------------------------------------------------------- #
 print("proactive in-flight registry (the 07-07 double-brief race):")
 import hal_orchestrator.state as st  # noqa: E402
 

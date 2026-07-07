@@ -11,6 +11,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import structlog
+
 from hal_orchestrator.services.baby import (
     EVENT_KINDS,
     add_event,
@@ -30,6 +32,8 @@ from hal_orchestrator.services.baby import (
     summarize_day,
 )
 from hal_orchestrator.tools.registry import ToolContext
+
+log = structlog.get_logger()
 
 HISTORY_DAYS = 14  # analytics window loaded per call
 
@@ -131,6 +135,30 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         if not events:
             return f"No events logged yet for {baby}."
         return format_forecast(forecast_next(events, tz, now), tz, baby)
+
+    if action == "card":
+        # Render the visual baby-monitor card (last/next feed & nap) and attach
+        # it as an image. The bridge sends ctx.result_images as iMessage
+        # attachments (same path as image_edit).
+        import base64
+
+        from hal_orchestrator.services.baby_card import render_for_silo
+
+        try:
+            png = await render_for_silo(ctx.session, ctx.phone)
+        except Exception:
+            log.exception("baby.card_render_failed", silo=ctx.phone)
+            png = None
+        if not png:
+            return f"No events logged yet for {baby} — nothing to put on a card."
+        ctx.result_images.append(
+            {"mime_type": "image/png", "data": base64.b64encode(png).decode(), "ext": "png"}
+        )
+        return (
+            f"[Rendered {baby}'s status card — it will be sent as an image with "
+            "your reply. Add at most ONE short friendly line; do NOT re-list the "
+            "feed/nap times, the card already shows them.]"
+        )
 
     if action == "stats":
         period = (args.get("period") or "today").strip().lower()
