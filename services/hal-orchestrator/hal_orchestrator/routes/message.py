@@ -634,13 +634,30 @@ GROUP_TACT_SYSTEM = (
 )
 
 
+# A reply that CONFIRMS concrete work HAL just did — logged a baby event, set a
+# reminder, scheduled/watched something — is the expected response to a request
+# directed at HAL, NOT a social interjection. The family baby-logging group is
+# the clear case: "Bazzy went down" is a log-this instruction, and its "Down for
+# a nap at 10:12" ack was being dropped by the on-the-ground-report DROP rule.
+# Turns using one of these action tools skip the tact gate. (Read/lookup tools
+# like web_search/places are deliberately excluded — those back the exact
+# unprompted interjections the gate exists to catch.)
+TACT_EXEMPT_TOOLS = frozenset(
+    {"baby", "set_reminder", "schedule", "trip", "watch", "group_quiet"}
+)
+
+
 def _needs_group_tact_gate(
-    is_group: bool, ambient_watch: bool, internal: bool, user_text: str, reply: str
+    is_group: bool, ambient_watch: bool, internal: bool, user_text: str,
+    reply: str, tools_used: set[str] | None = None,
 ) -> bool:
     """True for an UNPROMPTED interjection into an ambient-watched group:
     nobody said 'Hal' (word-boundary — 'halloween' doesn't count), the message
-    carries no link (links have the always-TL;DR duty), and HAL drafted a real
-    non-sentinel reply."""
+    carries no link (links have the always-TL;DR duty), HAL drafted a real
+    non-sentinel reply, and the turn didn't perform a concrete action whose
+    confirmation is legitimate (baby log, reminder, …)."""
+    if tools_used and (set(tools_used) & TACT_EXEMPT_TOOLS):
+        return False
     return (
         is_group
         and ambient_watch
@@ -1488,7 +1505,8 @@ def build_message_router() -> APIRouter:
         # interjections become the deliberate-silence sentinel so history
         # reads as HAL choosing quiet (not as an unanswered question it asked).
         if _needs_group_tact_gate(
-            is_group, ambient_watch, body.internal, user_text, reply
+            is_group, ambient_watch, body.internal, user_text, reply,
+            {s["tool"] for s in trajectory_steps},
         ) and not gemini_failed:
             try:
                 verdict = await _run_tact_gate(

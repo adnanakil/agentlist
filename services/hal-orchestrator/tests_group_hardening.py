@@ -37,6 +37,19 @@ check("on-the-ground rule present", "on-the-ground" in p.lower() or "own on-the-
 check("butt-out rule present", "butt out" in p.lower())
 check("stfu listed as stay-out signal", "stfu" in p.lower())
 check("no summary block when none given", "What HAL knows about this group" not in p)
+
+print("tact gate — baby-log acks are exempt (the J-and-Hal silence bug):")
+from hal_orchestrator.routes.message import _needs_group_tact_gate  # noqa: E402
+
+DRAFT2 = "Down for a nap at 10:12 — should wake up around 11:00."
+check("baby-log ack skips the gate",
+      not _needs_group_tact_gate(True, True, False, "Bazzy went down", DRAFT2, {"baby"}))
+check("reminder confirmation skips the gate",
+      not _needs_group_tact_gate(True, True, False, "remind us at 5", "Reminder set for 5 PM 👍", {"set_reminder"}))
+check("a lookup-backed interjection STILL gates",
+      _needs_group_tact_gate(True, True, False, "they're checking us in", "Actually it's a public hall", {"places", "web_search"}))
+check("no-tools interjection still gates",
+      _needs_group_tact_gate(True, True, False, "the worst", "Totally agree", set()))
 p2 = build_tact_prompt("A: hi", "Adnan", "msg", "draft", summary="Users prefer the assistant to step back.")
 check("summary block included when given", "What HAL knows about this group" in p2)
 check("summary text reaches the gate", "step back" in p2)
