@@ -1,8 +1,9 @@
 # HAL — Architecture & Working Reference
 
 _The one doc to read before touching HAL. Rewritten 2026-07-06 (was badly stale
-from Feb). Part 1 is "pick up where we left off"; Parts 2+ are how the whole
-system works._
+from Feb); refreshed 2026-07-09 (reliable delivery, idempotency, worker
+leadership, action policy, and quarantined learning). Part 1 is "pick up where we
+left off"; Parts 2+ are how the whole system works._
 
 HAL is a proactive personal assistant you text over iMessage. It plans, remembers,
 watches for things, briefs you, and quietly gets to know you over time.
@@ -13,13 +14,23 @@ watches for things, briefs you, and quietly gets to know you over time.
 
 ## What HAL is, in one breath
 An iMessage bridge on a Mac relays your texts to a FastAPI "brain" on Railway,
-which runs an agent loop over 28 tools + 12 background daemons + a nightly
-self-improvement pipeline, all backed by Postgres. A sibling service (Ephemera)
+which runs an agent loop over 29 tools + 12 background daemons + a quarantined
+nightly learning pipeline, all backed by Postgres. A sibling service (Ephemera)
 feeds it NYC events.
 
-## Current state (as of 2026-07-06)
+## Current state (as of 2026-07-09)
 - **Live & healthy:** `hal-orchestrator` and `ephemera`, both on Railway.
 - **Main model:** `claude-sonnet-5`, thinking HIGH, fallbacks opus-4-8 / gemini-3.1-pro.
+- **Bridge:** runs on a **separate Mac named "Hal"** — `ssh hal.local`, file
+  `~/.hal/hal_bridge.py`, cron watchdog restarts it every minute (see Part 2 for
+  the deploy/restart procedure). NOT this dev machine.
+- **`parking` tool** (shipped 2026-07-08): NYC parking-ticket lookup by plate via
+  NYC OpenData. Full auto-pay is blocked by reCAPTCHA on CityPay — lookup +
+  tap-to-pay handoff only.
+- **Billing pay→unlock is fixed** (2026-07-08): the bridge's `strip_markdown` was
+  eating the underscores in a Stripe pay link's `client_reference_id`, so paying
+  users never got unlocked. Fixed in the bridge (shield URLs); added a safety net
+  that texts admin on any unmatched payment (Part 9 → Billing).
 - **Post-event follow-ups:** ON but scoped to the owner's DM only
   (`FOLLOWUP_ENABLED=true`, `FOLLOWUP_SILOS=+12017570419`). Widen by editing
   `FOLLOWUP_SILOS`; the dry-run harness is `dryrun_followup.py`.
@@ -30,6 +41,14 @@ feeds it NYC events.
   maintenance mode); rebuild the iOS app in Xcode (baseURL already points at
   Railway); redeploy Vercel once so its old cron stops double-scraping; push
   Ephemera's local-only commits if it has a remote.
+- **Reliability hardening is live (2026-07-09):** production is on migration
+  `029`; the bridge sends stable Messages GUIDs, leases + acknowledges outbox
+  rows, and keeps a 30-day local delivery-dedup ledger. The pre-rollout bridge
+  backup is `~/.hal/hal_bridge.py.bak.20260709-182837` on `hal.local`.
+- **Last production verification (2026-07-09):** `/health` returned 200; duplicate
+  inbound requests returned byte-identical stored responses with HTTP 200; one
+  test outbox row sent once and was acknowledged `1/1`; a rolling deploy showed
+  the replacement process take worker leadership after the old process drained.
 
 ## Key commands
 ```bash
@@ -40,6 +59,14 @@ railway up --service hal-orchestrator --detach ; rm railway.toml
 # --- Deploy Ephemera (its dir is linked to the agentgate project) ---
 cd ~/Project/Ephemera && railway up --service ephemera --detach
 
+# --- Change the iMessage BRIDGE (lives on a separate Mac, NOT this repo) ---
+# Edit ~/.hal/hal_bridge.py ON hal.local, then restart it:
+ssh hal.local 'cp ~/.hal/hal_bridge.py ~/.hal/hal_bridge.py.bak.$(date +%s)'   # back up
+scp mylocalcopy.py hal.local:.hal/hal_bridge.py                                # or edit in place
+ssh hal.local '/Library/Frameworks/Python.framework/Versions/3.8/bin/python3 -m py_compile ~/.hal/hal_bridge.py'
+ssh hal.local 'pid=$(pgrep -f "$HOME/.hal/hal_bridge.py" | head -1); kill "$pid"; bash ~/.hal/hal_watchdog.sh'
+ssh hal.local 'tail -8 /tmp/hal_bridge.log'                                    # verify clean startup banner
+
 # --- Query PRODUCTION Postgres (read-only; the .env DB URL is a dead tunnel) ---
 psql "$(railway variables --service Postgres --kv | grep DATABASE_PUBLIC_URL | cut -d= -f2-)"
 #   grades:   SELECT grade,failure_category,grade_note FROM hal_turns WHERE grade IN ('partial','failed');
@@ -48,6 +75,8 @@ psql "$(railway variables --service Postgres --kv | grep DATABASE_PUBLIC_URL | c
 
 # --- Tests (standalone scripts, no framework) ---
 for t in services/hal-orchestrator/tests_*.py; do python3 "$t" >/dev/null || echo FAIL $t; done
+PYTHONPATH=services/hal-orchestrator:packages/ag-common:packages/ag-db \
+  .venv/bin/python -m pytest -q tests/test_hal_reliability_foundations.py
 
 # --- Health ---
 curl https://hal-orchestrator-production.up.railway.app/health
@@ -65,16 +94,63 @@ curl https://ephemera-production-e117.up.railway.app/health
   Dockerfile, not `.npmrc`.
 - **After deploy**, wait ~40s for the OLD instance to drain before running evals;
   requests during the overlap hit stale code. Confirm via a startup log marker
-  (`followup.started` / `heartbeat.started`) before trusting new behavior.
+  (`hal_orchestrator.worker_leader`, `followup.started`, or `heartbeat.started`)
+  before trusting new behavior. Seeing `worker_standby` first is expected: the
+  replacement retries election until the old process releases its advisory lock.
+- **Always pass `--service hal-orchestrator`.** The local Railway link may point
+  at Ephemera; relying on the linked service can deploy or inspect the wrong one.
 - **Key provenance:** working Firecrawl/Scrapfly keys live in `Ephemera/.env.local`;
   its Anthropic key is DEAD — use hal-orchestrator's. `vercel env pull` corrupted
   some values once — verify a key with a real API call before trusting it.
+- **The bridge is on a SEPARATE Mac, not in this repo.** Editing
+  `~/Project/*/hal/hal_bridge.py` on the dev machine does nothing — the live copy
+  is `~/.hal/hal_bridge.py` on `hal.local`. Verify the actual PID with
+  `ps -axo pid,command | grep ~/.hal/hal_bridge.py` before restarting. It
+  `strip_markdown`s every outbound message — **URLs must be shielded
+  before stripping** (an `_italic_` rule silently ate underscores in Stripe's
+  `client_reference_id`, breaking pay→unlock for a full cycle; fixed 2026-07-08).
+
+## Reliability rollout (2026-07-09)
+Completed in production on 2026-07-09. For a new environment, deploy these as
+one coordinated change:
+
+1. Run Alembic migration `029_hal_reliability_foundations` against production.
+2. Set a long random `CARD_SIGNING_KEY`. Keep `HAL_PROCESS_ROLE=all` for the
+   current single service, or use `api` on web replicas and `worker` on one worker
+   service. Postgres advisory leadership prevents duplicate daemon ownership;
+   standby workers retry election and take over if the leader disappears.
+3. Deploy the orchestrator. Legacy bridge requests remain accepted during the
+   transition, but they do not get full inbound deduplication.
+4. Update `~/.hal/hal_bridge.py` to pass the stable Messages database GUID as
+   `message_id` on `POST /api/message`.
+5. Change bridge polling to `GET /api/outbox?ack=false`. Send each returned row
+   using its `id`, then call `POST /api/outbox/ack` with
+   `{"message_ids": ["..."]}` only after AppleScript/WDA reports success. Reuse
+   the outbox `id` as the bridge-side send deduplication key. Apply the same
+   deduplication to `side_messages[].id` returned by `POST /api/message`.
+6. Restart the bridge and verify that a retried inbound GUID returns the original
+   response, and that an outbox row remains claimable until acknowledged.
+
+Both the orchestrator and bridge have been observed on the new protocol. Keep
+the compatibility paths only while rollback to the pre-029 bridge remains a
+requirement. A stale inbound event is kept in `processing` rather than replayed
+automatically because its first attempt may have performed an irreversible
+action; reconcile it explicitly.
+
+### Rollback
+- Orchestrator: redeploy the previous Railway image. Migration `029` is additive,
+  so old code can run while the new tables remain.
+- Bridge: restore `~/.hal/hal_bridge.py.bak.20260709-182837`, syntax-check it with
+  the framework Python 3.8 binary, kill the current PID, then run
+  `~/.hal/hal_watchdog.sh`.
+- Do not downgrade migration `029` while any new orchestrator or bridge process
+  may still be using inbound receipts or outbox rows.
 
 ## Where to change common things
 | Want to change… | Edit |
 |---|---|
 | HAL's persona / tool-routing rules | `hal_orchestrator/prompts/system.py` |
-| A tool's behavior / a new tool | `hal_orchestrator/tools/*.py` + `prompts/tool_defs.py` + `tools/registry.py` |
+| A tool's behavior / a new tool | `hal_orchestrator/tools/*.py` + one `ToolSpec` registration in `tools/specs.py` (drop-in modules may use `tools/plugins/`) |
 | A proactive daemon | `hal_orchestrator/services/{heartbeat,followup,helpful,reminders,cron,watch}.py` |
 | The nightly grading/learning | `hal_orchestrator/services/growth.py` (+ `playbook.py`) |
 | A recurring skill (digest, brief) | `hal_orchestrator/skills/<name>/SKILL.md` |
@@ -96,26 +172,41 @@ Three cooperating systems, each in its own place:
  │  ~/.hal/hal_bridge  │   POST /api/message       │  (Railway, FastAPI)      │
  │  (AppleScript I/O)  │ ◄──────────────────────── │  the brain               │
  └─────────────────────┘   reply + attachments     └──────────────────────────┘
-      ▲   │  polls GET /api/outbox (proactive sends)     │        │        │
+      ▲   │ leases /api/outbox; POSTs ack after send     │        │        │
       │   └──────────────────────────────────────────────┘        │        │
    sends to                                              ┌─────────┘        │
    your phone                                            ▼                  ▼
                                               ┌──────────────────┐  ┌────────────────┐
                                               │ Postgres (Railway)│  │ Ephemera       │
-                                              │ 23 hal_* tables   │  │ (NYC events)   │
+                                              │ 28 hal_* tables   │  │ (NYC events)   │
                                               └──────────────────┘  │ Railway+Redis  │
                                                                     └────────────────┘
 ```
 
-- **MacBook Bridge** (`~/.hal/hal_bridge.py`, ~300 LOC, *not in this repo*): the
-  only thing that can send/receive iMessage. Watches the Messages SQLite DB,
-  POSTs inbound texts to the orchestrator, sends replies via AppleScript, and
-  polls `/api/outbox` for proactive messages the daemons queued. A cron watchdog
-  restarts it. **This single Mac is the biggest scaling constraint / SPOF** (see
-  FEATURE_PLAN.md for the Twilio-fallback plan).
+- **MacBook Bridge** (`~/.hal/hal_bridge.py`, ~950 LOC, *not in this repo*): the
+  only thing that can send/receive iMessage. Watches the Messages SQLite DB
+  (`chat.db`), POSTs inbound texts to the orchestrator, sends replies via
+  AppleScript/WDA, and leases `/api/outbox` rows for proactive messages. It
+  acknowledges each row only after a successful send. Inbound Messages GUIDs
+  become stable `message_id` values; split-message batches get a deterministic
+  composite ID. Successful reply, side-message, attachment, and outbox delivery
+  IDs are retained for 30 days in `~/.hal/hal_delivery.sqlite3`. **It runs on a
+  dedicated Mac named "Hal"** (`ssh hal.local`, key-based,
+  user `adnanakil`; `192.168.1.244` on the LAN) — *not* the dev machine. Stdlib
+  only (`urllib`, `sqlite3`), **python.org framework Python 3.8** at
+  `/Library/Frameworks/Python.framework/Versions/3.8/bin/python3` (switched off
+  Xcode's python 2026-07-08 — an Xcode update had orphaned its Full Disk Access
+  grant and took the bridge down; a `/Library/Frameworks` path is update-proof.
+  A launchd LaunchAgent does NOT work here — launchd's TCC context lacks FDA even
+  when the same python has it under ssh; keep the cron watchdog). Supervised by
+  **cron every minute** + `@reboot` running `~/.hal/hal_watchdog.sh`, which
+  respawns it whenever `pgrep -f hal_bridge.py` is empty (no launchd job for the
+  bridge itself). To change it, see Part 1 → Key commands. **This single Mac is
+  the biggest scaling constraint / SPOF** (see FEATURE_PLAN.md for the
+  Twilio-fallback plan).
 - **HAL Orchestrator** (this service): the brain. Everything below is about it.
-- **Postgres + Redis** (Railway managed): all durable state (23 `hal_*` tables)
-  and the outbox/queue substrate.
+- **Postgres** (Railway managed): all durable state, inbound event receipts,
+  leased outbox rows, action confirmations, and worker leadership.
 - **Ephemera** (separate repo `~/Project/Ephemera`): the NYC events engine HAL
   queries via `nyc_events`. See Part 8.
 
@@ -126,8 +217,10 @@ Three cooperating systems, each in its own place:
 Every inbound text routes through `POST /api/message` (`routes/message.py`, the
 heart of the system):
 
-1. **Auth** — `verify_bridge_auth` fails *closed*: an unset secret rejects every
-   request. This is what makes trusting the caller-supplied silo safe.
+1. **Auth and receipt** — `verify_bridge_auth` fails *closed*: an unset secret
+   rejects every request. A stable `message_id` claims an inbound receipt before
+   side effects; completed retries return the stored response. This is what makes
+   trusting the caller-supplied silo safe.
 2. **Silo resolution** — the *silo* is the isolation key for ALL state. 1:1 →
    your normalized phone/email; group → the group's chat id. A group is its own
    shared silo, walled off from members' personal silos (`identity.py`).
@@ -146,8 +239,31 @@ heart of the system):
    with no tool call gets performed or unclaimed), group tact gate (vetoes
    unprompted group interjections), critic (revises plan turns in place),
    markdown stripping.
-8. **Persist & deliver** — sanitized history saved, turn archived + graded, reply
-   returned.
+8. **Persist & deliver** — sanitized history is saved with optimistic versioning,
+   the turn is archived + graded, and the exact reply is stored on the inbound
+   receipt before it is returned.
+
+## Reliability semantics
+- **Inbound:** `hal_inbound_events.id` is the bridge GUID/composite ID. The first
+  request owns the turn; a completed duplicate gets the exact stored JSON. A
+  duplicate still marked `processing` returns 409 and is never auto-taken over,
+  because the first worker may have completed an irreversible side effect before
+  crashing. This favors at-most-once action execution over automatic replay.
+- **Outbound:** producers insert `hal_outbox_messages` in the same transaction as
+  the state change that caused the send. The bridge leases rows with
+  `GET /api/outbox?ack=false`; expired leases are reclaimable. It POSTs IDs to
+  `/api/outbox/ack` only after AppleScript/WDA succeeds. The bridge ledger absorbs
+  a lost-ack retry. There is still an unavoidable crash window between an iMessage
+  send and recording its local delivery ID because Messages has no idempotency API.
+- **Conversation concurrency:** model and network work runs without a row lock.
+  `hal_conversations.version` provides optimistic append/merge on completion;
+  same-process turns also use a short per-silo lock.
+- **Workers:** `HAL_PROCESS_ROLE` selects `api`, `worker`, or `all`. One process
+  owns the session-level Postgres advisory lock; standbys retry every 10 seconds.
+  Loss of the lock connection or any daemon loop restarts leadership election.
+- **Budgets:** request bodies are capped on both `Content-Length` and actual ASGI
+  bytes. Defaults are 12,000 message characters, four images, 30 tool calls,
+  45 seconds per tool, and 240 seconds per turn.
 
 **Loop safety valves:** empty-text turns and `finishReason=MAX_TOKENS` truncations
 route to `_finalize_answer` (tools-off re-synthesis at LOW thinking) instead of
@@ -159,14 +275,17 @@ nothing when silent and never synthesize a user-facing message from a stall.
 
 ---
 
-# PART 4 — THE 28 TOOLS
+# PART 4 — THE 29 TOOLS
 
-Registered in `tools/registry.py`; schemas in `prompts/tool_defs.py`.
+Declared centrally as `ToolSpec` objects in `tools/specs.py`; the registry loads
+handlers from those specs and enforces scope, risk policy, timeout, and budget.
+Drop-in modules under `tools/plugins/` may register additional specs without
+editing the dispatcher. Startup validation rejects declaration/handler drift.
 
 | Group | Tools |
 |-------|-------|
 | **Info / world** | `web_search`, `web_fetch`, `get_weather`, `sports_score`, `current_time` |
-| **Local / places** | `places` (Google Places + real photos), `travel_time` (Routes + Maps deep links), `nyc_events` (Ephemera) |
+| **Local / places** | `places` (Google Places + real photos), `travel_time` (Routes + Maps deep links), `nyc_events` (Ephemera), `parking` (NYC parking-ticket lookup by plate; lookup + tap-to-pay handoff — auto-pay blocked by CityPay reCAPTCHA) |
 | **Memory** | `memory` (explicit facts), `profile` (living notes), `recall_history` (FTS archive), `contacts` |
 | **Proactivity** | `set_reminder` (static nudge), `schedule` (agentic cron), `watch` (notify-when), `group_quiet` (mute), `helpful_mode` (briefs) |
 | **Google (1:1 only)** | `google_auth`, `google_calendar` (r/w), `google_gmail` (read-only) |
@@ -179,12 +298,21 @@ Registered in `tools/registry.py`; schemas in `prompts/tool_defs.py`.
 world-condition flips. Reminders support a `cancel_if` condition re-checked at fire
 time.
 
+## Sensitive action policy
+`send_message` is server-authorized, not prompt-authorized. It is blocked in
+groups and background turns. A DM may send immediately only when the actual
+inbound user text contains send intent and the exact target. Otherwise HAL stages
+a 10-minute `hal_action_confirmations` record bound to the silo, tool, and exact
+argument hash; a later explicit approval must present its token. The model cannot
+authorize itself using tool output or retrieved web content.
+
 ---
 
 # PART 5 — THE 12 PROACTIVE DAEMONS
 
-All launched in `main.py`; all deliver via the Redis outbox. This is HAL's
-defining feature — acting in the background, not just when addressed.
+Launched by the elected worker leader in `main.py`; all deliver through leased,
+acknowledged Postgres outbox rows. This is HAL's defining feature: acting in the
+background, not just when addressed.
 
 | Daemon | Cadence | Does |
 |--------|---------|------|
@@ -214,10 +342,11 @@ hours in *each silo's own timezone*.
 1. **Grade** each turn (private, per silo): handled/partial/failed/na + category.
 2. **Aggregate** a de-identified scorecard (names/emails scrubbed).
 3. **Verify** each live playbook rule's hypothesis against the day's grades.
-4. **Synthesize** playbook changes (operating notes injected into every prompt —
-   a 3am lesson changes 7am behavior), skills, and feature-backlog specs.
+4. **Synthesize** playbook changes, skills, and feature-backlog specs into
+   `hal_learning_candidates` for review.
 5. **Health check** (SRE-style) correlates friction into root causes → backlog.
-6. **Publish** through a PII lint; admin gets a digest.
+6. **Review and publish** through the admin candidate endpoints after PII lint;
+   admin gets a digest. `GROWTH_AUTO_PUBLISH=false` is the secure default.
 
 **Playbook rules are DM/group-scoped** (`hal_playbook.scope`) — a 1:1 lesson never
 leaks into group turns. Hard rules (privacy, safety, no-booking) stay code-owned;
@@ -242,6 +371,19 @@ members' personal silos. Enforced in code, not just prompt. Google tools refuse 
 groups. **One exception:** a *family* (`hal_families`) shares one baby's log across
 parents' 1:1s + the family group. **One-way valve:** the group enricher may write
 per-member observations into that member's 1:1 — never the reverse.
+
+## Group-context catalog (group → your own DM, 2026-07-08)
+A user's 1:1 prompt carries a compact catalog of the group chats they're IN
+(proven by having spoken there — `hal_group_members`, upserted on every group
+turn + backfilled): per group, last-active time + the head of its rolling
+summary (~150 chars; ~400 if active <6h; block capped ~900 chars). The agent
+pulls the real thread on demand via `recall_history(group=<id>)` —
+membership-gated, 1:1-only, returns conversation content only (never HAL's
+group notes/observations). Rationale: the user witnessed the group convo, so
+their own DM knowing about it leaks nothing. Group summaries now LEAD with
+decisions/plans/future-dated commitments (summarizer addendum) so the catalog
+head carries the thing DMs reference later. Code:
+`services/group_catalog.py`, backfill `backfill_group_members.py`, migration 028.
 
 ## Group participation states
 - **Tag-only** (default) — HAL only sees "Hal" mentions.
@@ -288,36 +430,63 @@ heartbeats/gates; frontier `OVERSEER_MODEL` for nightly grading. Thinking shares
 the output-token budget → heavy reasoning can truncate (`MAX_TOKENS`), guarded in
 the loop + mitigated by capping crons at MEDIUM.
 
-## Data model (23 `hal_*` tables; Alembic through migration 027)
+## Data model (28 `hal_*` tables; Alembic through migration 029)
 | Plane | Tables |
 |-------|--------|
 | Conversation | `hal_conversations`, `hal_messages` |
 | Who you are | `hal_user_profiles`, `hal_user_memories`, `hal_user_skills` |
 | Proactivity | `hal_reminders`, `hal_cron_jobs`, `hal_watches`, `hal_followups` |
-| Groups | `hal_watched_groups`, `hal_group_observations`, `hal_trips` |
+| Groups | `hal_watched_groups`, `hal_group_members`, `hal_group_observations`, `hal_trips` |
 | Baby | `hal_families`, `hal_family_members`, `hal_baby_events` |
-| Learning | `hal_turns`, `hal_reflections`, `hal_playbook`, `hal_feature_backlog`, `hal_friction_events`, `hal_skill_trajectories`, `hal_curator_state` |
+| Learning | `hal_turns`, `hal_reflections`, `hal_playbook`, `hal_feature_backlog`, `hal_friction_events`, `hal_skill_trajectories`, `hal_curator_state`, `hal_learning_candidates` |
+| Reliability | `hal_inbound_events`, `hal_outbox_messages`, `hal_action_confirmations` |
 | Integrations | `hal_google_accounts` (Fernet-encrypted) + shared `accounts`/`api_keys`/`stripe_events` |
 
 ## Infra & security
-- Railway project `agentgate` (europe-west4): HAL + Postgres + Redis + Ephemera.
+- Railway project `agentgate`: HAL + Postgres + Ephemera and the other project
+  services. HAL no longer uses Redis for delivery; its outbox is PostgreSQL.
 - Routers: `message`, `google` (OAuth callback), `admin` (token-gated dashboard),
-  `landing`, `legal`, `stripe`.
+  `landing`, `legal`, `stripe`, and `card` (short-lived signed baby card).
 - Fail-closed bridge auth; prod boot refuses to start without bridge secret + valid
-  Fernet key; SSRF guard on `web_fetch`/`browser`; `LOG_MESSAGE_CONTENT=false` in
-  prod; OAuth tokens encrypted at rest.
+  Fernet key + separate `CARD_SIGNING_KEY`; SSRF guard on `web_fetch`/`browser`;
+  request-size middleware; code-owned sensitive-action policy;
+  `LOG_MESSAGE_CONTENT=false` in prod; OAuth tokens encrypted at rest. Baby-card
+  URLs expire after 15 minutes by default.
+- Global playbook and shared-skill changes land in `hal_learning_candidates`.
+  Admins list, approve, or reject them through token-protected admin endpoints;
+  automatic publication is off in production.
+
+## Billing (pay → unlock) — `services/billing.py` + `routes/stripe.py`
+Free tier = `FREE_MESSAGE_LIMIT` (40) user-initiated msgs/month per 1:1 silo
+(`usage.py`; groups/heartbeats/admin exempt). Over the cap → a funding message
+with a static Stripe Payment Link + `?client_reference_id=<ref>` (signed with
+`ENCRYPTION_KEY`, binds the payment to the silo). Stripe webhook
+(`www.tryhal.xyz/api/stripe/webhook`, secret `STRIPE_WEBHOOK_SECRET`, no
+`STRIPE_SECRET_KEY` needed) → verify sig → resolve ref → `usage.set_plan(unlimited)`
++ queue the confirmation text. **Safety net:** an unmatchable payment
+(`client_reference_id` null/invalid) texts `ADMIN_PHONE` instead of silently
+dropping (`billing._alert_unmatched_payment`). **Manual replay** to unlock a lost
+payment: sign a `checkout.session.completed` with `ENCRYPTION_KEY` +
+`STRIPE_WEBHOOK_SECRET` and POST it to the webhook. (Gotcha: the URL must reach
+the phone with underscores intact — see the bridge `strip_markdown` note in Part 1.)
 
 ## Key env vars
 `GEMINI_MODEL`, `GEMINI_THINKING_LEVEL`, `MODEL_FALLBACKS`, `HAL_BRIDGE_SECRET`,
-`ENCRYPTION_KEY`, `GOOGLE_MAPS_API_KEY`, `ANTHROPIC_API_KEY`, `EPHEMERA_URL`,
-`FOLLOWUP_ENABLED`/`FOLLOWUP_SILOS`, the Google OAuth trio, Stripe keys.
+`CARD_SIGNING_KEY`, `HAL_PROCESS_ROLE`, `GROWTH_AUTO_PUBLISH`, `ENCRYPTION_KEY`,
+`GOOGLE_MAPS_API_KEY`, `ANTHROPIC_API_KEY`, `EPHEMERA_URL`,
+`FOLLOWUP_ENABLED`/`FOLLOWUP_SILOS`, the Google OAuth trio, Stripe keys. Important
+limits are configurable as `MAX_REQUEST_BYTES`, `MAX_MESSAGE_CHARS`,
+`MAX_IMAGES_PER_MESSAGE`, `MAX_TOOL_CALLS_PER_TURN`, `TOOL_TIMEOUT_SECONDS`, and
+`TURN_TIMEOUT_SECONDS`.
 
 ---
 
 ## Known limits (see FEATURE_PLAN.md)
 The single-Mac bridge is the scaling ceiling (Twilio fallback planned); Google
 OAuth is unverified (100-user cap, 7-day token expiry) pending CASA; no managed
-heavy-agent runtimes yet.
+heavy-agent runtimes yet. The live bridge source and its SQLite delivery ledger
+exist only on `hal.local` (with timestamped backups), so bridge changes are not
+yet reviewed or recovered through the repository's normal version-control path.
 
 ## Further reading
 `GROWTH.md` (learning loop) · `WATCH_FEATURE_SPEC.md` (notify-when) ·
