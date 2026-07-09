@@ -21,6 +21,7 @@ from ag_db import session as db_session
 from ag_db.models import HalConversation
 from hal_orchestrator.services.curator import idle_seconds
 from hal_orchestrator.services.gemini import call_gemini
+from hal_orchestrator.services.identity import is_group_id
 
 log = structlog.get_logger()
 
@@ -36,6 +37,24 @@ summary (<= 180 words, plain text, no preamble or headers) capturing:
 - ongoing or multi-step tasks and what the user is currently trying to accomplish
 Merge new info into the prior summary; drop stale one-off chatter. Output ONLY
 the summary text."""
+
+# Group summaries feed the group-context catalog (services/group_catalog.py),
+# where a member's own DM only ever sees a ~150-char head of this text. A
+# plain recap buries the one thing that head needs to carry: what was
+# actually decided. This addendum is appended only for group silos.
+GROUP_SUMMARY_ADDENDUM = """
+This conversation is a GROUP chat. LEAD the summary with concrete decisions, \
+plans, and future-dated commitments made in the group (who/what/when — with \
+actual dates/times), before any general recap. Preserve each one until its \
+date has passed; don't let newer chatter crowd them out."""
+
+
+def _summarizer_system_prompt(silo: str) -> str:
+    """The summarizer's system prompt, with the group-decisions addendum
+    appended when `silo` is a group (mirrors the enricher's _pick_prompt)."""
+    if is_group_id(silo):
+        return SUMMARIZER_PROMPT + "\n" + GROUP_SUMMARY_ADDENDUM
+    return SUMMARIZER_PROMPT
 
 
 async def _summarize_one(
@@ -62,7 +81,7 @@ async def _summarize_one(
         http,
         settings,
         [{"role": "user", "parts": [{"text": payload}]}],
-        system=SUMMARIZER_PROMPT,
+        system=_summarizer_system_prompt(conv.phone),
         model=settings.gemini_flash_model,
     )
     if not resp:

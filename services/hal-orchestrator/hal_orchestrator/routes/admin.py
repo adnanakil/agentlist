@@ -15,6 +15,7 @@ from __future__ import annotations
 import hmac
 import html
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -22,7 +23,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ag_db.models import HalConversation, HalMessage, HalUserProfile
+from ag_db.models import (
+    HalConversation,
+    HalLearningCandidate,
+    HalMessage,
+    HalUserProfile,
+)
 from ag_db.session import get_session
 from hal_orchestrator.prompts.system import USER_TZ
 from hal_orchestrator.services.identity import is_group_id
@@ -241,5 +247,84 @@ def build_admin_router() -> APIRouter:
         plan = await set_plan(session, silo, unlimited=unlimited, limit=limit)
         await session.commit()
         return JSONResponse({"ok": True, "silo": silo, "plan": plan})
+
+    @router.get("/api/admin/learning-candidates")
+    async def learning_candidates(
+        token: str = Query(""),
+        authorization: str = Header(""),
+        session: AsyncSession = Depends(get_session),
+    ) -> JSONResponse:
+        bearer = authorization.removeprefix("Bearer ").strip()
+        _check_token(bearer or token)
+        rows = (
+            (
+                await session.execute(
+                    select(HalLearningCandidate)
+                    .where(HalLearningCandidate.status == "pending")
+                    .order_by(HalLearningCandidate.created_at.desc())
+                    .limit(100)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return JSONResponse(
+            {
+                "candidates": [
+                    {
+                        "id": str(row.id),
+                        "kind": row.kind,
+                        "payload": row.payload,
+                        "created_at": row.created_at.isoformat(),
+                    }
+                    for row in rows
+                ]
+            }
+        )
+
+    @router.post("/api/admin/learning-candidates/{candidate_id}/approve")
+    async def approve_learning_candidate(
+        candidate_id: UUID,
+        token: str = Query(""),
+        authorization: str = Header(""),
+        session: AsyncSession = Depends(get_session),
+    ) -> JSONResponse:
+        bearer = authorization.removeprefix("Bearer ").strip()
+        _check_token(bearer or token)
+        candidate = await session.get(
+            HalLearningCandidate, candidate_id, with_for_update=True
+        )
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="candidate not found")
+        from hal_orchestrator.services.growth import build_denylist
+        from hal_orchestrator.services.learning_candidates import promote
+
+        result = await promote(session, candidate, await build_denylist(session))
+        if result.get("error"):
+            await session.rollback()
+            return JSONResponse(status_code=400, content=result)
+        await session.commit()
+        return JSONResponse({"ok": True, "result": result})
+
+    @router.post("/api/admin/learning-candidates/{candidate_id}/reject")
+    async def reject_learning_candidate(
+        candidate_id: UUID,
+        note: str = Query(""),
+        token: str = Query(""),
+        authorization: str = Header(""),
+        session: AsyncSession = Depends(get_session),
+    ) -> JSONResponse:
+        bearer = authorization.removeprefix("Bearer ").strip()
+        _check_token(bearer or token)
+        candidate = await session.get(
+            HalLearningCandidate, candidate_id, with_for_update=True
+        )
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="candidate not found")
+        from hal_orchestrator.services.learning_candidates import reject
+
+        await reject(session, candidate, note)
+        await session.commit()
+        return JSONResponse({"ok": True})
 
     return router

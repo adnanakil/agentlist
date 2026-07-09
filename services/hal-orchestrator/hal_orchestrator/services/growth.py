@@ -547,8 +547,8 @@ async def run_synthesis(
     denylist: list[str],
     reflection_id,
 ) -> dict:
-    from hal_orchestrator.prompts.tool_defs import MAIN_TOOLS
     from hal_orchestrator.tools.registry import STUBBED_TOOLS
+    from hal_orchestrator.tools.specs import all_tool_specs
 
     current_playbook = [
         {
@@ -587,18 +587,30 @@ async def run_synthesis(
             }
             for b in backlog_rows
         ],
-        "available_tools": sorted(
-            d["name"] for d in MAIN_TOOLS[0]["function_declarations"]
-        ),
+        "available_tools": sorted(spec.name for spec in all_tool_specs()),
         "stubbed_tools": sorted(STUBBED_TOOLS),
     }
     obj = await _model_json(settings, http, SYNTH_PROMPT, payload)
     if not obj:
         return {"summary": "", "playbook": {}, "skills_created": [], "backlog_changes": []}
 
-    pb_report = await playbook_svc.apply_changes(
-        session, obj.get("playbook") or {}, reflection_id, denylist
-    )
+    playbook_changes = obj.get("playbook") or {}
+    if settings.growth_auto_publish:
+        pb_report = await playbook_svc.apply_changes(
+            session, playbook_changes, reflection_id, denylist
+        )
+    elif any(playbook_changes.get(key) for key in ("add", "revise", "retire")):
+        from hal_orchestrator.services.learning_candidates import stage
+
+        candidate = await stage(
+            session,
+            kind="playbook",
+            payload=playbook_changes,
+            reflection_id=reflection_id,
+        )
+        pb_report = {"quarantined": [str(candidate.id)]}
+    else:
+        pb_report = {}
 
     created: list[str] = []
     for sk in (obj.get("shared_skills") or [])[:MAX_NEW_SKILLS_PER_NIGHT]:
@@ -608,16 +620,27 @@ async def run_synthesis(
             f"{sk.get('description', '')} {sk['body']}", denylist
         ):
             continue
-        result, err = await skills_svc.create(
-            session,
-            skills_svc.SHARED_OWNER,
-            sk["name"],
-            description=sk.get("description", "") or "",
-            body=sk["body"],
-            keywords=sk.get("keywords") or [],
-        )
-        if err is None:
-            created.append(result["name"])
+        if settings.growth_auto_publish:
+            result, err = await skills_svc.create(
+                session,
+                skills_svc.SHARED_OWNER,
+                sk["name"],
+                description=sk.get("description", "") or "",
+                body=sk["body"],
+                keywords=sk.get("keywords") or [],
+            )
+            if err is None:
+                created.append(result["name"])
+        else:
+            from hal_orchestrator.services.learning_candidates import stage
+
+            candidate = await stage(
+                session,
+                kind="shared_skill",
+                payload=sk,
+                reflection_id=reflection_id,
+            )
+            created.append(f"pending:{candidate.id}")
 
     backlog_changes = await _upsert_backlog(
         session, obj.get("backlog") or [], {str(b.id): b for b in backlog_rows}, denylist
@@ -876,12 +899,15 @@ async def _notify_admin(
         pb_bits.append(f"{len(pb['revised'])} revised")
     if pb.get("retired"):
         pb_bits.append(f"{len(pb['retired'])} retired")
+    if pb.get("quarantined"):
+        pb_bits.append(f"{len(pb['quarantined'])} pending review")
     if verify.get("verified"):
         pb_bits.append(f"{len(verify['verified'])} verified ✓")
     if pb_bits:
         lines.append("Playbook: " + ", ".join(pb_bits))
     if synth.get("skills_created"):
-        lines.append("New shared skills: " + ", ".join(synth["skills_created"]))
+        label = "Shared skill candidates" if not settings.growth_auto_publish else "New shared skills"
+        lines.append(label + ": " + ", ".join(synth["skills_created"]))
     for ping in backlog_pings[:3]:
         lines.append(f"💡 {ping}")
     if weekly:
