@@ -26,6 +26,8 @@ members = [
 [tool.uv.sources]
 ag-common = { workspace = true }
 ag-db = { workspace = true }
+agentgate-sdk = { workspace = true }
+hal-orchestrator = { workspace = true }
 
 [tool.uv]
 dev-dependencies = [
@@ -35,6 +37,8 @@ dev-dependencies = [
     "httpx>=0.27",
     "ruff>=0.8",
     "mypy>=1.13",
+    "agentgate-sdk",
+    "hal-orchestrator",
 ]
 
 [tool.ruff]

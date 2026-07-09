@@ -87,8 +87,16 @@ class HalOrchestratorConfig(BaseConfig):
     hal_bridge_url: str = ""
     orchestrator_url: str = "http://localhost:8005"
     max_tool_iterations: int = 15
+    max_tool_calls_per_turn: int = 30
     max_specialist_iterations: int = 10
     max_conversation_turns: int = 40
+    tool_timeout_seconds: int = 45
+    turn_timeout_seconds: int = 240
+    silo_concurrency_wait_seconds: int = 10
+    max_message_chars: int = 12000
+    max_images_per_message: int = 4
+    max_image_base64_chars: int = 8_000_000
+    max_request_bytes: int = 36_000_000
     gemini_timeout_seconds: int = 60
     gemini_temperature: float = 0.7
     # Shared budget for THINKING + visible output on Gemini thinking models.
@@ -186,6 +194,10 @@ class HalOrchestratorConfig(BaseConfig):
     # HAL's public iMessage number, shown on the tryhal.com landing page ("/").
     # Unset -> the page shows a coming-soon variant without a number.
     hal_public_number: str = ""
+    # Separate purpose-bound key for public card links. Production refuses to
+    # boot without it, so leaking a card URL cannot expose the bridge API key.
+    card_signing_key: str = ""
+    card_url_ttl_seconds: int = 15 * 60
     # Resy private-API web key (swappable without redeploy if Resy rotates it).
     # Defaults to Resy's public website key.
     resy_api_key: str = "VbWk7s3L4KiK5fzlO7JD3Q5EYolJI7n5"
@@ -207,6 +219,13 @@ class HalOrchestratorConfig(BaseConfig):
     # actual text of user messages, memories, reminders, and outbound sends —
     # only lengths/metadata are logged. Flip true locally to debug content.
     log_message_content: bool = False
+    # api = no proactive loops, worker = loops only, all = backwards-compatible
+    # single-process deployment. A database advisory lock ensures one leader.
+    hal_process_role: str = "all"
+    worker_leader_lock_enabled: bool = True
+    # Global playbook/skills are quarantined by default. This escape hatch is
+    # intended only for a reviewed single-user deployment.
+    growth_auto_publish: bool = False
 
     # --- Per-user message quota (free tier -> paid) ----------------------- #
     # Free user-initiated messages per calendar month, per 1:1 silo. Over the

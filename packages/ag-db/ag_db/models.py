@@ -432,12 +432,79 @@ class HalConversation(Base):
     # message_count at the last summary refresh, so the summarizer only re-runs
     # when there's been meaningful new activity.
     summarized_at_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Optimistic-concurrency token. Agent/model work happens outside a row lock;
+    # the final append updates only when this version still matches.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     __table_args__ = (Index("ix_hal_conversations_phone", "phone"),)
+
+
+class HalInboundEvent(Base):
+    """One bridge delivery, keyed by the bridge's stable message id.
+
+    The completed response is retained so an HTTP retry can return exactly the
+    same result without re-running tools or external side effects.
+    """
+
+    __tablename__ = "hal_inbound_events"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    silo: Mapped[str] = mapped_column(String(255), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="processing")
+    response: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        Index("ix_hal_inbound_events_silo_created", "silo", "created_at"),
+        Index("ix_hal_inbound_events_status_updated", "status", "updated_at"),
+    )
+
+
+class HalOutboxMessage(Base):
+    """Durable bridge delivery with optional idempotency and acknowledgement."""
+
+    __tablename__ = "hal_outbox_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    destination: Mapped[str] = mapped_column(String(255), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_hal_outbox_pending", "status", "available_at"),
+        Index("ix_hal_outbox_lease", "lease_until"),
+    )
+
+
+class HalActionConfirmation(Base):
+    """Short-lived consent bound to one silo, tool, and exact arguments."""
+
+    __tablename__ = "hal_action_confirmations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    silo: Mapped[str] = mapped_column(String(255), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    arguments_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_hal_action_confirmations_silo", "silo", "expires_at"),)
 
 
 class HalUserProfile(Base):
@@ -847,6 +914,25 @@ class HalPlaybookEntry(Base):
     __table_args__ = (Index("ix_hal_playbook_status", "status"),)
 
 
+class HalLearningCandidate(Base):
+    """Quarantined global learning change awaiting explicit promotion."""
+
+    __tablename__ = "hal_learning_candidates"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)  # playbook | shared_skill
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    source_reflection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    review_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_hal_learning_candidates_status", "status", "created_at"),)
+
+
 class HalFollowup(Base):
     """A post-event follow-up the sweep has sent (or decided on) for one silo,
     keyed so an event is never followed up twice. phase 'checkin' = the "how
@@ -937,4 +1023,31 @@ class HalGroupObservation(Base):
 
     __table_args__ = (
         Index("ix_hal_group_obs_member_created", "member_phone", "created_at"),
+    )
+
+
+class HalGroupMember(Base):
+    """Provable membership: a (group, member) row exists only because the
+    member actually SPOKE in that group — iMessage rosters can't be
+    enumerated, so "spoke there" is the only proxy we have for "is in it".
+
+    Backs the group-context catalog (services/group_catalog.py): a compact
+    summary of the groups a user is in, injected into their 1:1 prompt, plus
+    the membership check for recall_history(group=...). One-way like
+    HalGroupObservation — a group's own turns never read this table."""
+
+    __tablename__ = "hal_group_members"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    group_silo: Mapped[str] = mapped_column(Text, nullable=False)
+    member_silo: Mapped[str] = mapped_column(Text, nullable=False)
+    group_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_spoke_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_hal_group_members_group_silo", "group_silo"),
+        Index("ix_hal_group_members_member_silo", "member_silo"),
+        Index("ix_hal_group_members_last_spoke_at", "last_spoke_at"),
+        UniqueConstraint("group_silo", "member_silo", name="uq_hal_group_members_group_member"),
     )
