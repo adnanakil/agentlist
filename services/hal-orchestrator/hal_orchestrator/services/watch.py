@@ -21,7 +21,7 @@ from uuid import UUID
 
 import httpx
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_common.config import HalOrchestratorConfig
@@ -253,8 +253,6 @@ async def run_watch_checker(
 async def _check_and_run(
     settings: HalOrchestratorConfig, http: httpx.AsyncClient
 ) -> None:
-    import hal_orchestrator.state as state
-
     now = datetime.now(timezone.utc)
     async for session in get_session():
         due = (
@@ -263,6 +261,7 @@ async def _check_and_run(
                     select(HalWatch)
                     .where(HalWatch.active == True, HalWatch.next_run_at <= now)  # noqa: E712
                     .limit(20)
+                    .with_for_update(skip_locked=True)
                 )
             )
             .scalars()
@@ -291,7 +290,14 @@ async def _check_and_run(
                 to = w.chat_id if (w.is_group and w.chat_id) else w.phone
                 obs = (verdict.get("observation") or "").strip()
                 msg = w.notify + (f"\n{obs}" if obs else "")
-                await state.outbox.put({"to": to, "text": msg})
+                from hal_orchestrator.services.delivery import enqueue
+
+                await enqueue(
+                    session,
+                    to=to,
+                    text=msg,
+                    idempotency_key=f"watch:{w.id}",
+                )
                 w.active = False
                 # Record the observation that TRIGGERED the fire (not just the
                 # last miss), so the row reflects why it fired.

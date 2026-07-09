@@ -9,15 +9,16 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import time
+from collections.abc import AsyncGenerator
 from datetime import datetime
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.session import get_session
-
 from hal_orchestrator.prompts.system import (
     SYSTEM_PROMPT,
     USER_TZ,
@@ -25,17 +26,18 @@ from hal_orchestrator.prompts.system import (
     is_onboarding_complete,
     resolve_tz,
 )
-from hal_orchestrator.state import get_http_client, get_settings
-from hal_orchestrator.prompts.tool_defs import MAIN_TOOLS
 from hal_orchestrator.services.conversation import (
     get_summary,
     load_conversation,
+    load_conversation_snapshot,
     save_conversation,
 )
 from hal_orchestrator.services.gemini import call_gemini
 from hal_orchestrator.services.identity import is_group_id, normalize_handle
 from hal_orchestrator.services.profiles import get_profile, update_profile
+from hal_orchestrator.state import get_http_client, get_settings
 from hal_orchestrator.tools.registry import ToolContext, execute_tool
+from hal_orchestrator.tools.specs import all_tool_specs, model_tools
 
 log = structlog.get_logger()
 
@@ -310,7 +312,7 @@ async def _finalize_answer(
 # --------------------------------------------------------------------------- #
 
 PARALLEL_SAFE_TOOLS = frozenset(
-    {"web_search", "web_fetch", "get_weather", "travel_time", "sports_score", "places"}
+    spec.name for spec in all_tool_specs() if spec.parallel_safe
 )
 
 # --------------------------------------------------------------------------- #
@@ -503,7 +505,6 @@ async def _enforce_claimed_actions(
     (and still no tool call) gets pushed again instead of shipping the same
     lie twice (the exact hole behind the 07-01 'logged ✅ but never saved'
     incident)."""
-    from hal_orchestrator.prompts.tool_defs import MAIN_TOOLS
     from hal_orchestrator.services.gemini import call_gemini
 
     history.append(
@@ -535,7 +536,7 @@ async def _enforce_claimed_actions(
                 client=http_client,
                 settings=settings,
                 history=history,
-                tools=MAIN_TOOLS,
+                tools=model_tools(),
                 system=system_prompt,
                 model=model,
                 thinking_level=thinking_level,
@@ -563,6 +564,7 @@ async def _enforce_claimed_actions(
                 from hal_orchestrator.tools.registry import execute_tool
 
                 result = await execute_tool(tool_name, tool_args, ctx)
+                await ctx.session.commit()
                 func_responses.append(
                     {
                         "functionResponse": {
@@ -799,18 +801,23 @@ async def _capture_turn(
 
 
 class ImageData(BaseModel):
-    mime_type: str
-    data: str  # base64
+    mime_type: str = Field(
+        min_length=3,
+        max_length=64,
+        pattern=r"^image/(jpeg|jpg|png|gif|webp|heic|heif)$",
+    )
+    data: str = Field(min_length=1, max_length=8_000_000)  # base64
 
 
 class MessageRequest(BaseModel):
-    phone: str
-    text: str
-    sender_name: str | None = None
+    message_id: str | None = Field(default=None, min_length=1, max_length=255)
+    phone: str = Field(min_length=1, max_length=255)
+    text: str = Field(max_length=12000)
+    sender_name: str | None = Field(default=None, max_length=200)
     is_group: bool = False
-    group_name: str | None = None
-    chat_id: str | None = None  # Group chat identifier (for trips, etc.)
-    images: list[ImageData] = []
+    group_name: str | None = Field(default=None, max_length=200)
+    chat_id: str | None = Field(default=None, max_length=255)
+    images: list[ImageData] = Field(default_factory=list, max_length=4)
     # Internal turn (heartbeat/daemon): the user did not send this. A silent
     # outcome persists NOTHING (no history, no archive, no turn capture); an
     # alert persists a compact stub instead of the synthetic prompt.
@@ -823,6 +830,7 @@ class MessageRequest(BaseModel):
 
 
 class SideMessage(BaseModel):
+    id: str | None = None
     to: str
     text: str
 
@@ -836,8 +844,13 @@ class ResultImage(BaseModel):
 class MessageResponse(BaseModel):
     reply: str
     tool_calls: int = 0
-    side_messages: list[SideMessage] = []
-    result_images: list[ResultImage] = []
+    side_messages: list[SideMessage] = Field(default_factory=list)
+    result_images: list[ResultImage] = Field(default_factory=list)
+
+
+class OutboxAckRequest(BaseModel):
+    message_ids: list[str] = Field(min_length=1, max_length=200)
+    delivered: bool = True
 
 
 # --------------------------------------------------------------------------- #
@@ -867,6 +880,31 @@ async def verify_bridge_auth(authorization: str = Header(...)) -> None:
         raise HTTPException(status_code=401, detail="Invalid authorization")
 
 
+_silo_turn_locks: dict[str, asyncio.Lock] = {}
+
+
+async def serialize_silo_turn(body: MessageRequest) -> AsyncGenerator[None, None]:
+    """Bound same-process concurrency; DB versions handle cross-replica races."""
+    sender = normalize_handle(body.phone)
+    key = (body.chat_id or body.phone) if body.is_group else (sender or body.phone)
+    lock = _silo_turn_locks.setdefault(key, asyncio.Lock())
+    settings = get_settings()
+    try:
+        await asyncio.wait_for(
+            lock.acquire(), timeout=settings.silo_concurrency_wait_seconds
+        )
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="another message in this chat is still processing",
+            headers={"Retry-After": "2"},
+        ) from exc
+    try:
+        yield
+    finally:
+        lock.release()
+
+
 # --------------------------------------------------------------------------- #
 # Router
 # --------------------------------------------------------------------------- #
@@ -883,6 +921,7 @@ def build_message_router() -> APIRouter:
     async def process_message(
         body: MessageRequest,
         session: AsyncSession = Depends(get_session),
+        _turn_slot: None = Depends(serialize_silo_turn),
     ) -> MessageResponse:
         """Process an incoming message through the Gemini tool-use loop."""
         from hal_orchestrator.services.curator import mark_activity
@@ -891,6 +930,12 @@ def build_message_router() -> APIRouter:
         http_client = get_http_client()
 
         user_text = body.text
+        if len(user_text) > settings.max_message_chars:
+            raise HTTPException(status_code=413, detail="message text is too large")
+        if len(body.images) > settings.max_images_per_message or any(
+            len(image.data) > settings.max_image_base64_chars for image in body.images
+        ):
+            raise HTTPException(status_code=413, detail="image payload is too large")
 
         # --- Silo resolution ---------------------------------------------- #
         # The silo key scopes ALL persistent state (conversation, profile,
@@ -907,6 +952,42 @@ def build_message_router() -> APIRouter:
                 chat_id = body.phone
                 sender_phone = None
         silo = (chat_id or body.phone) if is_group else (sender_phone or body.phone)
+
+        # Claim the bridge event before any model call or side effect. Older
+        # bridge payloads without message_id remain accepted for a staged rollout.
+        from hal_orchestrator.services.idempotency import begin as begin_inbound
+        from hal_orchestrator.services.idempotency import complete as complete_inbound
+
+        duplicate = await begin_inbound(
+            session,
+            message_id=body.message_id,
+            silo=silo,
+            payload=body.model_dump(mode="json"),
+        )
+        if duplicate is not None:
+            return MessageResponse.model_validate(duplicate)
+        if not body.message_id:
+            log.warning("message.missing_idempotency_key", silo=silo)
+
+        async def finish(response: MessageResponse) -> MessageResponse:
+            await complete_inbound(
+                session, body.message_id, response.model_dump(mode="json")
+            )
+            return response
+
+        # Group-context catalog: record that this member spoke in this group —
+        # the only provable membership signal we have (rosters can't be
+        # enumerated). Feeds their own 1:1 catalog/pull later; best-effort so
+        # a write hiccup here can never block the turn.
+        if is_group and sender_phone:
+            try:
+                from hal_orchestrator.services.group_catalog import (
+                    record_participation,
+                )
+
+                await record_participation(session, silo, sender_phone, body.group_name)
+            except Exception:
+                log.exception("message.group_catalog_record_failed", silo=silo)
 
         # Notify curator idle tracker so it backs off while users are active.
         # Internal (heartbeat) turns are not user activity.
@@ -929,14 +1010,14 @@ def build_message_router() -> APIRouter:
 
             await clear_conversation(session, silo)
             await session.commit()
-            return MessageResponse(reply="Conversation cleared.")
+            return await finish(MessageResponse(reply="Conversation cleared."))
 
         # Echo guard: one of HAL's own canned failure replies arriving as an
         # inbound message means the bridge bounced our send back. Drop it —
         # processing it creates the user/model error loop.
         if user_text.strip() in FALLBACK_REPLIES:
             log.warning("message.echo_suppressed", silo=silo)
-            return MessageResponse(reply="")
+            return await finish(MessageResponse(reply=""))
 
         # Per-user message quota. A metered (1:1, real, non-admin) user over the
         # monthly free cap gets a funding prompt instead of a model run — this is
@@ -968,7 +1049,7 @@ def build_message_router() -> APIRouter:
                     else quota.message
                 )
                 await session.commit()  # persist the admin-notify marker, if any
-                return MessageResponse(reply=reply_text)
+                return await finish(MessageResponse(reply=reply_text))
 
         # Load the silo's profile (the user's in 1:1; the group's shared notes
         # in groups) and build context. In groups we deliberately do NOT load
@@ -1016,7 +1097,7 @@ def build_message_router() -> APIRouter:
                 ).strip()
                 if last_text and user_text.strip() == last_text:
                     log.warning("message.self_echo_suppressed", silo=silo)
-                    return MessageResponse(reply="")
+                    return await finish(MessageResponse(reply=""))
             # Image-only messages persist a placeholder, mirroring the history
             # sanitizer — an empty text turn would be dropped on next load.
             visible = user_text.strip()
@@ -1040,7 +1121,7 @@ def build_message_router() -> APIRouter:
                 log.exception("message.mute_hooks_failed", silo=silo)
             await session.commit()
             log.info("message.muted_silent", silo=silo, until=str(group_muted_until))
-            return MessageResponse(reply="")
+            return await finish(MessageResponse(reply=""))
 
         user_context = build_user_context(
             silo=silo,
@@ -1104,6 +1185,21 @@ def build_message_router() -> APIRouter:
             except Exception:
                 log.exception("message.group_obs_failed", silo=silo)
 
+        # Group-context catalog — a compact index of the group chats THIS user
+        # is actually a member of (proven by having spoken there), with what's
+        # recently happening in each, so this DM can recognize plans made
+        # elsewhere instead of drawing a blank. 1:1 only, same one-way valve as
+        # group observations above. Best-effort like its siblings.
+        if not is_group:
+            try:
+                from hal_orchestrator.services.group_catalog import build_catalog
+
+                catalog = await build_catalog(session, silo)
+                if catalog:
+                    system_prompt += "\n\n" + catalog
+            except Exception:
+                log.exception("message.group_catalog_failed", silo=silo)
+
         # T0.5: auto-recall semantically relevant memories for THIS message so the
         # signals attach themselves, instead of relying on the model to call recall.
         # Keyed by silo: groups recall only the group's own shared memories.
@@ -1161,8 +1257,11 @@ def build_message_router() -> APIRouter:
                 "messages below)\n" + convo_summary
             )
 
-        # Load conversation history
-        history = await load_conversation(session, silo)
+        # Read without a long-lived row lock. The final write uses this version
+        # and merges safely if another replica completed a turn first.
+        conversation_snapshot = await load_conversation_snapshot(session, silo)
+        history = conversation_snapshot.history
+        conversation_version = conversation_snapshot.version
 
         # Onboarding stall nudge (1:1 only): if the user has sent a few messages
         # and we still don't have their name, escalate — get the name in one line
@@ -1187,7 +1286,7 @@ def build_message_router() -> APIRouter:
             ).strip()
             if last_text and user_text.strip() == last_text:
                 log.warning("message.self_echo_suppressed", silo=silo)
-                return MessageResponse(reply="")
+                return await finish(MessageResponse(reply=""))
 
         # Append user message (multimodal if images present). Prefix the text with
         # the local send time so the model can anchor each message in real time and
@@ -1233,7 +1332,14 @@ def build_message_router() -> APIRouter:
             sender_phone=sender_phone,
             is_group=is_group,
             images=[{"mime_type": img.mime_type, "data": img.data} for img in body.images],
+            user_text=user_text,
+            message_id=body.message_id,
+            internal=body.internal,
         )
+
+        # Release context-assembly reads and quota/profile writes before the
+        # potentially long provider/tool loop.
+        await session.commit()
 
         # --- Tool-use loop ---
         total_tool_calls = 0
@@ -1241,17 +1347,32 @@ def build_message_router() -> APIRouter:
         gemini_failed = False
         tool_counts: dict[str, int] = {}  # per-tool repeat guard (runaway detection)
         stalled = False  # ran out of iterations OR a tool looped — synthesize
+        tool_budget_exhausted = False
+        turn_deadline = time.monotonic() + settings.turn_timeout_seconds
 
         for iteration in range(settings.max_tool_iterations):
-            response = await call_gemini(
-                client=http_client,
-                settings=settings,
-                history=history,
-                tools=MAIN_TOOLS,
-                system=system_prompt,
-                model=body.model,  # None → settings.gemini_model (main loop)
-                thinking_level=body.thinking_level,
-            )
+            remaining = turn_deadline - time.monotonic()
+            if remaining <= 0:
+                log.warning("message.turn_timeout", silo=silo)
+                stalled = True
+                break
+            try:
+                response = await asyncio.wait_for(
+                    call_gemini(
+                        client=http_client,
+                        settings=settings,
+                        history=history,
+                        tools=model_tools(),
+                        system=system_prompt,
+                        model=body.model,
+                        thinking_level=body.thinking_level,
+                    ),
+                    timeout=remaining,
+                )
+            except TimeoutError:
+                log.warning("message.turn_timeout", silo=silo)
+                stalled = True
+                break
 
             candidates = (response or {}).get("candidates", [])
             content = candidates[0].get("content", {}) if candidates else {}
@@ -1288,6 +1409,17 @@ def build_message_router() -> APIRouter:
                     call = fc["functionCall"]
                     tool_name = call["name"]
                     tool_args = call.get("args", {})
+                    if total_tool_calls >= settings.max_tool_calls_per_turn:
+                        tool_budget_exhausted = True
+                        func_responses[idx] = {
+                            "functionResponse": {
+                                "name": tool_name,
+                                "response": {
+                                    "content": "Tool budget reached; synthesize the answer now."
+                                },
+                            }
+                        }
+                        continue
                     total_tool_calls += 1
                     tool_counts[tool_name] = tool_counts.get(tool_name, 0) + 1
                     trajectory_steps.append(
@@ -1306,6 +1438,13 @@ def build_message_router() -> APIRouter:
                         continue
 
                     result = await execute_tool(tool_name, tool_args, ctx)
+                    # Stateful tools own short transactions. This avoids holding
+                    # locks/connections during the model's next reasoning round.
+                    from hal_orchestrator.tools.specs import get_tool_spec
+
+                    spec = get_tool_spec(tool_name)
+                    if spec is not None and not spec.parallel_safe:
+                        await session.commit()
                     func_responses[idx] = {
                         "functionResponse": {
                             "name": tool_name,
@@ -1330,6 +1469,13 @@ def build_message_router() -> APIRouter:
 
                 # Add tool responses to history
                 history.append({"role": "user", "parts": [r for r in func_responses if r]})
+
+                if tool_budget_exhausted:
+                    log.warning(
+                        "message.tool_budget", silo=silo, limit=settings.max_tool_calls_per_turn
+                    )
+                    stalled = True
+                    break
 
                 # Runaway guard: one tool hammered repeatedly without converging
                 # → stop and synthesize from what we have (don't burn the budget).
@@ -1394,7 +1540,9 @@ def build_message_router() -> APIRouter:
                 # happened to run long.
                 log.warning("message.internal_stalled", silo=silo)
                 await session.commit()
-                return MessageResponse(reply="", tool_calls=total_tool_calls)
+                return await finish(
+                    MessageResponse(reply="", tool_calls=total_tool_calls)
+                )
             # The model kept calling tools (looped on one, or hit the cap) but
             # never wrote an answer. Instead of leaking "too many steps", make
             # ONE tools-disabled call to synthesize a real answer from what it
@@ -1409,7 +1557,7 @@ def build_message_router() -> APIRouter:
             # persisted. The breaker still counted it above.
             log.warning("message.internal_failed", silo=silo)
             await session.commit()
-            return MessageResponse(reply="", tool_calls=total_tool_calls)
+            return await finish(MessageResponse(reply="", tool_calls=total_tool_calls))
 
         if gemini_failed:
             # Failed turn: persist NOTHING model-visible — no dangling user
@@ -1438,12 +1586,15 @@ def build_message_router() -> APIRouter:
                 reply=reply[:80] if settings.log_message_content else None,
                 gemini_failed=True,
             )
-            return MessageResponse(
-                reply=reply,
-                tool_calls=total_tool_calls,
-                side_messages=[
-                    SideMessage(to=m["to"], text=m["text"]) for m in ctx.side_messages
-                ],
+            return await finish(
+                MessageResponse(
+                    reply=reply,
+                    tool_calls=total_tool_calls,
+                    side_messages=[
+                        SideMessage(id=m.get("id"), to=m["to"], text=m["text"])
+                        for m in ctx.side_messages
+                    ],
+                )
             )
 
         # Normalize markdown out of the final reply — iMessage renders **bold**,
@@ -1628,18 +1779,27 @@ def build_message_router() -> APIRouter:
             # Alert → persist a compact stub + the alert so HAL remembers what
             # it proactively said (that's also its dedup against re-alerting).
             if outbound_reply:
+                internal_entries = [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": (
+                                    f"[{stamp}] [heartbeat check — you noticed "
+                                    "something and texted the user:]"
+                                )
+                            }
+                        ],
+                    },
+                    {"role": "model", "parts": [{"text": reply}]},
+                ]
                 await save_conversation(
                     session,
                     silo,
-                    clean_history[:pre_turn_len]
-                    + [
-                        {
-                            "role": "user",
-                            "parts": [{"text": f"[{stamp}] [heartbeat check — you noticed something and texted the user:]"}],
-                        },
-                        {"role": "model", "parts": [{"text": reply}]},
-                    ],
+                    clean_history[:pre_turn_len] + internal_entries,
                     max_turns=settings.max_conversation_turns,
+                    expected_version=conversation_version,
+                    append_entries=internal_entries,
                 )
                 try:
                     from hal_orchestrator.services.history_search import archive_turn
@@ -1658,17 +1818,25 @@ def build_message_router() -> APIRouter:
                 alerted=bool(outbound_reply),
                 tool_calls=total_tool_calls,
             )
-            return MessageResponse(
-                reply=outbound_reply,
-                tool_calls=total_tool_calls,
-                side_messages=[
-                    SideMessage(to=m["to"], text=m["text"]) for m in ctx.side_messages
-                ],
+            return await finish(
+                MessageResponse(
+                    reply=outbound_reply,
+                    tool_calls=total_tool_calls,
+                    side_messages=[
+                        SideMessage(id=m.get("id"), to=m["to"], text=m["text"])
+                        for m in ctx.side_messages
+                    ],
+                )
             )
 
         # Save conversation
         await save_conversation(
-            session, silo, clean_history, max_turns=settings.max_conversation_turns
+            session,
+            silo,
+            clean_history,
+            max_turns=settings.max_conversation_turns,
+            expected_version=conversation_version,
+            append_entries=clean_history[pre_turn_len:],
         )
 
         # Best-effort post-hooks: durable archive (full-text/temporal recall) and
@@ -1727,19 +1895,25 @@ def build_message_router() -> APIRouter:
             tool_calls=total_tool_calls,
         )
 
-        return MessageResponse(
-            reply=outbound_reply,
-            tool_calls=total_tool_calls,
-            side_messages=[
-                SideMessage(to=m["to"], text=m["text"]) for m in ctx.side_messages
-            ],
-            # A suppressed reply (quiet sentinel / tact-gate drop) must not
-            # ship orphan attachments — a bare photo landing in a group HAL
-            # chose to stay silent in is worse than the interjection itself.
-            result_images=[
-                ResultImage(mime_type=img["mime_type"], data=img["data"], ext=img["ext"])
-                for img in ctx.result_images
-            ] if outbound_reply else [],
+        return await finish(
+            MessageResponse(
+                reply=outbound_reply,
+                tool_calls=total_tool_calls,
+                side_messages=[
+                    SideMessage(id=m.get("id"), to=m["to"], text=m["text"])
+                    for m in ctx.side_messages
+                ],
+                # A suppressed reply (quiet sentinel / tact-gate drop) must not
+                # ship orphan attachments.
+                result_images=[
+                    ResultImage(
+                        mime_type=img["mime_type"], data=img["data"], ext=img["ext"]
+                    )
+                    for img in ctx.result_images
+                ]
+                if outbound_reply
+                else [],
+            )
         )
 
     @router.get(
@@ -1759,16 +1933,45 @@ def build_message_router() -> APIRouter:
         "/api/outbox",
         dependencies=[Depends(verify_bridge_auth)],
     )
-    async def drain_outbox() -> dict:
-        """Return and clear all pending outbox messages (reminders, etc.)."""
-        import hal_orchestrator.state as state
+    async def drain_outbox(
+        ack: bool = True,
+        limit: int = 100,
+        session: AsyncSession = Depends(get_session),
+    ) -> dict:
+        """Claim durable deliveries.
 
-        messages = []
-        while not state.outbox.empty():
-            try:
+        ``ack=true`` preserves the legacy drain-on-read bridge. New bridges use
+        ``ack=false`` and POST /api/outbox/ack after AppleScript succeeds.
+        """
+        import hal_orchestrator.state as state
+        from hal_orchestrator.services.delivery import DurableOutbox, claim
+
+        messages = await claim(session, limit=limit, auto_ack=ack)
+        await session.commit()
+        # Preserve startup/test queue compatibility.
+        if isinstance(state.outbox, DurableOutbox):
+            while not state.outbox.empty():
                 messages.append(state.outbox.get_nowait())
-            except Exception:
-                break
         return {"messages": messages}
+
+    @router.post(
+        "/api/outbox/ack",
+        dependencies=[Depends(verify_bridge_auth)],
+    )
+    async def ack_outbox(
+        body: OutboxAckRequest,
+        session: AsyncSession = Depends(get_session),
+    ) -> dict:
+        import uuid
+
+        from hal_orchestrator.services.delivery import acknowledge
+
+        try:
+            message_ids = [uuid.UUID(value) for value in body.message_ids]
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid outbox message id") from exc
+        count = await acknowledge(session, message_ids, delivered=body.delivered)
+        await session.commit()
+        return {"acknowledged": count}
 
     return router

@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 
 import httpx
 
 from ag_common.config import HalOrchestratorConfig
+from hal_orchestrator.services.delivery import outbox as outbox
 
 settings = HalOrchestratorConfig()
 http_client: httpx.AsyncClient | None = None
-
-# Outbox for messages the bridge should send (reminders, async notifications)
-# Each item: {"to": "+1...", "text": "message"}
-outbox: asyncio.Queue[dict] = asyncio.Queue()
 
 # Cross-daemon proactive-send registry: silo -> when HAL last texted this silo
 # UNPROMPTED (heartbeat alert, reminder, cron delivery, helpful brief/ping,

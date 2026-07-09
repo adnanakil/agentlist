@@ -202,6 +202,7 @@ async def _check_and_send_reminders(
                 HalReminder.due_at <= now,
             )
             .limit(50)
+            .with_for_update(skip_locked=True)
         )
         result = await session.execute(stmt)
         due_reminders = result.scalars().all()
@@ -223,6 +224,16 @@ async def _check_and_send_reminders(
                             reminder.text = verdict.text
 
                 reminder.sent = True
+
+                if not drop:
+                    from hal_orchestrator.services.delivery import enqueue
+
+                    await enqueue(
+                        session,
+                        to=reminder.phone,
+                        text=f"Reminder: {reminder.text}",
+                        idempotency_key=f"reminder:{reminder.id}",
+                    )
 
                 # Handle recurrence (independent of send/drop — a daily reminder
                 # that's moot today should still come back tomorrow).
@@ -368,7 +379,7 @@ async def _gate_reminder(
         )
         if events:
             forecast = forecast_next(events, tz, now)
-            situation_parts.append(format_forecast(forecast, tz, family.baby_name))
+            situation_parts.append(format_forecast(forecast, tz, family.baby_name, now))
 
     # Recent conversation in the reminder's silo (best-effort). Newest last so
     # the model reads it chronologically.
@@ -435,7 +446,6 @@ async def _send_reminder_via_bridge(
     import hal_orchestrator.state as state
 
     message = f"Reminder: {reminder.text}"
-    await state.outbox.put({"to": reminder.phone, "text": message})
     state.mark_proactive_send(reminder.phone)
     log.info(
         "reminder.queued",

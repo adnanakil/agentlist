@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.models import HalConversation
@@ -11,22 +14,45 @@ from ag_db.models import HalConversation
 log = structlog.get_logger()
 
 
-async def load_conversation(session: AsyncSession, phone: str) -> list[dict]:
-    """Load conversation history for a phone number. Uses SELECT ... FOR UPDATE
-    to prevent concurrent modifications."""
-    stmt = (
-        select(HalConversation)
-        .where(HalConversation.phone == phone)
-        .with_for_update()
+@dataclass(frozen=True)
+class ConversationSnapshot:
+    history: list[dict]
+    version: int
+
+
+async def load_conversation_snapshot(
+    session: AsyncSession, phone: str
+) -> ConversationSnapshot:
+    """Read a conversation without holding a lock across model/network work."""
+    result = await session.execute(
+        select(HalConversation.history, HalConversation.version).where(
+            HalConversation.phone == phone
+        )
     )
-    result = await session.execute(stmt)
-    conv = result.scalar_one_or_none()
+    row = result.one_or_none()
+    if row is None:
+        return ConversationSnapshot([], 0)
+    history = row.history if isinstance(row.history, list) else []
+    return ConversationSnapshot(validate_history(history), int(row.version or 0))
 
-    if conv is None:
-        return []
 
-    history = conv.history if isinstance(conv.history, list) else []
-    return validate_history(history)
+async def load_conversation(session: AsyncSession, phone: str) -> list[dict]:
+    """Compatibility wrapper returning only the validated history."""
+    return (await load_conversation_snapshot(session, phone)).history
+
+
+def _trim_history(history: list[dict], max_turns: int) -> list[dict]:
+    """Trim without splitting a functionCall/functionResponse pair."""
+    if len(history) <= max_turns * 2:
+        return history
+    start = len(history) - (max_turns * 2)
+    while start < len(history):
+        parts = history[start].get("parts", [])
+        if any("functionCall" in p or "functionResponse" in p for p in parts):
+            start += 1
+        else:
+            break
+    return history[start:]
 
 
 async def save_conversation(
@@ -34,23 +60,69 @@ async def save_conversation(
     phone: str,
     history: list[dict],
     max_turns: int = 40,
+    *,
+    expected_version: int | None = None,
+    append_entries: list[dict] | None = None,
+    _retry_count: int = 0,
 ) -> None:
-    """Save conversation history, trimming to max_turns if needed."""
-    # Trim old turns (keep most recent).
-    # Find a safe trim point that doesn't split a functionCall/functionResponse pair.
-    if len(history) > max_turns * 2:
-        start = len(history) - (max_turns * 2)
-        # Advance past any functionResponse or functionCall entries at the cut point
-        while start < len(history):
-            parts = history[start].get("parts", [])
-            has_fc = any("functionCall" in p for p in parts)
-            has_fr = any("functionResponse" in p for p in parts)
-            if has_fc or has_fr:
-                start += 1
-            else:
-                break
-        history = history[start:]
+    """Save history with optional optimistic append/merge semantics."""
+    history = _trim_history(history, max_turns)
 
+    if expected_version is not None:
+        updated = (
+            await session.execute(
+                update(HalConversation)
+                .where(
+                    HalConversation.phone == phone,
+                    HalConversation.version == expected_version,
+                )
+                .values(
+                    history=history,
+                    message_count=HalConversation.message_count + 1,
+                    version=HalConversation.version + 1,
+                )
+                .returning(HalConversation.id)
+            )
+        ).scalar_one_or_none()
+        if updated is not None:
+            return
+
+        if expected_version == 0:
+            inserted = (
+                await session.execute(
+                    insert(HalConversation)
+                    .values(
+                        phone=phone,
+                        history=history,
+                        message_count=1,
+                        version=1,
+                    )
+                    .on_conflict_do_nothing(index_elements=["phone"])
+                    .returning(HalConversation.id)
+                )
+            ).scalar_one_or_none()
+            if inserted is not None:
+                return
+
+        # Another turn won the version race. Preserve its result and append only
+        # this turn's new entries, then retry against the fresh version.
+        if _retry_count >= 3:
+            raise RuntimeError(f"conversation update contention for {phone}")
+        fresh = await load_conversation_snapshot(session, phone)
+        additions = append_entries if append_entries is not None else history
+        merged = validate_history([*fresh.history, *additions])
+        await save_conversation(
+            session,
+            phone,
+            merged,
+            max_turns=max_turns,
+            expected_version=fresh.version,
+            append_entries=additions,
+            _retry_count=_retry_count + 1,
+        )
+        return
+
+    # Legacy callers still get a short row lock around the write itself.
     stmt = (
         select(HalConversation)
         .where(HalConversation.phone == phone)
@@ -64,11 +136,13 @@ async def save_conversation(
             phone=phone,
             history=history,
             message_count=1,
+            version=1,
         )
         session.add(conv)
     else:
         conv.history = history
         conv.message_count = conv.message_count + 1
+        conv.version = conv.version + 1
 
     await session.flush()
 

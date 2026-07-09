@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 import structlog
@@ -65,7 +66,12 @@ async def tool_send_message(args: dict, ctx: ToolContext) -> str:
 
     import hal_orchestrator.state as _state
 
-    ctx.side_messages.append({"to": to, "text": text})
+    action_id = None
+    message_id = getattr(ctx, "message_id", None)
+    if message_id:
+        digest = hashlib.sha256(f"{ctx.phone}\n{to}\n{text}".encode()).hexdigest()[:24]
+        action_id = f"send:{message_id}:{digest}"
+    ctx.side_messages.append({"id": action_id, "to": to, "text": text})
     log.info(
         "send_message.queued",
         to=to,

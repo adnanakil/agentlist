@@ -1,0 +1,1 @@
+"""HAL HTTP middleware."""

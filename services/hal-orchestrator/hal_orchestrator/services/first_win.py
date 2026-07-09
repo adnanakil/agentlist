@@ -21,6 +21,7 @@ import structlog
 
 from ag_common.config import HalOrchestratorConfig
 from ag_db import session as db_session
+from hal_orchestrator.services.idempotency import internal_message_id
 
 log = structlog.get_logger()
 
@@ -102,6 +103,7 @@ async def run_first_win(
         resp = await http.post(
             f"http://127.0.0.1:{port}/api/message",
             json={
+                "message_id": internal_message_id("first-win", silo, gathered),
                 "phone": silo,
                 "text": build_first_win_prompt(gathered),
                 "internal": True,

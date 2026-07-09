@@ -32,6 +32,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import structlog
 from sqlalchemy import select
+from hal_orchestrator.services.idempotency import internal_message_id
 
 from ag_common.config import HalOrchestratorConfig
 from ag_db import session as db_session
@@ -197,6 +198,7 @@ async def _fire(
     resp = await http.post(
         f"http://127.0.0.1:{port}/api/message",
         json={
+            "message_id": internal_message_id(f"helpful-{mode}", silo, prompt),
             "phone": silo,
             "text": prompt,
             "internal": True,

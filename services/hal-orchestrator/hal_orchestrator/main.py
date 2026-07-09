@@ -14,10 +14,11 @@ import httpx
 import structlog
 import uvicorn
 from fastapi import FastAPI
-
-from ag_db.session import create_engine_and_session
+from sqlalchemy import text
 
 import hal_orchestrator.state as state
+from ag_db.session import create_engine_and_session
+from hal_orchestrator.middleware.request_size import ContentLengthLimitMiddleware
 from hal_orchestrator.routes.admin import build_admin_router
 from hal_orchestrator.routes.card import build_card_router
 from hal_orchestrator.routes.google import build_google_router
@@ -29,10 +30,10 @@ from hal_orchestrator.services.baby_watch import baby_watch_loop
 from hal_orchestrator.services.cron import run_cron_checker
 from hal_orchestrator.services.curator import curator_loop
 from hal_orchestrator.services.followup import followup_loop
-from hal_orchestrator.services.profile_enricher import profile_enricher_loop
 from hal_orchestrator.services.growth import growth_loop
 from hal_orchestrator.services.heartbeat import heartbeat_loop
 from hal_orchestrator.services.helpful import helpful_loop
+from hal_orchestrator.services.profile_enricher import profile_enricher_loop
 from hal_orchestrator.services.reminders import run_reminder_checker
 from hal_orchestrator.services.skill_synthesizer import skill_synthesizer_loop
 from hal_orchestrator.services.summarizer import summarizer_loop
@@ -85,6 +86,10 @@ def _validate_production_config(settings) -> None:
             problems.append("ENCRYPTION_KEY is not a valid Fernet key")
     else:
         problems.append("ENCRYPTION_KEY is not set (OAuth tokens can't be encrypted)")
+    if not getattr(settings, "card_signing_key", ""):
+        problems.append("CARD_SIGNING_KEY is not set (card links share the bridge secret)")
+    if getattr(settings, "hal_process_role", "all") not in ("api", "worker", "all"):
+        problems.append("HAL_PROCESS_ROLE must be api, worker, or all")
 
     is_prod = (settings.environment or "").lower() in ("production", "prod")
     if problems and is_prod:
@@ -94,6 +99,86 @@ def _validate_production_config(settings) -> None:
         )
     for p in problems:
         log.warning("hal_orchestrator.config_warning", issue=p)
+
+
+def _worker_coroutines(settings, http_client) -> tuple:
+    return (
+        run_reminder_checker(settings, http_client),
+        curator_loop(settings, http_client),
+        summarizer_loop(settings, http_client),
+        profile_enricher_loop(settings, http_client),
+        run_cron_checker(settings, http_client),
+        skill_synthesizer_loop(settings, http_client),
+        growth_loop(settings, http_client),
+        baby_watch_loop(settings, http_client),
+        heartbeat_loop(settings, http_client),
+        helpful_loop(settings, http_client),
+        run_watch_checker(settings, http_client),
+        followup_loop(settings, http_client),
+    )
+
+
+async def _run_worker_set(settings, http_client, leader_connection=None) -> None:
+    """Run one daemon set until cancellation, connection loss, or loop death."""
+    tasks = [asyncio.create_task(loop) for loop in _worker_coroutines(settings, http_client)]
+    log.info("hal_orchestrator.worker_leader", tasks=len(tasks))
+    try:
+        while True:
+            done, _ = await asyncio.wait(
+                tasks,
+                timeout=10,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if done:
+                for task in done:
+                    if task.cancelled():
+                        continue
+                    error = task.exception()
+                    if error is not None:
+                        log.error(
+                            "hal_orchestrator.worker_loop_failed",
+                            error=str(error),
+                        )
+                    else:
+                        log.error("hal_orchestrator.worker_loop_stopped")
+                return
+            if leader_connection is not None:
+                try:
+                    await leader_connection.execute(text("SELECT 1"))
+                    await leader_connection.commit()
+                except Exception:
+                    log.exception("hal_orchestrator.worker_leadership_lost")
+                    return
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def _worker_supervisor(engine, settings, http_client) -> None:
+    """Continuously elect and supervise the single proactive worker leader."""
+    while True:
+        try:
+            if not settings.worker_leader_lock_enabled:
+                await _run_worker_set(settings, http_client)
+            else:
+                async with engine.connect() as connection:
+                    acquired = await connection.scalar(
+                        text(
+                            "SELECT pg_try_advisory_lock("
+                            "hashtext('hal-background-worker-v1'))"
+                        )
+                    )
+                    await connection.commit()
+                    if acquired:
+                        await _run_worker_set(settings, http_client, connection)
+                    else:
+                        log.info("hal_orchestrator.worker_standby")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("hal_orchestrator.worker_supervisor_failed")
+        await asyncio.sleep(10)
 
 
 @asynccontextmanager
@@ -110,87 +195,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         timeout=httpx.Timeout(settings.gemini_timeout_seconds + 10)
     )
 
-    # Start reminder background task
-    reminder_task = asyncio.create_task(
-        run_reminder_checker(settings, state.http_client)
-    )
-
-    # Start skills curator background task (no-op until interval+idle gates pass)
-    curator_task = asyncio.create_task(
-        curator_loop(settings, state.http_client)
-    )
-
-    # Start conversation summarizer background task (~20 min cadence)
-    summarizer_task = asyncio.create_task(
-        summarizer_loop(settings, state.http_client)
-    )
-
-    # Start profile enricher background task (~30 min cadence): distills durable
-    # preferences/needs (1:1) or interests/dynamics/goals (group) into the
-    # silo's structured profile, so the agent knows each user/group better over time.
-    enricher_task = asyncio.create_task(
-        profile_enricher_loop(settings, state.http_client)
-    )
-
-    # Agentic cron (scheduled full agent turns) + auto-skill synthesizer.
-    cron_task = asyncio.create_task(run_cron_checker(settings, state.http_client))
-    synth_task = asyncio.create_task(
-        skill_synthesizer_loop(settings, state.http_client)
-    )
-
-    # Nightly growth loop: grade every turn in-silo, aggregate de-identified
-    # verdicts, self-author playbook notes + skills, maintain the feature
-    # backlog, verify past improvements (GROWTH.md).
-    reflection_task = asyncio.create_task(
-        growth_loop(settings, state.http_client)
-    )
-
-    # Baby nap-cap watcher: unprompted nudge when a logged nap runs long.
-    baby_watch_task = asyncio.create_task(
-        baby_watch_loop(settings, state.http_client)
-    )
-
-    # Heartbeat: per-silo anticipation checks (upcoming plans vs traffic /
-    # weather / expected emails). Silent by default; texts only when useful.
-    heartbeat_task = asyncio.create_task(
-        heartbeat_loop(settings, state.http_client)
-    )
-
-    # Helpful mode: OPT-IN proactive concierge — a daily situation/location-aware
-    # brief (weather, local events, news, agenda) + a few capped same-day pings.
-    helpful_task = asyncio.create_task(
-        helpful_loop(settings, state.http_client)
-    )
-
-    # Watch checker: re-polls notify-when conditions on a cheap model and fires
-    # once when true. Silent until then (WATCH_FEATURE_SPEC.md).
-    watch_task = asyncio.create_task(
-        run_watch_checker(settings, state.http_client)
-    )
-
-    # Post-event follow-up sweep: the backward-looking sibling of the heartbeat
-    # ("how was the lunch I planned for you?"). No-op unless followup_enabled.
-    followup_task = asyncio.create_task(
-        followup_loop(settings, state.http_client)
-    )
+    tasks: list[asyncio.Task] = []
+    run_workers = settings.hal_process_role in ("worker", "all")
+    if run_workers:
+        tasks.append(
+            asyncio.create_task(
+                _worker_supervisor(engine, settings, state.http_client)
+            )
+        )
 
     yield
 
     log.info("hal_orchestrator.shutdown")
-    for task in (
-        reminder_task,
-        curator_task,
-        summarizer_task,
-        enricher_task,
-        cron_task,
-        synth_task,
-        reflection_task,
-        baby_watch_task,
-        heartbeat_task,
-        helpful_task,
-        watch_task,
-        followup_task,
-    ):
+    for task in tasks:
         task.cancel()
         try:
             await task
@@ -211,6 +228,9 @@ def create_app() -> FastAPI:
         title="HAL Orchestrator",
         version="0.1.0",
         lifespan=lifespan,
+    )
+    application.add_middleware(
+        ContentLengthLimitMiddleware, max_bytes=state.settings.max_request_bytes
     )
 
     # Health check

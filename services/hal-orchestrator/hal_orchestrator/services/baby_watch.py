@@ -45,8 +45,6 @@ async def baby_watch_loop(
 
 
 async def _check_naps() -> None:
-    import hal_orchestrator.state as state
-
     now = datetime.now(timezone.utc)
     async for session in get_session():
         families = (await session.execute(select(HalFamily))).scalars().all()
@@ -94,7 +92,14 @@ async def _check_naps() -> None:
                 f"{fmt_duration(cap_min)} cap. Might be time to wake him so bedtime stays on "
                 f"track. If he already woke, just tell me when."
             )
-            await state.outbox.put({"to": last.silo, "text": text})
+            from hal_orchestrator.services.delivery import enqueue
+
+            await enqueue(
+                session,
+                to=last.silo,
+                text=text,
+                idempotency_key=f"baby-nap-cap:{last.id}",
+            )
             family.state = {**(family.state or {}), "nap_nudge_event_id": str(last.id)}
             await session.flush()
             log.info(

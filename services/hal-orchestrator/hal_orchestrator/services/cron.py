@@ -149,11 +149,12 @@ async def _check_and_run(
             select(HalCronJob)
             .where(HalCronJob.active == True, HalCronJob.next_run_at <= now)  # noqa: E712
             .limit(20)
+            .with_for_update(skip_locked=True)
         )
         due = (await session.execute(stmt)).scalars().all()
         for job in due:
             try:
-                await _run_job(settings, http, job)
+                await _run_job(settings, http, job, session=session)
                 job.last_status = "ok"
             except Exception as exc:
                 log.exception("cron.run_failed", job_id=str(job.id))
@@ -184,7 +185,10 @@ def should_retry_blank(prompt: str, reply: str | None) -> bool:
 
 
 async def _run_job(
-    settings: HalOrchestratorConfig, http: httpx.AsyncClient, job: HalCronJob
+    settings: HalOrchestratorConfig,
+    http: httpx.AsyncClient,
+    job: HalCronJob,
+    session=None,
 ) -> None:
     """Run the job's prompt through the full agent pipeline (internal call),
     then enqueue the reply (+ any side messages) to the outbox."""
@@ -192,10 +196,14 @@ async def _run_job(
 
     port = os.environ.get("PORT", "8005")
     url = f"http://127.0.0.1:{port}/api/message"
+    scheduled_for = getattr(job, "next_run_at", None)
+    occurrence = scheduled_for.isoformat() if scheduled_for is not None else str(job.id)
     payload: dict = {
+        "message_id": f"cron:{job.id}:{occurrence}",
         "phone": job.sender_phone or job.phone,
         "text": job.prompt,
         "is_group": job.is_group,
+        "internal": True,
     }
     if job.is_group and job.chat_id:
         payload["chat_id"] = job.chat_id
@@ -237,11 +245,33 @@ async def _run_job(
                 log.warning("cron.slash_blank", job_id=str(job.id), prompt=job.prompt[:40])
 
         if reply:
-            await state.outbox.put({"to": to, "text": reply})
+            if session is not None:
+                from hal_orchestrator.services.delivery import enqueue
+
+                await enqueue(
+                    session,
+                    to=to,
+                    text=reply,
+                    idempotency_key=f"cron:{job.id}:{occurrence}:reply",
+                )
+            else:
+                await state.outbox.put({"to": to, "text": reply})
             state.mark_proactive_send(to)
             log.info("cron.delivered", job_id=str(job.id), to=to, chars=len(reply))
-        for sm in data.get("side_messages", []):
+        for index, sm in enumerate(data.get("side_messages", [])):
             if sm.get("to") and sm.get("text"):
-                await state.outbox.put({"to": sm["to"], "text": sm["text"]})
+                if session is not None:
+                    from hal_orchestrator.services.delivery import enqueue
+
+                    await enqueue(
+                        session,
+                        to=sm["to"],
+                        text=sm["text"],
+                        idempotency_key=(
+                            f"cron:{job.id}:{occurrence}:side:{index}"
+                        ),
+                    )
+                else:
+                    await state.outbox.put({"to": sm["to"], "text": sm["text"]})
     finally:
         state.end_proactive(to)

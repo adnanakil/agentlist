@@ -40,6 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ag_common.config import HalOrchestratorConfig
 from ag_db import session as db_session
 from ag_db.models import HalFollowup, HalMessage, HalTurn
+from hal_orchestrator.services.idempotency import internal_message_id
 
 from hal_orchestrator.prompts.system import USER_TZ, resolve_tz
 from hal_orchestrator.services.heartbeat import in_active_hours
@@ -361,6 +362,7 @@ async def _draft_and_send(
     port = os.environ.get("PORT", "8005")
     is_group = is_group_id(silo)
     payload: dict = {
+        "message_id": internal_message_id("followup", silo, prompt),
         "phone": silo,
         "text": prompt,
         "is_group": is_group,
