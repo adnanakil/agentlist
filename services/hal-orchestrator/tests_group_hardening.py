@@ -226,15 +226,15 @@ from hal_orchestrator.services.baby_card import (  # noqa: E402
     card_url, verify_card_token,
 )
 u = card_url("https://x.example", "chat783794800760957500", "s3cr3t")
-check("card url points at /card.png", "/card.png?s=" in u and "sig=" in u and "t=" in u)
+check("card url points at /card.png", "/card.png?s=" in u and "sig=" in u and "e=" in u)
 import urllib.parse as _up  # noqa: E402
 q = _up.parse_qs(_up.urlparse(u).query)
 check("valid token decodes back to the silo",
-      verify_card_token(q["s"][0], q["sig"][0], "s3cr3t") == "chat783794800760957500")
+      verify_card_token(q["s"][0], q["sig"][0], int(q["e"][0]), "s3cr3t") == "chat783794800760957500")
 check("wrong secret rejected",
-      verify_card_token(q["s"][0], q["sig"][0], "other") is None)
+      verify_card_token(q["s"][0], q["sig"][0], int(q["e"][0]), "other") is None)
 check("tampered sig rejected",
-      verify_card_token(q["s"][0], "deadbeef", "s3cr3t") is None)
+      verify_card_token(q["s"][0], "deadbeef", int(q["e"][0]), "s3cr3t") is None)
 
 # --------------------------------------------------------------------------- #
 print("proactive in-flight registry (the 07-07 double-brief race):")
@@ -278,6 +278,46 @@ from hal_orchestrator.services import playbook as pb  # noqa: E402
 
 check("scopes defined", pb.SCOPES == ("dm", "group", "all"))
 check("cache is per-scope dict", isinstance(pb._cache.get("blocks"), dict))
+
+# --------------------------------------------------------------------------- #
+print("parking — parsing + formatting (no network):")
+from zoneinfo import ZoneInfo  # noqa: E402
+
+from hal_orchestrator.services import parking as pk  # noqa: E402
+
+_tz = ZoneInfo("America/New_York")
+check("plate normalized (spaces/dashes/case)", pk.normalize_plate("gkm 75-41") == "GKM7541")
+check("empty plate → empty string", pk.normalize_plate("  ") == "")
+check("_money parses string dollars", pk._money({"amount_due": "1,150"}, "amount_due") == 1150.0)
+check("_money missing → 0", pk._money({}, "amount_due") == 0.0)
+
+_rows = [
+    {"summons_number": "111", "violation": "DOUBLE PARKING", "issue_date": "11/13/2017",
+     "fine_amount": "115", "penalty_amount": "10", "interest_amount": "0",
+     "amount_due": "125", "issuing_agency": "TRAFFIC",
+     "summons_image": {"url": "http://nycserv/1"}},
+    {"summons_number": "222", "violation": "FIRE HYDRANT", "issue_date": "01/02/2018",
+     "fine_amount": "115", "amount_due": "115", "issuing_agency": "TRAFFIC"},
+]
+check("total_due sums amount_due", pk.total_due(_rows) == 240.0)
+
+_one = pk.format_violation(_rows[0], _tz, index=1)
+check("violation title-cased", "Double Parking" in _one)
+check("amount due shown", "$125.00 due" in _one)
+check("summons number shown", "Summons #111" in _one)
+check("issue date formatted", "Nov 13, 2017" in _one)
+check("fine/penalty breakdown", "fine $115" in _one and "penalty $10" in _one)
+check("interest of 0 omitted", "interest" not in _one)
+check("view-ticket link included", "http://nycserv/1" in _one)
+
+_all = pk.format_violations(_rows, _tz, "gkm 7541", "NY")
+check("header has count + total + plate", "2 open violations for NY plate GKM7541" in _all
+      and "$240.00 total due" in _all)
+check("pay url in footer", pk.PAY_URL in _all)
+check("empty → no-open-violations message",
+      "No open parking/camera violations" in pk.format_violations([], _tz, "ABC1234", "NY"))
+check("singular grammar for one", "1 open violation for" in pk.format_violations(
+    _rows[:1], _tz, "ABC1234", "NY"))
 
 # --------------------------------------------------------------------------- #
 print()

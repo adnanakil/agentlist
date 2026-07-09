@@ -63,6 +63,12 @@ Rules:
 - You MAY record a clear, repeated pattern as a preference (e.g. "usually asks
   for TL;DRs", "books aisle seats"), but do NOT fabricate or over-infer from thin
   evidence. High confidence only.
+- BABY feed/nap/wake CLOCK TIMES and daily feeding/nap schedules DRIFT every day
+  and are tracked live in the baby log (the baby tool). Do NOT record them here,
+  and REMOVE any already in the profile (e.g. a "Feeds: 10:30 AM, 1:30 PM" line) —
+  they go stale and make the assistant cite the wrong time. The assistant reads
+  current baby times from baby(forecast). Durable baby CARE facts are fine (e.g.
+  "naps ~45min", "naps better in the stroller", "tummy time ~30min after feeds").
 - You are ALSO given MEMORIES: a log of timestamped events/facts saved over a
   long period. Mine them for LONGER-TERM patterns the recent messages alone
   can't show — recurring quantities/timings (e.g. "naps usually run ~1h10"),

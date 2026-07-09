@@ -192,7 +192,6 @@ async def tool_delegate(args: dict, ctx: ToolContext) -> str:
     """
     agent_name = args.get("agent", "")
     task = args.get("task", "")
-    context = args.get("context", "")
 
     if not agent_name or not task:
         return "Error: 'agent' and 'task' are required"

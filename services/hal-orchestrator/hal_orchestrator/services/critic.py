@@ -21,10 +21,8 @@ from __future__ import annotations
 import json
 import re
 
-import httpx
 import structlog
 
-from ag_common.config import HalOrchestratorConfig
 from hal_orchestrator.services.gemini import call_gemini
 
 log = structlog.get_logger()

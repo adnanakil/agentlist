@@ -173,24 +173,33 @@ def render_card_png(data: dict) -> bytes:
 # --------------------------------------------------------------------------- #
 
 
-def _sign(silo: str, secret: str) -> str:
-    return hmac.new(secret.encode(), silo.encode(), hashlib.sha256).hexdigest()[:32]
+def _sign(silo: str, expires: int, secret: str) -> str:
+    payload = f"hal-card-v1\n{silo}\n{expires}".encode()
+    return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()[:32]
 
 
-def card_url(base_url: str, silo: str, secret: str) -> str:
+def card_url(
+    base_url: str, silo: str, secret: str, ttl_seconds: int = 15 * 60
+) -> str:
     s = base64.urlsafe_b64encode(silo.encode()).decode().rstrip("=")
-    return f"{base_url.rstrip('/')}/card.png?s={s}&sig={_sign(silo, secret)}&t={int(time.time())}"
+    now = int(time.time())
+    expires = now + max(60, ttl_seconds)
+    sig = _sign(silo, expires, secret)
+    return f"{base_url.rstrip('/')}/card.png?s={s}&e={expires}&sig={sig}&t={now}"
 
 
-def verify_card_token(s: str, sig: str, secret: str) -> str | None:
+def verify_card_token(s: str, sig: str, expires: int, secret: str) -> str | None:
     """Return the silo if the signature is valid, else None. Prevents anyone
     from rendering an arbitrary silo's card by guessing the URL."""
     try:
+        if expires < int(time.time()):
+            return None
         pad = "=" * (-len(s) % 4)
         silo = base64.urlsafe_b64decode(s + pad).decode()
     except Exception:
         return None
-    return silo if hmac.compare_digest(_sign(silo, secret), sig or "") else None
+    expected = _sign(silo, expires, secret)
+    return silo if hmac.compare_digest(expected, sig or "") else None
 
 
 async def render_for_silo(session, silo: str) -> bytes | None:

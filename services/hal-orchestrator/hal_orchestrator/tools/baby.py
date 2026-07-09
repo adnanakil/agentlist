@@ -127,7 +127,10 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
                 from hal_orchestrator.services.baby_card import card_url
 
                 card_link = card_url(
-                    ctx.settings.public_base_url, ctx.phone, ctx.settings.hal_bridge_secret
+                    ctx.settings.public_base_url,
+                    ctx.phone,
+                    ctx.settings.card_signing_key or ctx.settings.hal_bridge_secret,
+                    ctx.settings.card_url_ttl_seconds,
                 )
             except Exception:
                 log.exception("baby.card_on_log_failed", silo=ctx.phone)
@@ -144,7 +147,7 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             lines = [
                 f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
                 "",
-                format_forecast(forecast, tz, baby),
+                format_forecast(forecast, tz, baby, now),
             ]
         if auto_set:
             lines.append("Auto-set reminders (standing preference): " + "; ".join(auto_set))
@@ -159,7 +162,7 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         )
         if not events:
             return f"No events logged yet for {baby}."
-        return format_forecast(forecast_next(events, tz, now), tz, baby)
+        return format_forecast(forecast_next(events, tz, now), tz, baby, now)
 
     if action == "card":
         # The visual baby-monitor card. Delivered as a signed image URL that
@@ -175,7 +178,12 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             has_data = False
         if not has_data:
             return f"No events logged yet for {baby} — nothing to put on a card."
-        url = card_url(ctx.settings.public_base_url, ctx.phone, ctx.settings.hal_bridge_secret)
+        url = card_url(
+            ctx.settings.public_base_url,
+            ctx.phone,
+            ctx.settings.card_signing_key or ctx.settings.hal_bridge_secret,
+            ctx.settings.card_url_ttl_seconds,
+        )
         return (
             f"[{baby}'s status card is ready. Put THIS URL on its OWN LINE in your "
             f"reply so it renders as an image:\n{url}\nAdd at most ONE short "
@@ -199,7 +207,7 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             out = [f"{baby} — {period} ({d.strftime('%a %b %-d')}):",
                    format_day_summary(summary, tz, baby)]
             if period == "today":
-                out += ["", format_forecast(forecast_next(events, tz, now), tz, baby)]
+                out += ["", format_forecast(forecast_next(events, tz, now), tz, baby, now)]
             return "\n".join(out)
 
         # week: per-day digest + patterns + regression flags
@@ -237,12 +245,17 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         )
         if not events_raw:
             return f"No events in the last 3 days for {baby}."
+        from hal_orchestrator.services.baby import fmt_ago
+
         lines = [f"{baby} — recent events:"]
         for e in events_raw[-20:]:
             local = e.event_at.astimezone(tz)
             note = f" ({e.note})" if e.note else ""
+            # Relative time computed in code — the model must never do clock
+            # math itself (it narrated a 2-minute-old nap as "2 hours ago").
             lines.append(
-                f"- {local.strftime('%a %-I:%M %p')}: {e.kind.replace('_', ' ')}{note}"
+                f"- {local.strftime('%a %-I:%M %p')} ({fmt_ago(e.event_at, now)}): "
+                f"{e.kind.replace('_', ' ')}{note}"
             )
         return "\n".join(lines)
 

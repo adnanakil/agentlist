@@ -33,6 +33,7 @@ from ag_db import session as db_session
 from ag_db.models import HalTurn
 
 from hal_orchestrator.prompts.system import USER_TZ, resolve_tz
+from hal_orchestrator.services.idempotency import internal_message_id
 
 log = structlog.get_logger()
 
@@ -134,14 +135,33 @@ _DELIVERY_RE = re.compile(
 )
 
 
+def _without_snippet(line: str) -> str:
+    """Strip the trailing snippet parenthetical google.py appends to mail
+    lines ("- [id: ...] from ... — <subject>  (<snippet>)"), leaving only the
+    "[id: ...] from <sender> — <subject>" portion. Real carrier mail puts the
+    delivery event in the SUBJECT ("Delivered: your package"); newsletter
+    marketing copy that happens to say "delivered straight to your inbox"
+    lives in the SNIPPET. Matching the whole line conflates the two, so any
+    regex meant to detect a real delivery must only ever see the subject."""
+    idx = line.find("  (")
+    return line[:idx] if idx != -1 else line
+
+
 def delivery_directive(gathered: str) -> str:
     """A hard MUST-surface directive when `gathered` (the pre-fetched inbox)
     shows a package actually arrived; '' otherwise. Appended AFTER the gathered
     block so it's the last thing the model reads — countering the strong
     'most heartbeats must be silent' default for this one high-value case.
-    Lines already marked as surfaced (identity dedup) don't count."""
+    Lines already marked as surfaced (identity dedup) don't count.
+
+    Only the subject/sender portion of each mail line is scanned — the
+    trailing snippet is stripped first (see `_without_snippet`) — so a
+    newsletter's marketing snippet ("delivered straight to your inbox") can
+    never trip this, only an actual delivery notice in the subject can."""
     fresh = "\n".join(
-        ln for ln in (gathered or "").splitlines() if SEEN_MARK not in ln
+        _without_snippet(ln)
+        for ln in (gathered or "").splitlines()
+        if SEEN_MARK not in ln
     )
     if not _DELIVERY_RE.search(fresh):
         return ""
@@ -208,7 +228,10 @@ def ids_covered_by_alert(gathered: str, reply: str, directive_fired: bool) -> li
             continue
         if len(_line_words(ln) & reply_words) >= 2:
             covered.append(m.group(1))
-        elif directive_fired and _DELIVERY_RE.search(ln):
+        # Subject-only here too (see _without_snippet): a newsletter whose
+        # SNIPPET happens to say "delivered" must not get marked "covered" as
+        # a delivery just because the directive fired for some OTHER line.
+        elif directive_fired and _DELIVERY_RE.search(_without_snippet(ln)):
             covered.append(m.group(1))
     return covered
 
@@ -251,6 +274,20 @@ async def _mark_seen(silo: str, ids: list[str], prior: dict[str, str]) -> None:
         await session.commit()
         break
     log.info("heartbeat.marked_seen", silo=silo, n=len(ids))
+
+
+def directive_bypass(directive: str, reply: str) -> bool:
+    """Whether a fired delivery directive earns the right to bypass the
+    proactive-send cooldown for THIS reply. A directive can fire on a false
+    positive (e.g. a newsletter snippet — mitigated but not eliminated by
+    subject-only scanning), so the bypass must also be confirmed by the
+    model's own reply actually reading like a delivery alert. If the
+    directive fired but the reply is generic (no delivery language), treat it
+    as if there were no directive: the cooldown re-check applies as normal.
+    This is safe even if a REAL delivery gets suppressed here — its gmail id
+    is never marked seen in that case, so the next heartbeat (~15 min later)
+    re-alerts on it."""
+    return bool(directive) and bool(_DELIVERY_RE.search(reply or ""))
 
 
 def in_active_hours(now_local: datetime, settings: HalOrchestratorConfig) -> bool:
@@ -386,6 +423,7 @@ async def _beat(
             return
 
     payload: dict = {
+        "message_id": internal_message_id("heartbeat", silo, prompt),
         "phone": silo,
         "text": prompt,
         "is_group": is_group,
@@ -413,8 +451,12 @@ async def _beat(
         # heartbeat was gathering + thinking (the cron marks "sent" only at
         # delivery, ~16s after this heartbeat first checked the cooldown). Re-
         # check right before sending so a brief that just went out suppresses
-        # this duplicate. A hard delivery directive still bypasses.
-        if not directive:
+        # this duplicate. The directive only bypasses this re-check when the
+        # model's OWN reply also reads like a delivery alert — a directive
+        # that fired on a false positive (newsletter, misfire) must not force
+        # out an unrelated reply on top of a brief that just went out; see
+        # directive_bypass().
+        if not directive_bypass(directive, reply):
             since = state.minutes_since_proactive_send(silo)
             if since is not None and since < settings.heartbeat_alert_cooldown_minutes:
                 log.info("heartbeat.cooldown_skip_late", silo=silo, minutes=round(since))

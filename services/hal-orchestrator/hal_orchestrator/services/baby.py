@@ -534,6 +534,20 @@ def fmt_duration(minutes: int | None) -> str:
     return f"{h}h {m:02d}m" if h else f"{m}m"
 
 
+def fmt_ago(at: datetime | None, now: datetime) -> str:
+    """Relative time ('2m ago' / 'in 43m') computed in CODE, not by the model.
+    Models reliably misdo clock arithmetic (a nap logged 2 minutes ago got
+    narrated as 'about 2 hours ago'), so every clock time the baby tool emits
+    carries this annotation and the prompt tells the model to quote it."""
+    if at is None:
+        return ""
+    minutes = round((now - at).total_seconds() / 60)
+    if abs(minutes) < 1:
+        return "just now"
+    word = "{} ago" if minutes > 0 else "in {}"
+    return word.format(fmt_duration(abs(minutes)))
+
+
 def format_day_summary(summary: dict, tz: ZoneInfo, baby: str) -> str:
     lines: list[str] = []
     if summary["morning_wake"]:
@@ -563,28 +577,36 @@ def format_day_summary(summary: dict, tz: ZoneInfo, baby: str) -> str:
     return "\n".join(lines)
 
 
-def format_forecast(forecast: dict, tz: ZoneInfo, baby: str) -> str:
+def format_forecast(
+    forecast: dict, tz: ZoneInfo, baby: str, now: datetime | None = None
+) -> str:
+    # Every clock time gets a code-computed relative ("2:33 PM — 2m ago") when
+    # `now` is provided, so the model quotes relatives instead of doing clock
+    # math itself (see fmt_ago).
+    def _t(at) -> str:
+        base = fmt_time(at, tz)
+        rel = fmt_ago(at, now) if now is not None else ""
+        return f"{base} — {rel}" if rel else base
+
     lines: list[str] = []
     state = forecast["state"]
     if state in ("napping", "night"):
-        since = fmt_time(forecast["asleep_since"], tz)
         what = "down for the night" if state == "night" else "napping"
-        lines.append(f"{baby} is {what} (since {since})")
+        lines.append(f"{baby} is {what} (since {_t(forecast['asleep_since'])})")
         if forecast["expected_wake"]:
-            lines.append(f"Expected wake: ~{fmt_time(forecast['expected_wake'], tz)}")
+            lines.append(f"Expected wake: ~{_t(forecast['expected_wake'])}")
     else:
         lines.append(f"{baby} is awake")
         if forecast["next_nap"]:
-            lines.append(f"Next nap: ~{fmt_time(forecast['next_nap'], tz)}")
+            lines.append(f"Next nap: ~{_t(forecast['next_nap'])}")
         elif forecast["expected_bedtime"]:
             lines.append(
-                f"Next sleep is bedtime: ~{fmt_time(forecast['expected_bedtime'], tz)}"
+                f"Next sleep is bedtime: ~{_t(forecast['expected_bedtime'])}"
             )
     if forecast["next_feed"]:
-        feed_str = fmt_time(forecast["next_feed"], tz)
-        lines.append(f"Next feed: ~{feed_str}")
+        lines.append(f"Next feed: ~{_t(forecast['next_feed'])}")
     if forecast["expected_bedtime"] and forecast["state"] != "night":
-        lines.append(f"Bedtime: ~{fmt_time(forecast['expected_bedtime'], tz)}")
+        lines.append(f"Bedtime: ~{_t(forecast['expected_bedtime'])}")
     p = forecast["patterns"]
     if p["nap_samples"] >= 3:
         lines.append(

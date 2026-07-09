@@ -7,7 +7,6 @@ weekday at 8am text me my morning brief", "summarize my unread email at 6pm".
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 
 from hal_orchestrator.services.cron import (

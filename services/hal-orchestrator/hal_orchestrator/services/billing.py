@@ -134,11 +134,45 @@ async def handle_event(session, settings, event: dict) -> str | None:
     return None
 
 
+async def _alert_unmatched_payment(settings, obj: dict, *, has_ref: bool) -> None:
+    """A REAL payment we couldn't tie to a user (missing/invalid
+    client_reference_id). Ping the admin so a paying user is never silently
+    stranded — this is the exact failure that hid a broken pay link for a full
+    billing cycle (the bridge was mangling `client_reference_id` -> null). Best
+    effort: an alert must never turn a 200 into a webhook retry storm.
+    """
+    admin = getattr(settings, "admin_phone", "")
+    if not admin:
+        return
+    try:
+        details = obj.get("customer_details") or {}
+        amount = obj.get("amount_total")
+        amt = f"${amount / 100:.2f}" if isinstance(amount, (int, float)) else "?"
+        who = details.get("email") or details.get("name") or obj.get("customer") or "unknown"
+        reason = "reference didn't verify" if has_ref else "no client_reference_id on the session"
+        import hal_orchestrator.state as state
+
+        await state.outbox.put(
+            {
+                "to": admin,
+                "text": (
+                    f"⚠️ Stripe payment ({amt}) I couldn't match to a user — {reason}. "
+                    f"Payer: {who}. Session {obj.get('id', '?')}. "
+                    "Unlock them manually and check the pay link."
+                ),
+            }
+        )
+        log.warning("stripe.unmatched_payment_alerted", amount=amt, has_ref=has_ref)
+    except Exception:
+        log.exception("stripe.unmatched_alert_failed")
+
+
 async def _handle_checkout(session, settings, obj: dict) -> str | None:
     ref = obj.get("client_reference_id") or (obj.get("metadata") or {}).get("silo")
     silo = verify_billing_ref(settings, ref) if ref else None
     if not silo:
         log.warning("stripe.no_valid_silo", has_ref=bool(ref))
+        await _alert_unmatched_payment(settings, obj, has_ref=bool(ref))
         return None
 
     from hal_orchestrator.services.profiles import get_profile

@@ -97,8 +97,10 @@ from datetime import datetime, timedelta, timezone
 from hal_orchestrator.services.heartbeat import (
     SEEN_MARK,
     _prune_seen,
+    _without_snippet,
     annotate_seen,
     delivery_directive,
+    directive_bypass,
     ids_covered_by_alert,
 )
 
@@ -135,6 +137,54 @@ seen = {
 }
 pruned = _prune_seen(seen, now)
 check("prune keeps fresh, drops stale+garbage", set(pruned) == {"fresh"})
+
+# --------------------------------------------------------------------------- #
+print("\nheartbeat: subject-only delivery scan (2026-07-09 dup-brief fix):")
+
+newsletter_gathered = (
+    "Recent unread email:\n"
+    "- [id: news001] from The Daily Scoop — Your weekly roundup"
+    "  (Fresh headlines delivered straight to your inbox every morning!)"
+)
+check("newsletter SNIPPET saying 'delivered' does NOT fire the directive",
+      delivery_directive(newsletter_gathered) == "")
+
+subject_delivery_gathered = (
+    "Recent unread email:\n"
+    "- [id: pkg001] from Amazon — Delivered: your package"
+    "  (Thanks for shopping with us — see other deals inside)"
+)
+check("SUBJECT saying 'Delivered: your package' fires the directive",
+      delivery_directive(subject_delivery_gathered) != "")
+
+subject_delivery_gathered2 = (
+    "Recent unread email:\n"
+    "- [id: pkg002] from UPS — Your package was delivered"
+    "  (Track future shipments in the UPS app)"
+)
+check("SUBJECT 'Your package was delivered' fires the directive",
+      delivery_directive(subject_delivery_gathered2) != "")
+
+subject_delivery_seen = annotate_seen(
+    subject_delivery_gathered, {"pkg001": "2026-07-01T10:00:00+00:00"}
+)
+check("subject-delivery line already SEEN_MARK'd -> directive does NOT fire",
+      delivery_directive(subject_delivery_seen) == "")
+
+check("_without_snippet strips the trailing parenthetical",
+      _without_snippet(
+          "- [id: x] from A — Subject here  (some snippet (with parens))"
+      ) == "- [id: x] from A — Subject here")
+check("_without_snippet no-ops a line with no snippet",
+      _without_snippet("- [id: x] from A — Subject here") == "- [id: x] from A — Subject here")
+
+print("\nheartbeat: directive_bypass requires delivery-worded reply:")
+check("directive + delivery-worded reply -> bypass True",
+      directive_bypass("‼️ some directive", "Heads up — your package was delivered!"))
+check("directive + generic weather/plans reply -> bypass False",
+      not directive_bypass("‼️ some directive", "Looks like rain around 3pm, bring an umbrella."))
+check("no directive -> bypass False even with delivery-worded reply",
+      not directive_bypass("", "Your package was delivered."))
 
 # --------------------------------------------------------------------------- #
 print("\nhonest web_search failures:")

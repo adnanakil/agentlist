@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.session import get_session
-
 from hal_orchestrator.services.baby_card import render_for_silo, verify_card_token
 from hal_orchestrator.state import get_settings
 
@@ -25,10 +24,15 @@ def build_card_router() -> APIRouter:
 
     @router.get("/card.png")
     async def card_png(
-        s: str, sig: str, t: str = "", session: AsyncSession = Depends(get_session)
+        s: str,
+        sig: str,
+        e: int,
+        t: str = "",
+        session: AsyncSession = Depends(get_session),
     ) -> Response:
         settings = get_settings()
-        silo = verify_card_token(s, sig, settings.hal_bridge_secret)
+        signing_key = settings.card_signing_key or settings.hal_bridge_secret
+        silo = verify_card_token(s, sig, e, signing_key)
         if not silo:
             raise HTTPException(status_code=403, detail="bad signature")
         try:

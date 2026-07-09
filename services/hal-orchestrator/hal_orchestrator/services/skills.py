@@ -37,7 +37,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ag_db.models import HalUserSkill, utcnow
+from ag_db.models import HalUserSkill
 
 log = structlog.get_logger()
 
