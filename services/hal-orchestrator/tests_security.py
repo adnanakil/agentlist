@@ -131,9 +131,13 @@ from hal_orchestrator.main import _validate_production_config
 good_key = Fernet.generate_key().decode()
 
 
-def _prod(bridge, enc, env="production"):
+def _prod(bridge, enc, env="production", card="card-secret"):
     cfg = SimpleNamespace(
-        hal_bridge_secret=bridge, encryption_key=enc, environment=env
+        hal_bridge_secret=bridge,
+        encryption_key=enc,
+        environment=env,
+        card_signing_key=card,
+        hal_process_role="all",
     )
     try:
         _validate_production_config(cfg)
@@ -145,6 +149,7 @@ def _prod(bridge, enc, env="production"):
 check("prod refuses missing bridge secret", _prod("", good_key) == "refused")
 check("prod refuses missing encryption key", _prod("s", "") == "refused")
 check("prod refuses invalid fernet key", _prod("s", "not-a-key") == "refused")
+check("prod refuses missing card signing key", _prod("s", good_key, card="") == "refused")
 check("prod boots with valid config", _prod("s", good_key) == "ok")
 check("dev only warns (never refuses)", _prod("", "", env="development") == "ok")
 

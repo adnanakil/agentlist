@@ -439,6 +439,13 @@ MAIN_TOOLS: list[dict] = [
                             "type": "string",
                             "description": "Message text",
                         },
+                        "confirmation_token": {
+                            "type": "string",
+                            "description": (
+                                "Server-issued token from a prior blocked send. Use "
+                                "only after the user's next message explicitly confirms."
+                            ),
+                        },
                     },
                     "required": ["to", "text"],
                 },
@@ -621,6 +628,46 @@ MAIN_TOOLS: list[dict] = [
                 },
             },
             {
+                "name": "parking",
+                "description": (
+                    "Look up (and hand off payment for) NYC parking & camera "
+                    "violations by license plate. action=lookup returns every "
+                    "OPEN ticket for a plate from NYC's official live dataset — "
+                    "summons number, what it was for, amount due, issue date, "
+                    "a link to the ticket image — plus the total owed and the "
+                    "pay link. Use this whenever the user mentions a parking "
+                    "ticket / violation / 'what do I owe the city'. If you don't "
+                    "have the plate, ASK for it (and the state if it's not a NY "
+                    "plate). action=pay hands the user the exact summons + pay "
+                    "link to tap-pay (HAL can't submit payment autonomously "
+                    "yet). This is public data (anyone can look up any plate at "
+                    "the city site)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["lookup", "pay"],
+                            "description": "Default lookup.",
+                        },
+                        "plate": {
+                            "type": "string",
+                            "description": "License plate (spaces/dashes ignored, case-insensitive).",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "2-letter plate registration state (default NY).",
+                        },
+                        "summons_number": {
+                            "type": "string",
+                            "description": "For action=pay: the specific summons to pay (omit to hand off all open tickets).",
+                        },
+                    },
+                    "required": ["plate"],
+                },
+            },
+            {
                 "name": "group_quiet",
                 "description": (
                     "Group chats only. When a member tells you to butt out, keep "
@@ -707,6 +754,14 @@ MAIN_TOOLS: list[dict] = [
                         "since": {"type": "string", "description": "ISO start of time range"},
                         "until": {"type": "string", "description": "ISO end of time range"},
                         "limit": {"type": "integer", "description": "Max results (default 10)"},
+                        "group": {
+                            "type": "string",
+                            "description": (
+                                "Group chat id from the context catalog — search THAT "
+                                "group's history instead of this conversation (only "
+                                "groups you're in)."
+                            ),
+                        },
                     },
                 },
             },
@@ -1077,10 +1132,6 @@ MAIN_TOOLS: list[dict] = [
 
 def get_agent_tools(tool_names: list[str]) -> list[dict]:
     """Build a Gemini tools array containing only the specified tool names."""
-    all_decls = MAIN_TOOLS[0]["function_declarations"]
-    filtered = [d for d in all_decls if d["name"] in tool_names]
+    from hal_orchestrator.tools.specs import model_tools
 
-    if not filtered:
-        return []
-
-    return [{"function_declarations": filtered}]
+    return model_tools(tool_names)
