@@ -1,12 +1,13 @@
-"""grocery tool — one tap-to-shop link from a recipe or shopping list.
+"""shopping tool — turn any list of things to buy into tap-to-shop links.
 
 First drop-in plugin: declaration, policy, timeout, and handler ship together
-here. `list` (default) leads with an Instacart link when a key exists; without
-one it builds a single Amazon add-to-cart link for the shippable items and
-Whole Foods search links for the fresh ones. `amazon_cart` forces the Amazon
-route for everything; `recipe` builds an Instacart recipe page; `wholefoods_links`
-is the per-item Whole Foods fallback. The clients and parsing live in
-services/grocery.py.
+here. It covers BOTH groceries and general products (books, electronics,
+household). `amazon_cart` puts any product list through Amazon and returns ONE
+link that fills the user's real cart. `list` (default) is the grocery flow: an
+Instacart link when a key exists, else the Amazon cart split (shippable items
+-> one Amazon link, fresh items -> Whole Foods search links). `recipe` builds
+an Instacart recipe page; `wholefoods_links` is the per-item Whole Foods
+fallback. The module lives at services/grocery.py (path kept for git history).
 
 Instacart's developer program stopped accepting applications (checked
 2026-07-10; the old ~/.hal/.instacart_key is revoked — 401 on both MCP
@@ -26,23 +27,28 @@ from hal_orchestrator.tools.specs import ToolSpec, register_tool
 log = structlog.get_logger()
 
 _DECLARATION = {
-    "name": "grocery",
+    "name": "shopping",
     "description": (
-        "Turn a recipe or shopping list into ONE tap-to-shop link. "
-        "action=list (default): items (a pasted recipe/list blob or a list) -> "
-        "ONE tappable link that fills the user's real Amazon cart with the "
-        "shippable items (they may be asked to sign in to Amazon once, then the "
-        "items carry through), plus Whole Foods search links for the fresh/"
-        "perishable items. (If an Instacart key is configured it leads with an "
-        "Instacart list instead.) action=amazon_cart: put EVERYTHING through the "
-        "Amazon cart link (use for 'add these to my Amazon cart'), Whole Foods "
-        "links only for anything not found. action=recipe: title + ingredients "
-        "(+ optional instructions) -> a shoppable recipe page. "
-        "action=wholefoods_links: per-item Whole Foods storefront search links, "
-        "ONLY when the user insists on Whole Foods specifically. Works in both "
-        "DMs and group chats ('add this to our grocery list'). Always safe to "
-        "call — it degrades to search links, never an error; relay whichever "
-        "reply it gives."
+        "Turn any list of things to buy into ONE tap-to-shop link — groceries "
+        "OR general products (books, electronics, household). "
+        "action=amazon_cart: put a list of products through Amazon and return "
+        "ONE tappable link that fills the user's REAL Amazon cart (they may be "
+        "asked to sign in to Amazon once, then the items carry through). Use for "
+        "'add Project Hail Mary and a desk lamp to my cart'. Prefix an item with "
+        "a count for quantity ('2x AA batteries'); Whole Foods links only for "
+        "anything not found. "
+        "action=list (default) is the grocery flow: items (a pasted recipe/list "
+        "blob or a list) -> if an Instacart key is configured, a shareable "
+        "Instacart list (works with the user's local stores); otherwise the "
+        "shippable items become ONE Amazon cart link and the fresh/perishable "
+        "ones become Whole Foods search links. Use for 'put this smoothie recipe "
+        "in my cart'. "
+        "action=recipe: title + ingredients (+ optional instructions) -> a "
+        "shoppable recipe page. action=wholefoods_links: per-item Whole Foods "
+        "storefront search links, ONLY when the user insists on Whole Foods "
+        "specifically. Works in both DMs and group chats. Always safe to call — "
+        "it degrades to search links, never an error; relay whichever reply it "
+        "gives."
     ),
     "parameters": {
         "type": "object",
@@ -55,9 +61,10 @@ _DECLARATION = {
             "items": {
                 "type": "string",
                 "description": (
-                    "The groceries — a pasted recipe/list blob or a comma/"
-                    "newline-separated list. Used by list, amazon_cart, and "
-                    "wholefoods_links."
+                    "The things to buy — a pasted recipe/list blob or a comma/"
+                    "newline-separated list (groceries for list/wholefoods_links; "
+                    "any products for amazon_cart, e.g. 'Project Hail Mary, "
+                    "desk lamp, 2x AA batteries')."
                 ),
             },
             "title": {
@@ -146,25 +153,42 @@ async def _list_reply(items: list[str], ctx: ToolContext) -> str:
 
 
 async def _amazon_cart_reply(items: list[str], ctx: ToolContext) -> str:
-    """Everything through Amazon discovery (no perishable routing); WF links for
-    misses. All-WF fallback if nothing hits."""
-    cart_pairs, _fresh, misses = await _discover_buckets(items, ctx, route_perishables=False)
+    """Any product list -> ONE Amazon cart link. No perishable routing, no
+    grocery parsing; a leading '2x' becomes the item quantity. Misses (and the
+    nothing-found case) get general Amazon search links."""
+    # (search name, quantity, original) — strip a leading count off the name.
+    triples = [(grocery.strip_multiplier(it), grocery.cart_quantity(it), it) for it in items]
+    names = [n for n, _, _ in triples]
+    found = await grocery.discover_asins(ctx, names) if names else {}
+
+    cart_pairs: list[tuple[str, int]] = []
+    misses: list[str] = []
+    for name, qty, _original in triples:
+        cand = found.get(name)
+        if cand:
+            cart_pairs.append((cand.asin, qty))
+        else:
+            misses.append(name)
+
     if not cart_pairs:
-        log.info("grocery.amazon_no_hits", items=len(items))
-        return _wholefoods_reply(items)
+        log.info("shopping.amazon_no_hits", items=len(items))
+        return (
+            "Couldn't match those on Amazon directly — here are Amazon search "
+            "links, tap each to add:\n\n" + grocery.amazon_search_links(names)
+        )
 
     tag = (getattr(ctx.settings, "amazon_associate_tag", "") or "").strip()
-    log.info("grocery.amazon_cart", cart=len(cart_pairs), misses=len(misses))
+    log.info("shopping.amazon_cart", cart=len(cart_pairs), misses=len(misses))
     blocks = [_amazon_cart_block(cart_pairs, tag)]
     if misses:
         blocks.append(
-            "These weren't on Amazon — Whole Foods search links instead:\n"
-            + grocery.wholefoods_search_links(misses)
+            "Couldn't match these exactly — Amazon search links instead:\n"
+            + grocery.amazon_search_links(misses)
         )
     return "\n\n".join(blocks)
 
 
-async def tool_grocery(args: dict, ctx: ToolContext) -> str:
+async def tool_shopping(args: dict, ctx: ToolContext) -> str:
     action = (args.get("action") or "list").strip().lower()
 
     if action == "wholefoods_links":
@@ -174,7 +198,8 @@ async def tool_grocery(args: dict, ctx: ToolContext) -> str:
         return _wholefoods_reply(items, insisted=True)
 
     if action == "amazon_cart":
-        items = grocery.coerce_items(args.get("items"))
+        # General products: keep titles intact (no ingredient parsing).
+        items = grocery.coerce_products(args.get("items"))
         if not items:
             return "Send me the items and I'll build one Amazon cart link."
         return await _amazon_cart_reply(items, ctx)
@@ -220,14 +245,14 @@ async def tool_grocery(args: dict, ctx: ToolContext) -> str:
             "Tap it, pick your store, and add every ingredient at once."
         )
 
-    return f"Unknown grocery action: {action}. Use: list, recipe, wholefoods_links."
+    return f"Unknown shopping action: {action}. Use: list, amazon_cart, recipe, wholefoods_links."
 
 
 register_tool(
     ToolSpec(
-        name="grocery",
+        name="shopping",
         declaration=_DECLARATION,
-        handler="hal_orchestrator.tools.plugins.grocery:tool_grocery",
+        handler="hal_orchestrator.tools.plugins.grocery:tool_shopping",
         scopes=frozenset({"dm", "group"}),
         risk="write",
         timeout_seconds=60,  # covers the concurrent ASIN search batch

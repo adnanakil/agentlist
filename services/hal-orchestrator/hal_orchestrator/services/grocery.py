@@ -33,6 +33,8 @@ MCP_URL = "https://mcp.instacart.com/mcp"
 
 # Amazon storefront search scoped to the Whole Foods Market merchant.
 _WF_SEARCH = "https://www.amazon.com/s?k={q}&i=wholefoods"
+# General Amazon storefront search (any product) — for non-grocery misses.
+_AMAZON_SEARCH = "https://www.amazon.com/s?k={q}"
 
 class GroceryError(Exception):
     """The Instacart link couldn't be built (transport, API, or missing URL)."""
@@ -161,11 +163,49 @@ def coerce_items(value) -> list[str]:
     return parse_ingredient_lines(str(value))
 
 
+def coerce_products(value) -> list[str]:
+    """Split a general buy-list into item strings WITHOUT grocery parsing.
+
+    For non-grocery Amazon items (books, electronics), where the ingredient
+    parser would do the wrong thing: a title with "or" ("Do Androids Dream…")
+    must not be truncated as an alternation, and a title that reads like a
+    quantity must not be dropped as a non-item. A list passes through cleaned;
+    a string splits on newlines/semicolons/commas only. Dedupes, keeps order.
+    """
+    if value is None:
+        return []
+    raw_parts = (
+        [str(v) for v in value]
+        if isinstance(value, (list, tuple))
+        else re.split(r"[\n\r;,]+", str(value))
+    )
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_parts:
+        line = _clean(_BULLET.sub("", raw))
+        key = line.lower()
+        if line and key not in seen:
+            seen.add(key)
+            out.append(line)
+    return out
+
+
 def wholefoods_search_links(items: list[str]) -> str:
     """Per-item Whole Foods storefront search links, as a compact numbered list."""
     return "\n".join(
         f"{i}. {item}: {_WF_SEARCH.format(q=quote_plus(item))}"
         for i, item in enumerate(coerce_items(items), 1)
+    )
+
+
+def amazon_search_links(items: list[str]) -> str:
+    """Per-item general Amazon search links (any product, not Whole Foods).
+
+    Takes item names as-is (no grocery coercion) — the caller has already split
+    a general product list via coerce_products."""
+    return "\n".join(
+        f"{i}. {item}: {_AMAZON_SEARCH.format(q=quote_plus(item))}"
+        for i, item in enumerate((s for s in items if s), 1)
     )
 
 
@@ -392,12 +432,26 @@ def extract_asins(url: str) -> list[str]:
     return _ASIN_RE.findall(url or "")
 
 
+def _is_streaming_hit(title: str, url: str) -> bool:
+    """A Prime Video / streaming result (a rental, not a cart item). Amazon
+    reuses /dp/ ASINs for video, so a book search can surface the movie."""
+    low_t = (title or "").lower()
+    low_u = (url or "").lower()
+    return (
+        "prime video" in low_t
+        or "instant video" in low_t
+        or low_t.startswith("watch ")
+        or "/gp/video/" in low_u
+    )
+
+
 def score_candidate(item_name: str, title: str, url: str) -> float:
     """Score how well a search hit's title matches the item (higher = better).
 
     Base is the fraction of the item's tokens present in the title; a canonical
-    /dp/ URL gets a small bonus, and a missing head noun (obvious mismatch) a
-    penalty so unrelated products score at or below zero.
+    /dp/ URL gets a small bonus, a missing head noun (obvious mismatch) a
+    penalty, and a streaming/Prime-Video result a decisive penalty — so
+    unrelated or non-shoppable hits score at or below zero.
     """
     item_toks = _tokens(item_name)
     if not item_toks:
@@ -409,6 +463,8 @@ def score_candidate(item_name: str, title: str, url: str) -> float:
         score += 0.1
     if item_toks[-1] not in title_toks:  # head noun absent -> likely wrong item
         score -= 0.3
+    if _is_streaming_hit(title, url):  # a movie/stream is not a cart item
+        score -= 1.5
     return round(score, 4)
 
 
@@ -433,6 +489,13 @@ def cart_quantity(item: str) -> int:
         n = int(m.group(1))
         return n if 1 <= n <= 12 else 1
     return 1
+
+
+def strip_multiplier(item: str) -> str:
+    """Drop a leading '2x '/'3× ' count so the search query is the product name
+    ('2x AA batteries' -> 'AA batteries'). The count is read by cart_quantity."""
+    stripped = _MULTIPLIER_RE.sub("", item or "", count=1).strip()
+    return stripped or (item or "").strip()
 
 
 def is_perishable(item: str) -> bool:

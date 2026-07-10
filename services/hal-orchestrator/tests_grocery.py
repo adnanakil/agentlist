@@ -29,10 +29,12 @@ from hal_orchestrator.services.grocery import (  # noqa: E402
     _parse_mcp_body,
     _structure_line,
     amazon_cart_url,
+    amazon_search_links,
     best_asin_candidate,
     cart_quantity,
     coerce_items,
     coerce_line_items,
+    coerce_products,
     extract_asins,
     is_perishable,
     parse_ingredient_lines,
@@ -40,6 +42,7 @@ from hal_orchestrator.services.grocery import (  # noqa: E402
     recipe_arguments,
     score_candidate,
     shopping_list_arguments,
+    strip_multiplier,
     wholefoods_search_links,
 )
 
@@ -329,7 +332,7 @@ except GroceryError as exc:
 # --------------------------------------------------------------------------- #
 print("tool handler — empty key is graceful, WF fallback needs no key:")
 
-from hal_orchestrator.tools.plugins.grocery import tool_grocery  # noqa: E402
+from hal_orchestrator.tools.plugins.grocery import tool_shopping  # noqa: E402
 
 
 def _ctx(key=""):
@@ -340,7 +343,7 @@ def _ctx(key=""):
     )
 
 
-no_key = asyncio.run(tool_grocery({"action": "list", "items": "oats, chia"}, _ctx("")))
+no_key = asyncio.run(tool_shopping({"action": "list", "items": "oats, chia"}, _ctx("")))
 check(
     "empty key -> automatic Whole Foods fallback links",
     "amazon.com/s?k=oats&i=wholefoods" in no_key and "amazon.com/s?k=chia&i=wholefoods" in no_key,
@@ -349,7 +352,7 @@ check(
 check("empty-key message never leaks 'error'/'exception'", "error" not in no_key.lower() and "exception" not in no_key.lower(), no_key)
 
 no_key_recipe = asyncio.run(
-    tool_grocery({"action": "recipe", "title": "Smoothie", "ingredients": "oats, chia"}, _ctx(""))
+    tool_shopping({"action": "recipe", "title": "Smoothie", "ingredients": "oats, chia"}, _ctx(""))
 )
 check(
     "empty key -> recipe also falls back to WF links",
@@ -358,7 +361,7 @@ check(
 )
 
 wf_reply = asyncio.run(
-    tool_grocery({"action": "wholefoods_links", "items": "oats, chia"}, _ctx(""))
+    tool_shopping({"action": "wholefoods_links", "items": "oats, chia"}, _ctx(""))
 )
 check("wholefoods_links works with no Instacart key", "amazon.com/s?k=oats&i=wholefoods" in wf_reply, wf_reply)
 
@@ -411,6 +414,16 @@ check(
     score_candidate("rolled oats", "Stainless Steel Water Bottle", _dp) <= 0,
     score_candidate("rolled oats", "Stainless Steel Water Bottle", _dp),
 )
+check(
+    "a Prime Video / streaming hit is rejected (not a cart item)",
+    score_candidate("Project Hail Mary", "Watch Project Hail Mary | Prime Video", _dp) <= 0,
+    score_candidate("Project Hail Mary", "Watch Project Hail Mary | Prime Video", _dp),
+)
+check(
+    "a real 'Apple Watch' product is NOT caught by the streaming filter",
+    score_candidate("apple watch", "Apple Watch Series 9 GPS 45mm", _dp) > 0,
+    score_candidate("apple watch", "Apple Watch Series 9 GPS 45mm", _dp),
+)
 
 _results = [
     {"title": "Roasted Sunflower Seeds Snack", "url": "https://www.amazon.com/dp/B0011111AA"},
@@ -462,6 +475,45 @@ check("peanut butter stays on Amazon (pantry override)", is_perishable("1 tbsp p
 check("soy milk is pantry-stable (override) -> discovery", is_perishable("250 ml soy milk") is False)
 
 # --------------------------------------------------------------------------- #
+print("General-product coercion — no ingredient parsing, quantity prefix, search links:")
+
+check(
+    "a book title with 'or' is NOT truncated as an alternation",
+    coerce_products("Do Androids Dream of Electric Sheep") == ["Do Androids Dream of Electric Sheep"],
+    coerce_products("Do Androids Dream of Electric Sheep"),
+)
+check(
+    "'whey, casein, or soy' is truncated by the GROCERY parser (contrast)",
+    coerce_items("whey, casein, or soy protein powder") == ["whey protein powder"],
+    coerce_items("whey, casein, or soy protein powder"),
+)
+check(
+    "a list passes through intact (commas inside a title preserved)",
+    coerce_products(["Eats, Shoots & Leaves", "desk lamp"]) == ["Eats, Shoots & Leaves", "desk lamp"],
+    coerce_products(["Eats, Shoots & Leaves", "desk lamp"]),
+)
+check(
+    "a comma/newline string splits into products (no non-item filtering)",
+    coerce_products("Project Hail Mary, desk lamp\n2x AA batteries")
+    == ["Project Hail Mary", "desk lamp", "2x AA batteries"],
+    coerce_products("Project Hail Mary, desk lamp\n2x AA batteries"),
+)
+check("coerce_products dedupes case-insensitively", coerce_products("lamp, Lamp, LAMP") == ["lamp"])
+
+check("strip_multiplier drops a leading '2x'", strip_multiplier("2x AA batteries") == "AA batteries")
+check("strip_multiplier drops a leading '3× '", strip_multiplier("3× notebooks") == "notebooks")
+check("strip_multiplier leaves a plain name alone", strip_multiplier("desk lamp") == "desk lamp")
+check(
+    "strip_multiplier does NOT eat a grocery amount ('170 g')",
+    strip_multiplier("170 g oats") == "170 g oats",
+)
+
+_asl = amazon_search_links(["Project Hail Mary", "desk lamp"])
+check("amazon_search_links: general storefront (no wholefoods scope)", "i=wholefoods" not in _asl, _asl)
+check("amazon_search_links: url-encoded query", "k=Project+Hail+Mary" in _asl and "k=desk+lamp" in _asl, _asl)
+check("amazon_search_links: numbered per item", _asl.startswith("1. Project Hail Mary: "), _asl)
+
+# --------------------------------------------------------------------------- #
 print("Amazon split reply — cart link + Whole Foods bucket + honest miss line:")
 
 
@@ -479,7 +531,7 @@ _orig_discover = grocery.discover_asins
 grocery.discover_asins = _fake_discover({"1 tbsp chia": _CHIA, "40 g oats": _OATS})
 try:
     split = asyncio.run(
-        tool_grocery(
+        tool_shopping(
             {
                 "action": "list",
                 "items": "1 tbsp chia\n40 g oats\na handful of spinach\n170 g Greek yogurt\n1 tsp psyllium",
@@ -505,32 +557,42 @@ check("honest miss line names psyllium", "psyllium" in split and "Couldn't pin" 
 check("split reply leaks no error words", "error" not in split.lower() and "exception" not in split.lower(), split)
 
 # --------------------------------------------------------------------------- #
-print("amazon_cart action — everything discovered, misses -> Whole Foods links:")
+print("amazon_cart action — general products, quantity prefix, no perishable routing:")
 
-grocery.discover_asins = _fake_discover({"1 tbsp chia": _CHIA})
+_BOOK = AsinCandidate("B08GB58KD5", "Project Hail Mary: A Novel", "https://www.amazon.com/dp/B08GB58KD5", 1.2)
+_BATT = AsinCandidate("B00MNV8E0C", "Energizer AA Batteries 24 Pack", "https://www.amazon.com/dp/B00MNV8E0C", 1.0)
+
+# Discovery is keyed by the STRIPPED search name ("2x AA batteries" -> "AA batteries").
+grocery.discover_asins = _fake_discover({"Project Hail Mary": _BOOK, "AA batteries": _BATT})
 try:
     cart_reply = asyncio.run(
-        tool_grocery(
-            {"action": "amazon_cart", "items": "1 tbsp chia\na handful of spinach"}, _ctx("")
+        tool_shopping(
+            {"action": "amazon_cart", "items": ["Project Hail Mary", "2x AA batteries", "whole milk"]},
+            _ctx(""),
         )
     )
 finally:
     grocery.discover_asins = _orig_discover
 
-check("amazon_cart puts chia in the cart link", "ASIN.1=B00KFEXGO4" in cart_reply, cart_reply)
+check("amazon_cart puts the book in the cart link", "ASIN.1=B08GB58KD5" in cart_reply, cart_reply)
 check(
-    "amazon_cart skips perishable routing (spinach searched, missed -> WF link)",
-    "i=wholefoods" in cart_reply and "spinach" in cart_reply,
+    "'2x' prefix becomes Quantity 2 for the batteries",
+    "ASIN.2=B00MNV8E0C" in cart_reply and "Quantity.2=2" in cart_reply,
     cart_reply,
 )
-check("amazon_cart uses WF links, not the honest miss line", "Couldn't pin" not in cart_reply, cart_reply)
+check(
+    "no perishable routing: 'whole milk' is searched, missed -> GENERAL Amazon link",
+    "k=whole+milk" in cart_reply and "i=wholefoods" not in cart_reply,
+    cart_reply,
+)
+check("amazon_cart leaks no error words", "error" not in cart_reply.lower() and "exception" not in cart_reply.lower(), cart_reply)
 
 # --------------------------------------------------------------------------- #
 print("Amazon fallback — nothing found at all -> current all-Whole-Foods reply:")
 
 grocery.discover_asins = _fake_discover({})
 try:
-    all_wf = asyncio.run(tool_grocery({"action": "list", "items": "widget, gadget"}, _ctx("")))
+    all_wf = asyncio.run(tool_shopping({"action": "list", "items": "widget, gadget"}, _ctx("")))
 finally:
     grocery.discover_asins = _orig_discover
 
@@ -565,9 +627,10 @@ from hal_orchestrator.tools.specs import get_tool_spec, model_tools  # noqa: E40
 declared_names = {
     d["name"] for group in model_tools() for d in group["function_declarations"]
 }
-check("grocery in model_tools() declarations", "grocery" in declared_names, sorted(declared_names))
+check("shopping in model_tools() declarations", "shopping" in declared_names, sorted(declared_names))
+check("old name grocery is gone", "grocery" not in declared_names, sorted(declared_names))
 
-spec = get_tool_spec("grocery")
+spec = get_tool_spec("shopping")
 check("spec registered", spec is not None)
 check("scopes allow dm AND group", spec.scopes == frozenset({"dm", "group"}), spec.scopes)
 check("risk=write", spec.risk == "write", spec.risk)
@@ -575,10 +638,10 @@ check("timeout 60s (covers the ASIN search batch)", spec.timeout_seconds == 60, 
 check("not parallel_safe (it writes)", spec.parallel_safe is False)
 check(
     "handler points at the plugin",
-    spec.handler == "hal_orchestrator.tools.plugins.grocery:tool_grocery",
+    spec.handler == "hal_orchestrator.tools.plugins.grocery:tool_shopping",
     spec.handler,
 )
-check("declaration name matches spec name", spec.declaration["name"] == "grocery")
+check("declaration name matches spec name (shopping)", spec.declaration["name"] == "shopping")
 
 # --------------------------------------------------------------------------- #
 if failures:

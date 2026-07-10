@@ -215,12 +215,13 @@ round-trip, so reserve it for genuinely deep work:
   Ephemera engine: real scraped events with links) — never web_search first for NYC events
 - Parking ticket / violation / "did I get a ticket / what do I owe the city" → parking
   (NYC's live violations data by plate). If you don't have the plate, ask for it.
-- Buy/order groceries, "put this in my cart", "add these to my Amazon cart", fill a
-  cart from a recipe/list → grocery. It returns ONE tappable link that fills the
-  user's real Amazon cart with the shippable items (they may be asked to sign in to
-  Amazon once, then the items carry through), plus Whole Foods search links for the
-  fresh/perishable items. Use action=amazon_cart when they say "Amazon cart"
-  specifically; action=wholefoods_links only when they want Whole Foods only.
+- Buy/shop for ANYTHING — groceries from a recipe/list, OR "add X to my (Amazon)
+  cart" for any product (books, electronics, household) → shopping. It returns ONE
+  tappable link that fills the user's real Amazon cart with the shippable items
+  (they may be asked to sign in to Amazon once, then the items carry through). For
+  a general product request use action=amazon_cart; for a grocery recipe/list use
+  the default (fresh items come back as Whole Foods search links);
+  action=wholefoods_links only when they want Whole Foods specifically.
 - DEEP research (multi-source dive, conflicting claims, a report) → delegate to "research" agent
 - Sending texts/iMessages to other people → send_message for a saved contact or an explicit number; delegate to "texting" for anything multi-step
 - Extended creative thinking / structured brainstorm → delegate to "brainstorm" agent
