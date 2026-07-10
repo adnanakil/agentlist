@@ -130,6 +130,9 @@ class HalOrchestratorConfig(BaseConfig):
     agentlist_api_key: str = ""           # Bearer token for gateway fallback
     agentlist_account_id: str = ""        # UUID for internal invoke X-Account-ID header
     rapidapi_key: str = ""                # RapidAPI key for Airbnb search
+    # Instacart developer key (https://docs.instacart.com) for the grocery tool.
+    # Unset -> the tool returns a graceful "not set up yet" message, never an error.
+    instacart_api_key: str = ""
     # Brave Search API key (https://brave.com/search/api). When set, web_search
     # uses Brave (reliable JSON API) and falls back to DuckDuckGo scraping only
     # if Brave errors. Unset -> DDG scraping (brittle: bot-blocked pages).
