@@ -56,6 +56,10 @@ feeds it NYC events.
 ln -sf services/hal-orchestrator/railway.toml railway.toml
 railway up --service hal-orchestrator --detach ; rm railway.toml
 
+# --- Deploy the shared browser/scrape service ---
+ln -sf agents/browser/railway.toml railway.toml
+railway up --service browser --detach ; rm railway.toml
+
 # --- Deploy Ephemera (its dir is linked to the agentgate project) ---
 cd ~/Project/Ephemera && railway up --service ephemera --detach
 
@@ -99,9 +103,16 @@ curl https://ephemera-production-e117.up.railway.app/health
   replacement retries election until the old process releases its advisory lock.
 - **Always pass `--service hal-orchestrator`.** The local Railway link may point
   at Ephemera; relying on the linked service can deploy or inspect the wrong one.
-- **Key provenance:** working Firecrawl/Scrapfly keys live in `Ephemera/.env.local`;
-  its Anthropic key is DEAD — use hal-orchestrator's. `vercel env pull` corrupted
+- **Fetcher provenance:** Ephemera uses native HTTP first, then HAL's self-hosted
+  Playwright browser service; no Firecrawl/Scrapfly key is required.
+  Its Anthropic key is DEAD — use hal-orchestrator's. `vercel env pull` corrupted
   some values once — verify a key with a real API call before trusting it.
+- **Scraper authentication:** `SCRAPER_API_KEY` is the shared Bearer secret for
+  the browser service's `/scrape` and browser-action endpoints. Set the exact
+  same value on all three Railway services: `browser` (verifies requests),
+  `ephemera` (fetch-ladder caller), and `hal-orchestrator` (web/browser caller).
+  `BROWSER_SERVICE_URL`/`SCRAPER_SERVICE_URL` selects the service URL; it is not
+  the secret.
 - **The bridge is on a SEPARATE Mac, not in this repo.** Editing
   `~/Project/*/hal/hal_bridge.py` on the dev machine does nothing — the live copy
   is `~/.hal/hal_bridge.py` on `hal.local`. Verify the actual PID with
@@ -409,7 +420,7 @@ Separate Next.js service (repo `~/Project/Ephemera`, Railway) that HAL queries v
 `nyc_events`. Migrated off Heroku/Vercel-cron 2026-07-06.
 
 - **Pipeline:** daily in-process scheduler (`instrumentation.ts`) scrapes ~353 NYC
-  venue/aggregator sites (Firecrawl → Scrapfly), extracts events with Claude Haiku,
+  venue/aggregator sites (plain HTTP → self-hosted Playwright), extracts events with Claude Haiku,
   geocodes, dedupes, caches in Upstash Redis. Watchdog auto-resets a stall. (No
   serverless ceiling on Railway → the full scrape completes, ~2,071 events.)
 - **API:** `GET /api/events?since&until&near=lat,lng&radius_km&category&q&event_type&format&calendar_ready&limit`
@@ -476,7 +487,7 @@ the phone with underscores intact — see the bridge `strip_markdown` note in Pa
 ## Key env vars
 `GEMINI_MODEL`, `GEMINI_THINKING_LEVEL`, `MODEL_FALLBACKS`, `HAL_BRIDGE_SECRET`,
 `CARD_SIGNING_KEY`, `HAL_PROCESS_ROLE`, `GROWTH_AUTO_PUBLISH`, `ENCRYPTION_KEY`,
-`GOOGLE_MAPS_API_KEY`, `ANTHROPIC_API_KEY`, `EPHEMERA_URL`,
+`GOOGLE_MAPS_API_KEY`, `ANTHROPIC_API_KEY`, `EPHEMERA_URL`, `SCRAPER_API_KEY`,
 `FOLLOWUP_ENABLED`/`FOLLOWUP_SILOS`, the Google OAuth trio, Stripe keys. Important
 limits are configurable as `MAX_REQUEST_BYTES`, `MAX_MESSAGE_CHARS`,
 `MAX_IMAGES_PER_MESSAGE`, `MAX_TOOL_CALLS_PER_TURN`, `TOOL_TIMEOUT_SECONDS`, and

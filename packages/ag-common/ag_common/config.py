@@ -119,6 +119,8 @@ class HalOrchestratorConfig(BaseConfig):
     # One extra no-tools model call on gated turns only; kill with =false.
     critic_enabled: bool = True
     browser_service_url: str = ""
+    # Shared secret for the browser service's /scrape and browser-action APIs.
+    scraper_api_key: str = ""
     # Skills curator settings. interval=0 disables; default weekly.
     curator_check_interval_seconds: int = 60 * 30  # how often loop wakes
     curator_interval_hours: int = 24 * 7  # min hours between actual passes

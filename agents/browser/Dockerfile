@@ -8,6 +8,6 @@ WORKDIR /app
 COPY agents/browser/package.json .
 RUN npm install --production
 
-COPY agents/browser/server.js agents/browser/browser.js ./
+COPY agents/browser/server.js agents/browser/browser.js agents/browser/scraper.js ./
 
 CMD ["node", "server.js"]

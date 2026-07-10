@@ -1,10 +1,10 @@
 name: browser
 version: "0.1.0"
-description: "Browse the web with full Chromium. Extract content, transcripts, screenshots."
+description: "Fetch pages with HTTP-first scraping and Chromium fallback. Extract content, transcripts, and screenshots."
 runtime: nodejs
 entrypoint: server.js
 category: web
-tags: [browser, web, playwright, youtube, tiktok, transcript]
+tags: [browser, web, scraper, playwright, youtube, tiktok, transcript]
 price_per_call_cents: 10
 input_schema:
   type: object
@@ -14,7 +14,7 @@ input_schema:
       description: "URL to navigate to"
     action:
       type: string
-      description: "extract, screenshot, click, type, evaluate, read, links"
+      description: "extract, scrape, screenshot, click, type, evaluate, read, links"
     selector:
       type: string
       description: "CSS selector (for click/type actions)"

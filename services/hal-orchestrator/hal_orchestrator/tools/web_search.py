@@ -28,6 +28,12 @@ SEARCH_UNAVAILABLE = (
     "likely URL instead. Do not tell the user nothing exists."
 )
 
+_BLOCK_PAGE_RE = re.compile(
+    r"cf-browser-verification|cf-chl-|cloudflare ray id|just a moment\.\.\.|"
+    r"verify (?:you are|that you are) human|captcha|datadome|perimeterx|px-captcha",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class WebSearchResults:
@@ -157,8 +163,61 @@ async def tool_web_search(args: dict, ctx: ToolContext) -> str:
     )
 
 
+def _extract_page_text(body: str, content_type: str, *, limit: int = 8000) -> str:
+    if "text/html" not in content_type.lower():
+        return body[:limit]
+    text = re.sub(r"<script[^>]*>.*?</script>", "", body, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:limit] + ("... (truncated)" if len(text) > limit else "")
+
+
+def _needs_browser_fallback(status: int, body: str, content_type: str) -> bool:
+    if status in {401, 403, 407, 429, 503} or status >= 500:
+        return True
+    if _BLOCK_PAGE_RE.search(body[:100_000]):
+        return True
+    if "text/html" not in content_type.lower():
+        return not body.strip()
+    visible = _extract_page_text(body, content_type, limit=10_000)
+    return len(visible) < 400 and bool(
+        re.search(r"<script\b|__next|webpack|react|hydrate", body, re.IGNORECASE)
+    )
+
+
+async def _self_hosted_scrape(url: str, ctx: ToolContext) -> str | None:
+    browser_url = ctx.settings.browser_service_url.rstrip("/")
+    if not browser_url:
+        return None
+    headers = {"Content-Type": "application/json"}
+    scraper_key = getattr(ctx.settings, "scraper_api_key", "")
+    if scraper_key:
+        headers["Authorization"] = f"Bearer {scraper_key}"
+    try:
+        resp = await ctx.http_client.post(
+            f"{browser_url}/scrape",
+            json={"url": url, "render_js": True, "format": "markdown"},
+            headers=headers,
+            timeout=90,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        content = (data.get("result") or {}).get("content", "")
+        if content:
+            log.info(
+                "web_fetch.scraper_fallback",
+                url=url,
+                strategy=(data.get("result") or {}).get("strategy", "unknown"),
+            )
+            return content[:8000] + ("... (truncated)" if len(content) > 8000 else "")
+    except Exception as exc:
+        log.warning("web_fetch.scraper_failed", url=url, error=str(exc))
+    return None
+
+
 async def tool_web_fetch(args: dict, ctx: ToolContext) -> str:
-    """Fetch and extract text content from a URL."""
+    """Fetch a URL cheaply, escalating blocked/JS-shell pages to our scraper."""
     url = args.get("url", "")
     if not url:
         return "Error: url is required"
@@ -178,28 +237,30 @@ async def tool_web_fetch(args: dict, ctx: ToolContext) -> str:
         log.warning("web_fetch.blocked", url=url[:120], reason=reason)
         return f"Can't fetch that URL ({reason})."
 
+    native_error: Exception | None = None
     try:
         resp = await ctx.http_client.get(
             url,
-            headers={"User-Agent": "Mozilla/5.0"},
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
             follow_redirects=True,
             timeout=20,
         )
-
         content_type = resp.headers.get("content-type", "")
-        if "text/html" in content_type:
-            # Strip HTML tags, extract text
-            text = re.sub(r"<script[^>]*>.*?</script>", "", resp.text, flags=re.DOTALL)
-            text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
-            text = re.sub(r"<[^>]+>", " ", text)
-            text = re.sub(r"\s+", " ", text).strip()
-            # Truncate to ~8000 chars
-            if len(text) > 8000:
-                text = text[:8000] + "... (truncated)"
-            return text
-        else:
-            return resp.text[:8000]
-
+        if not _needs_browser_fallback(resp.status_code, resp.text, content_type):
+            return _extract_page_text(resp.text, content_type)
+        native_error = RuntimeError(f"HTTP {resp.status_code} returned a block page or JS shell")
     except Exception as exc:
         log.exception("web_fetch.error", url=url)
-        return f"Fetch error: {exc}"
+        native_error = exc
+
+    rendered = await _self_hosted_scrape(url, ctx)
+    if rendered:
+        return rendered
+    return f"Fetch error: {native_error or 'page returned no usable content'}"

@@ -546,6 +546,192 @@ async function extractGeneric(page, url) {
     return output;
 }
 
+async function settleRenderedPage(page) {
+    // Many calendar apps paint their useful list a few seconds after
+    // DOMContentLoaded. Wait for meaningful text (or an event/calendar-shaped
+    // subtree), then scroll in bounded steps to trigger lazy loaders.
+    try {
+        await page.waitForFunction(
+            ({ minText, selector }) => {
+                const textLength = (document.body?.innerText || '').trim().length;
+                return textLength >= minText || (textLength >= 300 && document.querySelector(selector));
+            },
+            {
+                minText: 800,
+                selector: '[class*="event" i], [id*="event" i], [data-testid*="event" i], '
+                    + '[class*="calendar" i], [id*="calendar" i], time[datetime]',
+            },
+            { timeout: 4000 },
+        );
+    } catch (_error) {
+        // Thin pages still get the scroll/settle pass below.
+    }
+
+    let previousHeight = 0;
+    let stableHeightPasses = 0;
+    for (let pass = 0; pass < 4; pass++) {
+        const metrics = await page.evaluate((step) => {
+            const body = document.body;
+            const root = document.documentElement;
+            const height = Math.max(
+                body?.scrollHeight || 0,
+                body?.offsetHeight || 0,
+                root?.scrollHeight || 0,
+                root?.offsetHeight || 0,
+            );
+            const viewport = window.innerHeight || 900;
+            const target = Math.min(height, Math.max(viewport * (step + 1), height * ((step + 1) / 4)));
+            window.scrollTo(0, target);
+            return { height, textLength: (body?.innerText || '').trim().length };
+        }, pass);
+        stableHeightPasses = metrics.height <= previousHeight ? stableHeightPasses + 1 : 0;
+        previousHeight = Math.max(previousHeight, metrics.height);
+        await page.waitForTimeout(350);
+        if (metrics.textLength >= 800 && stableHeightPasses >= 1) break;
+    }
+
+    try {
+        await page.waitForLoadState('networkidle', { timeout: 2500 });
+    } catch (_error) {
+        // Long-polling pages never become idle; use the stabilized DOM.
+    }
+
+    let previousSignature = '';
+    let stablePasses = 0;
+    for (let pass = 0; pass < 4; pass++) {
+        const signature = await page.evaluate(() => {
+            const textLength = (document.body?.innerText || '').trim().length;
+            return `${textLength}:${document.querySelectorAll('a[href]').length}:${document.querySelectorAll('time').length}`;
+        });
+        stablePasses = signature === previousSignature ? stablePasses + 1 : 0;
+        previousSignature = signature;
+        if (stablePasses >= 1) break;
+        await page.waitForTimeout(400);
+    }
+
+    await page.evaluate(() => window.scrollTo(0, 0));
+}
+
+async function scrapeRendered(page, url, format = 'markdown', maxOutputChars = 200000) {
+    const navigation = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    await settleRenderedPage(page);
+
+    const result = await page.evaluate(({ outputFormat, maxChars }) => {
+        const title = document.title || '';
+        if (outputFormat === 'html') {
+            const html = document.documentElement.outerHTML;
+            const links = Array.from(document.querySelectorAll('a[href]'), anchor => anchor.href)
+                .filter((href, index, all) => href && all.indexOf(href) === index)
+                .slice(0, 500);
+            return { title, content: html.slice(0, maxChars), links };
+        }
+
+        const clone = document.body.cloneNode(true);
+        clone.querySelectorAll('script, style, noscript, template, svg, iframe').forEach(node => node.remove());
+        const lines = [];
+        let outputLength = 0;
+        const blockTags = new Set([
+            'address', 'article', 'aside', 'blockquote', 'div', 'footer', 'header',
+            'main', 'nav', 'ol', 'p', 'section', 'table', 'tr', 'ul',
+        ]);
+
+        const walk = (node) => {
+            if (outputLength >= maxChars) return;
+            if (node.nodeType === Node.TEXT_NODE) {
+                const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+                if (text) {
+                    lines.push(text);
+                    outputLength += text.length + 1;
+                }
+                return;
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
+            const tag = node.tagName.toLowerCase();
+            if (['script', 'style', 'noscript', 'template', 'svg', 'iframe'].includes(tag)) return;
+
+            if (/^h[1-6]$/.test(tag)) {
+                const heading = (node.textContent || '').replace(/\s+/g, ' ').trim();
+                if (heading) {
+                    const value = `\n${'#'.repeat(Number(tag[1]))} ${heading}\n`;
+                    lines.push(value);
+                    outputLength += value.length;
+                }
+                return;
+            }
+            if (tag === 'a' && node.href) {
+                const label = (node.textContent || '').replace(/\s+/g, ' ').trim();
+                if (label) {
+                    const value = `${label} (${node.href})`;
+                    lines.push(value);
+                    outputLength += value.length + 1;
+                }
+                return;
+            }
+            if (tag === 'li') {
+                const label = (node.textContent || '').replace(/\s+/g, ' ').trim();
+                if (label) {
+                    const value = `\n- ${label}`;
+                    lines.push(value);
+                    outputLength += value.length;
+                }
+                return;
+            }
+            if (tag === 'br' || blockTags.has(tag)) {
+                lines.push('\n');
+                outputLength += 1;
+            }
+            for (const child of node.childNodes) walk(child);
+            if (blockTags.has(tag)) {
+                lines.push('\n');
+                outputLength += 1;
+            }
+        };
+        walk(clone);
+        const content = lines.join(' ')
+            .replace(/[ \t]+/g, ' ')
+            .replace(/ *\n */g, '\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+        const links = Array.from(document.querySelectorAll('a[href]'), anchor => anchor.href)
+            .filter((href, index, all) => href && all.indexOf(href) === index)
+            .slice(0, 500);
+        return { title, content: content.slice(0, maxChars), links };
+    }, { outputFormat: format, maxChars: maxOutputChars });
+
+    // Calendar widgets are often rendered in same- or cross-origin iframes.
+    // Playwright can read their visible DOM even when page JavaScript cannot;
+    // append useful frame text without allowing one embed to dominate output.
+    if (format !== 'html' && result.content.length < maxOutputChars) {
+        for (const frame of page.frames().slice(1, 6)) {
+            try {
+                const frameText = await frame.evaluate(() => (document.body?.innerText || '')
+                    .replace(/\s+/g, ' ')
+                    .trim());
+                if (frameText.length < 200) continue;
+                const sample = frameText.slice(0, 160);
+                if (result.content.includes(sample)) continue;
+                const remaining = maxOutputChars - result.content.length;
+                if (remaining <= 20) break;
+                result.content += `\n\n${frameText.slice(0, Math.min(remaining - 2, 30000))}`;
+            } catch (_error) {
+                // Detached, sandboxed, or still-navigating frames are best-effort.
+            }
+        }
+    }
+
+    return {
+        url: page.url(),
+        title: result.title,
+        type: 'webpage',
+        content: result.content,
+        links: result.links,
+        status_code: navigation?.status() || 200,
+        content_type: format === 'html'
+            ? (navigation?.headers()['content-type'] || 'text/html')
+            : 'text/markdown',
+    };
+}
+
 // ─── Action Router ───────────────────────────────────────────────────────── //
 
 // Recognise TikTok shortlinks (tiktok.com/t/<code>/, vm.tiktok.com/<code>/) too —
@@ -575,6 +761,14 @@ async function handleAction(input) {
                 if (type === 'tiktok') return await extractTikTok(page, url);
                 return await extractGeneric(page, url);
             }
+
+            case 'scrape':
+                return await scrapeRendered(
+                    page,
+                    url,
+                    input.format === 'html' ? 'html' : 'markdown',
+                    Math.min(Math.max(Number(input.max_output_chars) || 200000, 1000), 1000000),
+                );
 
             case 'screenshot': {
                 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -648,11 +842,11 @@ async function handleAction(input) {
             }
 
             default:
-                return { error: `Unknown action: ${action}. Use: extract, screenshot, click, type, evaluate, read, links` };
+                return { error: `Unknown action: ${action}. Use: extract, scrape, screenshot, click, type, evaluate, read, links` };
         }
     } finally {
         await browser.close().catch(() => {});
     }
 }
 
-module.exports = { handleAction };
+module.exports = { handleAction, settleRenderedPage };

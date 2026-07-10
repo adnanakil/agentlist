@@ -42,9 +42,13 @@ async def tool_browser(args: dict, ctx: ToolContext) -> str:
     log.info("tool.browser", url=url, action=action)
 
     try:
+        headers = {}
+        if ctx.settings.scraper_api_key:
+            headers["Authorization"] = f"Bearer {ctx.settings.scraper_api_key}"
         resp = await ctx.http_client.post(
             f"{browser_url}/",
             json={"input": payload},
+            headers=headers,
             timeout=90.0,
         )
         resp.raise_for_status()
@@ -88,7 +92,9 @@ async def tool_browser(args: dict, ctx: ToolContext) -> str:
         parts.append("\n[Screenshot captured — base64 data available]")
 
     if output.get("links"):
-        links_text = "\n".join(f"- {l['text']}: {l['href']}" for l in output["links"][:20])
+        links_text = "\n".join(
+            f"- {link['text']}: {link['href']}" for link in output["links"][:20]
+        )
         parts.append(f"\nLinks:\n{links_text}")
 
     if output.get("result") is not None:
