@@ -22,16 +22,23 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from hal_orchestrator.services import grocery  # noqa: E402
 from hal_orchestrator.services.grocery import (  # noqa: E402
+    AsinCandidate,
     GroceryError,
     _extract_share_url,
     _mcp_payload,
     _parse_mcp_body,
     _structure_line,
+    amazon_cart_url,
+    best_asin_candidate,
+    cart_quantity,
     coerce_items,
     coerce_line_items,
+    extract_asins,
+    is_perishable,
     parse_ingredient_lines,
     parse_line_items,
     recipe_arguments,
+    score_candidate,
     shopping_list_arguments,
     wholefoods_search_links,
 )
@@ -356,6 +363,201 @@ wf_reply = asyncio.run(
 check("wholefoods_links works with no Instacart key", "amazon.com/s?k=oats&i=wholefoods" in wf_reply, wf_reply)
 
 # --------------------------------------------------------------------------- #
+print("Amazon ASIN extraction — /dp/ and /gp/product/, reject near-misses:")
+
+check(
+    "/dp/ ASIN extracted",
+    extract_asins("https://www.amazon.com/Organic-Chia-Seeds/dp/B00KFEXGO4/ref=sr_1_3")
+    == ["B00KFEXGO4"],
+    extract_asins("https://www.amazon.com/Organic-Chia-Seeds/dp/B00KFEXGO4/ref=sr_1_3"),
+)
+check(
+    "/gp/product/ ASIN extracted",
+    extract_asins("https://www.amazon.com/gp/product/B0016AXNS2") == ["B0016AXNS2"],
+)
+check(
+    "ASIN before a query string extracted",
+    extract_asins("https://www.amazon.com/dp/B0016AXNS2?th=1") == ["B0016AXNS2"],
+)
+check(
+    "9-char near-miss rejected",
+    extract_asins("https://www.amazon.com/dp/B00KFEXG0/ref=x") == [],
+    extract_asins("https://www.amazon.com/dp/B00KFEXG0/ref=x"),
+)
+check(
+    "lowercase near-miss rejected",
+    extract_asins("https://www.amazon.com/dp/b00kfexgo4") == [],
+)
+check(
+    "11-char alnum run is not treated as an ASIN",
+    extract_asins("https://www.amazon.com/dp/B00KFEXGO4X") == [],
+    extract_asins("https://www.amazon.com/dp/B00KFEXGO4X"),
+)
+check(
+    "search URL (no /dp/) yields nothing",
+    extract_asins("https://www.amazon.com/s?k=chia+seeds") == [],
+)
+
+# --------------------------------------------------------------------------- #
+print("Amazon candidate scoring — the matching title wins:")
+
+_dp = "https://www.amazon.com/dp/B00KFEXGO4"
+s_match = score_candidate("chia seeds", "Organic Chia Seeds, 2 lb Bag", _dp)
+s_wrong = score_candidate("chia seeds", "Roasted Sunflower Seeds Snack", _dp)
+check("matching title scores higher than a wrong one", s_match > s_wrong, (s_match, s_wrong))
+check("full-overlap match clears 1.0 (with /dp/ bonus)", s_match > 1.0, s_match)
+check(
+    "obvious mismatch (head noun absent) scores at or below zero",
+    score_candidate("rolled oats", "Stainless Steel Water Bottle", _dp) <= 0,
+    score_candidate("rolled oats", "Stainless Steel Water Bottle", _dp),
+)
+
+_results = [
+    {"title": "Roasted Sunflower Seeds Snack", "url": "https://www.amazon.com/dp/B0011111AA"},
+    {"title": "Organic Chia Seeds, 2 lb Bag", "url": "https://www.amazon.com/Chia/dp/B00KFEXGO4/ref=x"},
+]
+_best = best_asin_candidate("chia seeds", _results)
+check("best_asin_candidate returns the chia match", _best is not None and _best.asin == "B00KFEXGO4", _best)
+check("best candidate carries its score", _best is not None and _best.score > 1.0, _best)
+check("no results -> None", best_asin_candidate("chia seeds", []) is None)
+check(
+    "results without any ASIN -> None",
+    best_asin_candidate("chia", [{"title": "Chia", "url": "https://x.com/s?k=chia"}]) is None,
+)
+
+# --------------------------------------------------------------------------- #
+print("Amazon cart URL builder — indexed params, encoding, associate tag:")
+
+cart_url = amazon_cart_url([("B00KFEXGO4", 1), ("B0016AXNS2", 2)])
+check("cart add.html endpoint", cart_url.startswith("https://www.amazon.com/gp/aws/cart/add.html?"), cart_url)
+check("item 1 ASIN + quantity", "ASIN.1=B00KFEXGO4" in cart_url and "Quantity.1=1" in cart_url, cart_url)
+check("item 2 ASIN + quantity", "ASIN.2=B0016AXNS2" in cart_url and "Quantity.2=2" in cart_url, cart_url)
+check("no AssociateTag param when omitted", "AssociateTag" not in cart_url, cart_url)
+_tagged = amazon_cart_url([("B00KFEXGO4", 1)], associate_tag="hal-20")
+check("AssociateTag included when configured", "AssociateTag=hal-20" in _tagged, _tagged)
+check(
+    "associate tag is URL-encoded",
+    "AssociateTag=my+tag" in amazon_cart_url([("B00KFEXGO4", 1)], associate_tag="my tag"),
+    amazon_cart_url([("B00KFEXGO4", 1)], associate_tag="my tag"),
+)
+check("quantity coerces to int (no 1.0)", "Quantity.1=1" in amazon_cart_url([("B00KFEXGO4", 1.0)]))
+
+check("cart_quantity default 1 for a gram amount", cart_quantity("170 g Greek yogurt") == 1)
+check("cart_quantity 1 for a plain item", cart_quantity("chia seeds") == 1)
+check("cart_quantity reads a '2 x' multiplier", cart_quantity("2 x sparkling water") == 2)
+check("cart_quantity reads '3× cans'", cart_quantity("3× cans black beans") == 3)
+check("cart_quantity ignores a count that isn't 'N x'", cart_quantity("2 cans black beans") == 1)
+
+# --------------------------------------------------------------------------- #
+print("Amazon perishable routing — fresh -> Whole Foods, pantry -> discovery:")
+
+check("spinach is perishable", is_perishable("a handful of spinach"))
+check("greek yogurt is perishable", is_perishable("170 g Greek yogurt"))
+check("frozen blueberries is perishable", is_perishable("100 g frozen blueberries"))
+check("chia is not perishable -> discovery", is_perishable("1 tbsp chia") is False)
+check("oats are not perishable -> discovery", is_perishable("40 g oats") is False)
+check("protein powder is not perishable -> discovery", is_perishable("1 scoop protein powder (whey)") is False)
+check("psyllium is not perishable", is_perishable("1 tsp psyllium (not a heap)") is False)
+check("peanut butter stays on Amazon (pantry override)", is_perishable("1 tbsp peanut butter") is False)
+check("soy milk is pantry-stable (override) -> discovery", is_perishable("250 ml soy milk") is False)
+
+# --------------------------------------------------------------------------- #
+print("Amazon split reply — cart link + Whole Foods bucket + honest miss line:")
+
+
+def _fake_discover(found_map):
+    async def _f(ctx, items, **kwargs):
+        return {it: found_map.get(it) for it in items}
+
+    return _f
+
+
+_CHIA = AsinCandidate("B00KFEXGO4", "Organic Chia Seeds", "https://www.amazon.com/dp/B00KFEXGO4", 1.1)
+_OATS = AsinCandidate("B000P6G0MS", "Rolled Oats 2lb", "https://www.amazon.com/dp/B000P6G0MS", 1.1)
+
+_orig_discover = grocery.discover_asins
+grocery.discover_asins = _fake_discover({"1 tbsp chia": _CHIA, "40 g oats": _OATS})
+try:
+    split = asyncio.run(
+        tool_grocery(
+            {
+                "action": "list",
+                "items": "1 tbsp chia\n40 g oats\na handful of spinach\n170 g Greek yogurt\n1 tsp psyllium",
+            },
+            _ctx(""),
+        )
+    )
+finally:
+    grocery.discover_asins = _orig_discover
+
+check(
+    "cart block present with both discovered ASINs",
+    "gp/aws/cart/add.html" in split and "ASIN.1=B00KFEXGO4" in split and "ASIN.2=B000P6G0MS" in split,
+    split,
+)
+check("cart block counts 2 items", "Amazon cart (2 items)" in split, split)
+check(
+    "fresh bucket -> Whole Foods links for spinach + yogurt",
+    "i=wholefoods" in split and "spinach" in split and "yogurt" in split.lower(),
+    split,
+)
+check("honest miss line names psyllium", "psyllium" in split and "Couldn't pin" in split, split)
+check("split reply leaks no error words", "error" not in split.lower() and "exception" not in split.lower(), split)
+
+# --------------------------------------------------------------------------- #
+print("amazon_cart action — everything discovered, misses -> Whole Foods links:")
+
+grocery.discover_asins = _fake_discover({"1 tbsp chia": _CHIA})
+try:
+    cart_reply = asyncio.run(
+        tool_grocery(
+            {"action": "amazon_cart", "items": "1 tbsp chia\na handful of spinach"}, _ctx("")
+        )
+    )
+finally:
+    grocery.discover_asins = _orig_discover
+
+check("amazon_cart puts chia in the cart link", "ASIN.1=B00KFEXGO4" in cart_reply, cart_reply)
+check(
+    "amazon_cart skips perishable routing (spinach searched, missed -> WF link)",
+    "i=wholefoods" in cart_reply and "spinach" in cart_reply,
+    cart_reply,
+)
+check("amazon_cart uses WF links, not the honest miss line", "Couldn't pin" not in cart_reply, cart_reply)
+
+# --------------------------------------------------------------------------- #
+print("Amazon fallback — nothing found at all -> current all-Whole-Foods reply:")
+
+grocery.discover_asins = _fake_discover({})
+try:
+    all_wf = asyncio.run(tool_grocery({"action": "list", "items": "widget, gadget"}, _ctx("")))
+finally:
+    grocery.discover_asins = _orig_discover
+
+check(
+    "all-miss list falls back to WF links for every item",
+    "i=wholefoods" in all_wf and "k=widget" in all_wf and "k=gadget" in all_wf,
+    all_wf,
+)
+check("fallback carries no Amazon cart link", "gp/aws/cart/add.html" not in all_wf, all_wf)
+
+# --------------------------------------------------------------------------- #
+print("web_search DDG redirect unwrapping (ASIN discovery depends on it):")
+
+from hal_orchestrator.tools.web_search import _unwrap_ddg_url  # noqa: E402
+
+check(
+    "uddg redirect unwrapped to the real Amazon URL",
+    _unwrap_ddg_url("//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.amazon.com%2Fdp%2FB00KFEXGO4&rut=x")
+    == "https://www.amazon.com/dp/B00KFEXGO4",
+    _unwrap_ddg_url("//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.amazon.com%2Fdp%2FB00KFEXGO4&rut=x"),
+)
+check(
+    "a plain (non-redirect) URL passes through unchanged",
+    _unwrap_ddg_url("https://www.amazon.com/dp/B00KFEXGO4") == "https://www.amazon.com/dp/B00KFEXGO4",
+)
+
+# --------------------------------------------------------------------------- #
 print("plugin registration — the drop-in reaches the model:")
 
 from hal_orchestrator.tools.specs import get_tool_spec, model_tools  # noqa: E402
@@ -369,7 +571,7 @@ spec = get_tool_spec("grocery")
 check("spec registered", spec is not None)
 check("scopes allow dm AND group", spec.scopes == frozenset({"dm", "group"}), spec.scopes)
 check("risk=write", spec.risk == "write", spec.risk)
-check("timeout ~30s", spec.timeout_seconds == 30, spec.timeout_seconds)
+check("timeout 60s (covers the ASIN search batch)", spec.timeout_seconds == 60, spec.timeout_seconds)
 check("not parallel_safe (it writes)", spec.parallel_safe is False)
 check(
     "handler points at the plugin",

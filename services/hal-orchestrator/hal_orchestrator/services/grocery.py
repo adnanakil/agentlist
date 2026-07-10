@@ -18,9 +18,11 @@ and are unit-tested in tests_grocery.py.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
-from urllib.parse import quote_plus
+from dataclasses import dataclass
+from urllib.parse import quote_plus, urlencode
 
 import httpx
 import structlog
@@ -303,6 +305,193 @@ def recipe_arguments(title: str, ingredients, instructions=None) -> dict:
     if steps:
         args["instructions"] = steps
     return args
+
+
+# --------------------------------------------------------------------------- #
+# Amazon add-to-cart — one tappable link that fills the user's real cart.
+#
+# Amazon has no cart API, but its documented remote "Add to Cart" form still
+# works: /gp/aws/cart/add.html?ASIN.1=..&Quantity.1=.. redirects (through a
+# sign-in if needed) to a cart pre-filled with every item. We find one ASIN per
+# non-perishable item via web search, build that link, and route fresh/
+# perishable items to Whole Foods search links instead (shipping fresh food
+# from a warehouse is the wrong outcome). All the parsing/scoring below is pure
+# and unit-tested; only discover_asins touches the network.
+# --------------------------------------------------------------------------- #
+
+_CART_ADD_URL = "https://www.amazon.com/gp/aws/cart/add.html"
+
+# An Amazon ASIN is exactly 10 uppercase alphanumerics, in a /dp/ or
+# /gp/product/ path segment. The trailing lookahead rejects 9-char and
+# >10-char near-misses; [A-Z0-9] rejects lowercase.
+_ASIN_RE = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})(?![A-Z0-9])")
+
+_WORD_RE = re.compile(r"[a-z0-9]+")
+# Tokens that carry no product signal — dropped before overlap scoring.
+_SCORE_STOP = {
+    "the", "a", "an", "of", "and", "or", "with", "for", "to", "in", "on",
+    "organic", "natural", "pack", "count", "ct", "oz", "lb", "lbs", "g", "kg",
+    "ml", "l", "size", "value", "premium", "brand", "amazon", "com",
+}
+
+# "2 x eggs" / "3× cans" — the only pattern that maps to an Amazon unit count.
+# A grocery amount ("170 g", "1 tbsp") is NOT a unit count and stays quantity 1.
+_MULTIPLIER_RE = re.compile(r"^\s*(\d{1,2})\s*(?:x|×|\*)\s+", re.I)
+
+# Perishable / fresh terms that belong at Whole Foods, matched as whole words
+# (plural forms enumerated) so pantry-stable "peanut butter" / plant milks fall
+# through to Amazon discovery. "frozen"/"fresh" are matched anywhere.
+_PERISHABLE_WORDS = {
+    "milk", "yogurt", "yoghurt", "cheese", "cream", "egg", "eggs", "butter",
+    "spinach", "lettuce", "kale", "arugula", "greens", "cilantro", "parsley",
+    "basil", "herb", "herbs", "tomato", "tomatoes", "cucumber", "avocado",
+    "banana", "bananas", "berry", "berries", "blueberry", "blueberries",
+    "strawberry", "strawberries", "raspberry", "raspberries", "blackberry",
+    "blackberries", "grape", "grapes", "apple", "apples", "orange", "oranges",
+    "lemon", "lemons", "lime", "limes", "carrot", "carrots", "onion", "onions",
+    "garlic", "ginger", "celery", "broccoli", "cauliflower", "zucchini",
+    "mushroom", "mushrooms", "potato", "potatoes", "chicken", "beef", "pork",
+    "turkey", "fish", "salmon", "shrimp", "meat", "tofu", "hummus", "salad",
+    "produce", "scallion", "scallions", "melon", "peach", "peaches", "mango",
+    "mangoes", "pear", "pears", "grapefruit", "cabbage", "asparagus",
+}
+_PERISHABLE_ANYWHERE = ("frozen", "fresh")
+# Nut/seed butters and plant milks are shelf-stable — keep them on Amazon.
+_PANTRY_OVERRIDE = (
+    "peanut butter", "almond butter", "cashew butter", "sunflower butter",
+    "seed butter", "nut butter", "apple butter", "cocoa butter",
+    "coconut butter", "soy milk", "almond milk", "oat milk", "coconut milk",
+    "rice milk", "cashew milk", "shelf-stable", "powdered milk", "milk powder",
+)
+
+
+@dataclass
+class AsinCandidate:
+    """One Amazon product matched to a grocery item, with its overlap score."""
+
+    asin: str
+    title: str
+    url: str
+    score: float
+
+
+def _tokens(text: str) -> list[str]:
+    """Lowercased content tokens (stopwords dropped, trailing plural 's' folded)."""
+    out = []
+    for tok in _WORD_RE.findall((text or "").lower()):
+        if tok in _SCORE_STOP or len(tok) < 2:
+            continue
+        if len(tok) > 3 and tok.endswith("s") and not tok.endswith("ss"):
+            tok = tok[:-1]
+        out.append(tok)
+    return out
+
+
+def extract_asins(url: str) -> list[str]:
+    """Every ASIN embedded in an Amazon product URL (/dp/ or /gp/product/)."""
+    return _ASIN_RE.findall(url or "")
+
+
+def score_candidate(item_name: str, title: str, url: str) -> float:
+    """Score how well a search hit's title matches the item (higher = better).
+
+    Base is the fraction of the item's tokens present in the title; a canonical
+    /dp/ URL gets a small bonus, and a missing head noun (obvious mismatch) a
+    penalty so unrelated products score at or below zero.
+    """
+    item_toks = _tokens(item_name)
+    if not item_toks:
+        return 0.0
+    title_toks = set(_tokens(title))
+    overlap = sum(1 for t in set(item_toks) if t in title_toks)
+    score = overlap / len(set(item_toks))
+    if "/dp/" in (url or ""):
+        score += 0.1
+    if item_toks[-1] not in title_toks:  # head noun absent -> likely wrong item
+        score -= 0.3
+    return round(score, 4)
+
+
+def best_asin_candidate(item_name: str, results: list[dict]) -> AsinCandidate | None:
+    """Highest-scoring ASIN candidate across a list of {title, url} hits."""
+    best: AsinCandidate | None = None
+    for r in results or []:
+        url, title = r.get("url", ""), r.get("title", "")
+        for asin in extract_asins(url):
+            cand = AsinCandidate(asin, title, url, score_candidate(item_name, title, url))
+            if best is None or cand.score > best.score:
+                best = cand
+    if best is None or best.score <= 0:
+        return None
+    return best
+
+
+def cart_quantity(item: str) -> int:
+    """Amazon unit count for an item — always 1 unless it clearly says '2 x …'."""
+    m = _MULTIPLIER_RE.match(item or "")
+    if m:
+        n = int(m.group(1))
+        return n if 1 <= n <= 12 else 1
+    return 1
+
+
+def is_perishable(item: str) -> bool:
+    """True for fresh/perishable items that should go to Whole Foods, not a
+    ship-from-warehouse Amazon cart."""
+    low = (item or "").lower()
+    if any(p in low for p in _PANTRY_OVERRIDE):
+        return False
+    if any(p in low for p in _PERISHABLE_ANYWHERE):
+        return True
+    words = set(_WORD_RE.findall(low))
+    return bool(words & _PERISHABLE_WORDS)
+
+
+def item_label(item: str) -> str:
+    """A short human label for an item — its name minus a leading quantity/unit
+    ("1 tsp psyllium (not a heap)" -> "psyllium (not a heap)"). For prose."""
+    return _structure_line(item)["name"] or _clean(item)
+
+
+def amazon_cart_url(pairs, associate_tag: str = "") -> str:
+    """Build the remote add-to-cart URL from (asin, quantity) pairs.
+
+    Indexed ASIN.n / Quantity.n params per Amazon's documented form; the
+    optional AssociateTag is appended only when a tag is configured.
+    """
+    params: list[tuple[str, str]] = []
+    for i, (asin, qty) in enumerate(pairs, 1):
+        params.append((f"ASIN.{i}", str(asin)))
+        params.append((f"Quantity.{i}", str(int(qty) if qty else 1)))
+    if associate_tag:
+        params.append(("AssociateTag", associate_tag))
+    return f"{_CART_ADD_URL}?{urlencode(params)}"
+
+
+async def discover_asins(ctx, items, *, concurrency: int = 4, timeout: float = 8.0) -> dict:
+    """Map each item -> best AsinCandidate (or None) via one web search each.
+
+    Runs searches concurrently (bounded) with a per-search timeout so the whole
+    batch fits the tool budget. An empty/failed/timed-out search is ROUTINE —
+    that item maps to None and the caller sends it to Whole Foods instead. Never
+    raises. `ctx` must expose `.http_client` and `.settings` (a ToolContext).
+    """
+    from hal_orchestrator.tools.web_search import search_web
+
+    sem = asyncio.Semaphore(max(1, concurrency))
+
+    async def _one(item: str):
+        async with sem:
+            try:
+                async with asyncio.timeout(timeout):
+                    res = await search_web(f"amazon.com {item}", ctx, count=5)
+            except Exception:
+                log.warning("grocery.discover_search_failed", item=item[:60])
+                return item, None
+            return item, best_asin_candidate(item, res.results)
+
+    found = await asyncio.gather(*(_one(it) for it in items))
+    return dict(found)
 
 
 # --------------------------------------------------------------------------- #

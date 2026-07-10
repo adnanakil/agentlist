@@ -133,6 +133,10 @@ class HalOrchestratorConfig(BaseConfig):
     # Instacart developer key (https://docs.instacart.com) for the grocery tool.
     # Unset -> the tool returns a graceful "not set up yet" message, never an error.
     instacart_api_key: str = ""
+    # Amazon Associates tag for the grocery tool's add-to-cart links. When set,
+    # it's appended as the documented AssociateTag param on the cart URL; when
+    # empty the param is omitted entirely (see PA-API "Add to Cart form").
+    amazon_associate_tag: str = ""
     # Brave Search API key (https://brave.com/search/api). When set, web_search
     # uses Brave (reliable JSON API) and falls back to DuckDuckGo scraping only
     # if Brave errors. Unset -> DDG scraping (brittle: bot-blocked pages).
