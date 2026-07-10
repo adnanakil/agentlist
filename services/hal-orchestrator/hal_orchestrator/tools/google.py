@@ -116,11 +116,16 @@ async def tool_google_auth(args: dict, ctx: ToolContext) -> str:
         ok = await gsvc.disconnect(
             ctx.session, ctx.settings, ctx.http_client, ctx.phone
         )
-        return (
-            "Disconnected your Google account and revoked access."
-            if ok
-            else "There was no connected Google account."
-        )
+        if ok:
+            # disconnect() already texted the user the graceful confirmation +
+            # "want me to forget what I saw?" line via the durable outbox, so DON'T
+            # send another message — reply with EXACTLY "..." to stay silent.
+            return (
+                "Disconnected and revoked. The user has ALREADY been sent the "
+                "confirmation and the offer to forget what you saw — reply with "
+                "EXACTLY '...' and nothing else so you don't double-text them."
+            )
+        return "There was no connected Google account."
 
     return f"Unknown google_auth action: {action}. Use: status, start, disconnect."
 

@@ -14,6 +14,7 @@ the callback landed), so scope-upgrade reconnects don't re-trigger it.
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import httpx
@@ -88,36 +89,107 @@ async def _gather(
     return "\n\n".join(lines)
 
 
+# If the whole first-win turn fails, the user still just connected Google and is
+# staring at their phone — never leave them with silence. This safe confirmation
+# goes out via the outbox so the connection is always acknowledged.
+FIRST_WIN_FALLBACK = (
+    "Connected ✅ — I can see your calendar and inbox now. I'll keep an eye on "
+    "them and flag anything that genuinely needs you."
+)
+
+_POST_ATTEMPTS = 2  # this is the single most important proactive message HAL sends
+
+
+async def _post_message_turn(
+    settings: HalOrchestratorConfig,
+    http: httpx.AsyncClient,
+    silo: str,
+    gathered: str,
+) -> str:
+    """POST the internal first-win turn with one retry + backoff; return the
+    reply text. Raises if every attempt fails (caller handles the fallback)."""
+    port = os.environ.get("PORT", "8005")
+    payload = {
+        "message_id": internal_message_id("first-win", silo, gathered),
+        "phone": silo,
+        "text": build_first_win_prompt(gathered),
+        "internal": True,
+        # model omitted -> the MAIN model; this is a first impression.
+    }
+    headers = {"Authorization": f"Bearer {settings.hal_bridge_secret}"}
+    last_exc: Exception | None = None
+    for attempt in range(1, _POST_ATTEMPTS + 1):
+        try:
+            resp = await http.post(
+                f"http://127.0.0.1:{port}/api/message",
+                json=payload,
+                headers=headers,
+                timeout=180.0,
+            )
+            resp.raise_for_status()
+            return (resp.json().get("reply") or "").strip()
+        except Exception as exc:
+            last_exc = exc
+            log.warning(
+                "first_win.post_retry", silo=silo, attempt=attempt, error=str(exc)
+            )
+            if attempt < _POST_ATTEMPTS:
+                await asyncio.sleep(1.5 * attempt)  # 1.5s, then give up
+    assert last_exc is not None
+    raise last_exc
+
+
 async def run_first_win(
     settings: HalOrchestratorConfig, http: httpx.AsyncClient, silo: str
 ) -> None:
-    """One internal agent turn; deliver the reply (if any) via the outbox.
-    Best-effort: a failure here must never break the OAuth callback."""
+    """One internal agent turn; deliver the reply via the outbox. This is the
+    single most important proactive message HAL ever sends (the payoff seconds
+    after a Google connect), so it retries the internal call and, if everything
+    fails or comes back empty, still sends a safe confirmation — the user must
+    never be left with silence. Best-effort: never breaks the OAuth callback."""
     import hal_orchestrator.state as state
 
     try:
         gathered = await _gather(settings, http, silo)
         if not gathered:
+            # Every pre-fetch failed (or returned nothing). Don't skip silently —
+            # log loudly and still confirm the connection.
+            log.error("first_win.gather_empty", silo=silo)
+            await state.outbox.put(
+                {
+                    "to": silo,
+                    "text": FIRST_WIN_FALLBACK,
+                    "idempotency_key": f"first-win-fallback:{silo}",
+                }
+            )
             return
-        port = os.environ.get("PORT", "8005")
-        resp = await http.post(
-            f"http://127.0.0.1:{port}/api/message",
-            json={
-                "message_id": internal_message_id("first-win", silo, gathered),
-                "phone": silo,
-                "text": build_first_win_prompt(gathered),
-                "internal": True,
-                # model omitted -> the MAIN model; this is a first impression.
-            },
-            headers={"Authorization": f"Bearer {settings.hal_bridge_secret}"},
-            timeout=180.0,
-        )
-        resp.raise_for_status()
-        reply = (resp.json().get("reply") or "").strip()
+
+        try:
+            reply = await _post_message_turn(settings, http, silo, gathered)
+        except Exception:
+            log.error("first_win.post_failed_all_attempts", silo=silo, exc_info=True)
+            await state.outbox.put(
+                {
+                    "to": silo,
+                    "text": FIRST_WIN_FALLBACK,
+                    "idempotency_key": f"first-win-fallback:{silo}",
+                }
+            )
+            return
+
         if reply:
             await state.outbox.put({"to": silo, "text": reply})
             log.info("first_win.sent", silo=silo, chars=len(reply))
         else:
-            log.warning("first_win.silent", silo=silo)
+            # The model produced nothing despite real material — that's a failure
+            # for a first impression. Confirm the connection rather than vanish.
+            log.error("first_win.silent", silo=silo)
+            await state.outbox.put(
+                {
+                    "to": silo,
+                    "text": FIRST_WIN_FALLBACK,
+                    "idempotency_key": f"first-win-fallback:{silo}",
+                }
+            )
     except Exception:
         log.exception("first_win.failed", silo=silo)

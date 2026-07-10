@@ -102,7 +102,11 @@ def build_google_router() -> APIRouter:
         email = await gsvc.save_tokens(
             session, settings, http_client, silo, token_resp
         )
-        await update_profile(session, silo, google_connected=True)
+        # Clear any prior disconnect flag so a reconnect leaves coherent state
+        # (a lingering google_disconnected only matters while disconnected).
+        await update_profile(
+            session, silo, google_connected=True, google_disconnected=False
+        )
         await session.commit()
         log.info(
             "google.connected",

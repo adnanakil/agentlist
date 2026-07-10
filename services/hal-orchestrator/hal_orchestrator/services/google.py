@@ -280,6 +280,16 @@ async def get_valid_access_token(
     return r.json().get("access_token")
 
 
+# Sent ONCE via the durable outbox on disconnect (not the model's live reply, so
+# it lands even if the turn's reply is terse). Offers to forget what HAL saw and
+# signals the no-more-Google-pitch promise the onboarding offer step now honors.
+_DISCONNECT_GRACE = (
+    "Done — I've disconnected your Google and revoked my access. Want me to also "
+    "forget the calendar and email details I picked up while connected? Just say "
+    "the word. I won't bring up reconnecting unless you ask."
+)
+
+
 async def disconnect(
     session: AsyncSession,
     settings: HalOrchestratorConfig,
@@ -299,6 +309,26 @@ async def disconnect(
             log.warning("google.revoke_failed", silo=silo)
     await session.delete(acct)
     await session.flush()
+
+    # Keep the profile in sync (deleting the account row alone left
+    # google_connected=True), and set google_disconnected so the onboarding offer
+    # step never re-pitches Google. Then queue ONE graceful "forget it?" line via
+    # the durable outbox. Best-effort — a hiccup here must not fail the disconnect.
+    try:
+        from hal_orchestrator.services.delivery import enqueue
+        from hal_orchestrator.services.profiles import update_profile
+
+        await update_profile(
+            session, silo, google_connected=False, google_disconnected=True
+        )
+        await enqueue(
+            session,
+            to=silo,
+            text=_DISCONNECT_GRACE,
+            idempotency_key=f"google-forget:{silo}",
+        )
+    except Exception:
+        log.exception("google.disconnect_grace_failed", silo=silo)
     return True
 
 
