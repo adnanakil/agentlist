@@ -10,6 +10,8 @@ or switches to browser/web_fetch instead.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
+from urllib.parse import parse_qs, urlparse
 
 import structlog
 
@@ -27,16 +29,40 @@ SEARCH_UNAVAILABLE = (
 )
 
 
-async def _brave_search(query: str, ctx: ToolContext) -> str | None:
-    """Brave Search API — reliable JSON. Returns rendered results, '' for a
-    genuine empty result set, or None to signal 'fall back to DDG'."""
+@dataclass
+class WebSearchResults:
+    """Structured search output shared by the rendered tool and by callers
+    (grocery ASIN discovery) that need URLs, not prose.
+
+    `available=False` means the search service errored or blocked the request —
+    NOT an empty result set. That distinction is the whole failure-honesty rule:
+    an empty `results` with `available=True` genuinely found nothing.
+    """
+
+    results: list[dict] = field(default_factory=list)  # [{title, url, snippet}]
+    available: bool = True
+
+
+def _unwrap_ddg_url(href: str) -> str:
+    """DuckDuckGo HTML wraps every result link in a /l/?uddg=<real-url> redirect;
+    unwrap it so callers get the real target URL (needed to read Amazon ASINs)."""
+    if "uddg=" not in href:
+        return href
+    query = urlparse(href if "://" in href else "https:" + href).query
+    target = parse_qs(query).get("uddg")
+    return target[0] if target else href
+
+
+async def _brave_results(query: str, ctx: ToolContext, count: int) -> list[dict] | None:
+    """Brave Search API — reliable JSON. Returns a (possibly empty) result list,
+    or None to signal 'no key / errored, fall back to DDG'."""
     key = getattr(ctx.settings, "brave_search_api_key", "")
     if not key:
         return None
     try:
         resp = await ctx.http_client.get(
             BRAVE_SEARCH_URL,
-            params={"q": query, "count": 5},
+            params={"q": query, "count": count},
             headers={"X-Subscription-Token": key, "Accept": "application/json"},
             timeout=15,
         )
@@ -44,16 +70,75 @@ async def _brave_search(query: str, ctx: ToolContext) -> str | None:
             log.warning("web_search.brave_http", status=resp.status_code)
             return None
         items = (resp.json().get("web") or {}).get("results") or []
-        results = []
-        for it in items[:5]:
+        out = []
+        for it in items[:count]:
             title = (it.get("title") or "").strip()
+            url = (it.get("url") or "").strip()
             desc = re.sub(r"<[^>]+>", "", it.get("description") or "").strip()
-            if title:
-                results.append(f"{title}\n{desc}\n{it.get('url', '')}")
-        return "\n\n".join(results)
+            if title and url:
+                out.append({"title": title, "url": url, "snippet": desc})
+        return out
     except Exception:
         log.exception("web_search.brave_error", query=query)
         return None
+
+
+async def _ddg_results(query: str, ctx: ToolContext, count: int) -> list[dict] | None:
+    """DuckDuckGo HTML scrape. Returns a (possibly empty) result list for a real
+    SERP, or None when the request was blocked/errored (an anti-bot page)."""
+    try:
+        resp = await ctx.http_client.post(
+            DUCKDUCKGO_HTML_URL,
+            data={"q": query},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=15,
+        )
+    except Exception:
+        log.exception("web_search.error", query=query)
+        return None
+    if resp.status_code != 200:
+        # Anti-bot block / rate limit / outage — signal unavailable, not empty.
+        log.warning("web_search.ddg_http", status=resp.status_code, query=query)
+        return None
+    html = resp.text
+
+    # Pattern: <a class="result__a" href="...">title</a> ... <a class="result__snippet">snippet</a>
+    matches = re.findall(
+        r'class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?'
+        r'class="result__snippet"[^>]*>(.*?)</a>',
+        html,
+        re.DOTALL,
+    )
+    out = []
+    for url, title, snippet in matches[:count]:
+        title = re.sub(r"<[^>]+>", "", title).strip()
+        snippet = re.sub(r"<[^>]+>", "", snippet).strip()
+        url = _unwrap_ddg_url(url)
+        if title and url:
+            out.append({"title": title, "url": url, "snippet": snippet})
+
+    if not out and "result" not in html:
+        # Zero matches AND no results container: DDG served an anti-bot/
+        # interstitial page (shape change or block), not an empty result set.
+        log.warning("web_search.ddg_blocked", query=query)
+        return None
+    return out
+
+
+async def search_web(query: str, ctx: ToolContext, *, count: int = 5) -> WebSearchResults:
+    """Structured web search: Brave when keyed, else DuckDuckGo HTML.
+
+    The single search client. `tool_web_search` renders this for the model;
+    grocery ASIN discovery consumes the raw URLs. A blocked/errored search
+    returns `available=False` so callers never mistake it for 'nothing exists'.
+    """
+    brave = await _brave_results(query, ctx, count)
+    if brave is not None:
+        return WebSearchResults(results=brave, available=True)
+    ddg = await _ddg_results(query, ctx, count)
+    if ddg is None:
+        return WebSearchResults(results=[], available=False)
+    return WebSearchResults(results=ddg, available=True)
 
 
 async def tool_web_search(args: dict, ctx: ToolContext) -> str:
@@ -62,55 +147,14 @@ async def tool_web_search(args: dict, ctx: ToolContext) -> str:
     if not query:
         return "Error: query is required"
 
-    brave = await _brave_search(query, ctx)
-    if brave:
-        return brave
-    if brave == "":  # Brave answered fine and genuinely found nothing
+    res = await search_web(query, ctx)
+    if not res.available:
+        return SEARCH_UNAVAILABLE
+    if not res.results:
         return f"No results found for '{query}'."
-
-    try:
-        resp = await ctx.http_client.post(
-            DUCKDUCKGO_HTML_URL,
-            data={"q": query},
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=15,
-        )
-        if resp.status_code != 200:
-            # Anti-bot block / rate limit / outage — say so honestly.
-            log.warning("web_search.ddg_http", status=resp.status_code, query=query)
-            return SEARCH_UNAVAILABLE
-        html = resp.text
-
-        # Extract results from DuckDuckGo HTML
-        results = []
-        # Pattern: <a class="result__a" href="...">title</a> ... <a class="result__snippet">snippet</a>
-        snippets = re.findall(
-            r'class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?'
-            r'class="result__snippet"[^>]*>(.*?)</a>',
-            html,
-            re.DOTALL,
-        )
-
-        for url, title, snippet in snippets[:5]:
-            title = re.sub(r"<[^>]+>", "", title).strip()
-            snippet = re.sub(r"<[^>]+>", "", snippet).strip()
-            if title:
-                results.append(f"{title}\n{snippet}\n{url}")
-
-        if not results:
-            # Zero regex matches usually means DDG served an anti-bot/interstitial
-            # page (shape change or block), not an empty result set. A real empty
-            # SERP still contains the results container; a challenge page doesn't.
-            if "result" not in html:
-                log.warning("web_search.ddg_blocked", query=query)
-                return SEARCH_UNAVAILABLE
-            return f"No results found for '{query}'."
-
-        return "\n\n".join(results)
-
-    except Exception as exc:
-        log.exception("web_search.error", query=query)
-        return f"{SEARCH_UNAVAILABLE} (error: {exc})"
+    return "\n\n".join(
+        f"{r['title']}\n{r['snippet']}\n{r['url']}" for r in res.results
+    )
 
 
 async def tool_web_fetch(args: dict, ctx: ToolContext) -> str:
