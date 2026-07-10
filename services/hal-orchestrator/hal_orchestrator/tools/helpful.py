@@ -53,15 +53,36 @@ async def tool_helpful(args: dict, ctx: ToolContext) -> str:
 
     if action == "off":
         hp["enabled"] = False
+        hp.pop("trial", None)
+        hp.pop("trial_asked_date", None)
         _save(profile, hp)
         await ctx.session.flush()
         return "Helpful mode is off — I won't send the daily brief or proactive pings."
+
+    if action == "trial":
+        # Arm a single SAMPLE brief for tomorrow morning (onboarding's final step).
+        # The helpful loop sends one brief, appends a "want it daily?" line, and
+        # turns itself off the next day unless the user commits (action=on).
+        hp["enabled"] = True
+        hp["trial"] = "armed"
+        hp.setdefault("interests", list(DEFAULT_INTERESTS))
+        hp.setdefault("hour", 8)
+        _save(profile, hp)
+        await ctx.session.flush()
+        return (
+            "Trial brief armed — I'll send ONE sample brief tomorrow morning; it "
+            "stops on its own unless they ask to keep it."
+        )
 
     if action in ("on", "set"):
         if action == "on":
             hp["enabled"] = True
             hp.setdefault("interests", list(DEFAULT_INTERESTS))
             hp.setdefault("hour", 8)
+        # An explicit on/set is a commitment — leave trial mode so the daily brief
+        # sticks (this is the "they said yes, keep it" path).
+        hp.pop("trial", None)
+        hp.pop("trial_asked_date", None)
         if "interests" in args:
             chosen = [i for i in (args.get("interests") or []) if i in VALID_INTERESTS]
             if chosen:
@@ -77,4 +98,4 @@ async def tool_helpful(args: dict, ctx: ToolContext) -> str:
         await ctx.session.flush()
         return ("Helpful mode on. " if action == "on" else "Updated. ") + _summary(hp)
 
-    return "Unknown action. Use: on, off, status, set (interests, hour)."
+    return "Unknown action. Use: on, off, status, set (interests, hour), trial."

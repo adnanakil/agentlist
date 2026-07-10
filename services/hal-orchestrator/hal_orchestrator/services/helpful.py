@@ -120,6 +120,34 @@ def precip_directive(gathered: str) -> str:
     )
 
 
+# Appended to the ONE trial/sample brief (change 5): the code-enforced decay
+# below turns helpful mode off the next day unless the user commits, so this line
+# only asks — it never has to nag.
+TRIAL_FOLLOWUP = (
+    "\n\n(That's a sample of your morning brief — want it every morning? Just say "
+    "the word and I'll keep it up. Otherwise it stops on its own.)"
+)
+
+
+def _trial_expired(trial_asked_date: str | None, today: str) -> bool:
+    """True once a trial brief was sent + asked about on an EARLIER local day and
+    the user still hasn't committed — the code-enforced 'turn off if silent'.
+    Pure (ISO date strings compare lexicographically)."""
+    return bool(trial_asked_date) and trial_asked_date < today
+
+
+def advance_trial_on_brief(hp: dict, today: str) -> bool:
+    """When a trial-armed user's single sample brief fires, move the state
+    'armed' → 'asked' (stamping the local date the decay clock runs from) and
+    return True so the caller appends the follow-up line. Pure/testable; mutates
+    `hp` in place."""
+    if hp.get("trial") == "armed":
+        hp["trial"] = "asked"
+        hp["trial_asked_date"] = today
+        return True
+    return False
+
+
 def _helpful_state(profile: HalUserProfile) -> dict | None:
     hp = (profile.extra_data or {}).get("helpful")
     return hp if isinstance(hp, dict) and hp.get("enabled") else None
@@ -233,7 +261,8 @@ async def _run_once(settings: HalOrchestratorConfig, http: httpx.AsyncClient) ->
     from hal_orchestrator.prompts.system import USER_TZ
 
     now = datetime.now(timezone.utc)
-    actions: list[tuple[str, str, list, str]] = []  # (silo, mode, interests, location)
+    # (silo, mode, interests, location, is_trial)
+    actions: list[tuple[str, str, list, str, bool]] = []
 
     # --- Phase 1: claim slots (no HTTP inside this transaction) ---------------
     async for session in db_session.get_session():
@@ -253,11 +282,26 @@ async def _run_once(settings: HalOrchestratorConfig, http: httpx.AsyncClient) ->
             location = extra.get("home_location") or ""
 
             new_hp = dict(hp)
+
+            # Trial decay (change 5): a sample brief was sent + asked about on an
+            # earlier day and the user never committed → silently turn helpful mode
+            # off. Code-enforced, before any new brief could fire.
+            if new_hp.get("trial") == "asked" and _trial_expired(
+                new_hp.get("trial_asked_date"), today
+            ):
+                new_hp["enabled"] = False
+                new_hp.pop("trial", None)
+                new_hp.pop("trial_asked_date", None)
+                _save_state(profile, new_hp)
+                log.info("helpful.trial_lapsed_off", silo=profile.phone)
+                continue
+
             # New local day: reset the opportunistic ping counter.
             if new_hp.get("pings_date") != today:
                 new_hp["pings"], new_hp["pings_date"] = 0, today
 
             mode: str | None = None
+            is_trial = False
             # Daily brief: ONCE, inside a morning window only (never the evening).
             if (
                 brief_hour <= local.hour < brief_hour + settings.helpful_brief_window_hours
@@ -265,9 +309,15 @@ async def _run_once(settings: HalOrchestratorConfig, http: httpx.AsyncClient) ->
             ):
                 new_hp["last_brief"] = today
                 mode = "brief"
-            # Opportunistic ping: brief done today, under cap, well-spaced.
+                # A trial's single sample brief fires here; mark it asked (durably,
+                # before the send) so phase 2 appends the "want it daily?" line and
+                # the decay above can retire it tomorrow if unconfirmed.
+                is_trial = advance_trial_on_brief(new_hp, today)
+            # Opportunistic ping: brief done today, under cap, well-spaced. Trial
+            # users get only the one sample brief — no pings until they commit.
             elif (
-                new_hp.get("last_brief") == today
+                not new_hp.get("trial")
+                and new_hp.get("last_brief") == today
                 and brief_hour <= local.hour < settings.helpful_active_hour_end
                 and int(new_hp.get("pings", 0)) < settings.helpful_max_pings_per_day
                 and _gap_ok(new_hp.get("last_check"), now, settings.helpful_ping_min_gap_hours)
@@ -278,11 +328,11 @@ async def _run_once(settings: HalOrchestratorConfig, http: httpx.AsyncClient) ->
             if new_hp != hp:
                 _save_state(profile, new_hp)
             if mode:
-                actions.append((profile.phone, mode, interests, location))
+                actions.append((profile.phone, mode, interests, location, is_trial))
         await session.commit()  # guards durable BEFORE any fire
 
     # --- Phase 2: fire + deliver (outside any DB transaction) -----------------
-    for silo, mode, interests, location in actions:
+    for silo, mode, interests, location, is_trial in actions:
         try:
             reply = await _fire(
                 settings, http, silo, mode=mode, interests=interests, location=location
@@ -292,8 +342,12 @@ async def _run_once(settings: HalOrchestratorConfig, http: httpx.AsyncClient) ->
             continue
         if mode == "brief":
             if reply:
+                if is_trial:
+                    reply += TRIAL_FOLLOWUP
                 await _deliver(silo, reply)
-                log.info("helpful.brief_sent", silo=silo, chars=len(reply))
+                log.info(
+                    "helpful.brief_sent", silo=silo, chars=len(reply), trial=is_trial
+                )
         elif reply and not _is_quiet(reply):  # ping
             await _deliver(silo, reply)
             await _bump_ping(silo)

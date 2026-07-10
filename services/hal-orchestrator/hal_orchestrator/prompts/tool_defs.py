@@ -716,8 +716,13 @@ MAIN_TOOLS: list[dict] = [
                     "properties": {
                         "action": {
                             "type": "string",
-                            "enum": ["on", "off", "status", "set"],
-                            "description": "on, off, status, or set (adjust interests/hour)",
+                            "enum": ["on", "off", "status", "set", "trial"],
+                            "description": (
+                                "on, off, status, set (adjust interests/hour), or "
+                                "trial (arm ONE sample brief for tomorrow that turns "
+                                "itself off unless the user asks to keep it — use "
+                                "'on' when they do)."
+                            ),
                         },
                         "interests": {
                             "type": "array",
