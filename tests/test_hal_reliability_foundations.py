@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from hal_orchestrator import main
 from hal_orchestrator.middleware.request_size import ContentLengthLimitMiddleware
+from hal_orchestrator.middleware.security_headers import SecurityHeadersMiddleware
 from hal_orchestrator.routes.message import ImageData, MessageRequest
 from hal_orchestrator.services.action_policy import _explicit_send_request, arguments_hash
 from hal_orchestrator.services.baby_card import card_url, verify_card_token
@@ -117,6 +118,37 @@ def test_request_size_limit_counts_chunked_body_without_content_length() -> None
             send,
         )
         assert sent[0]["status"] == 413
+
+    asyncio.run(scenario())
+
+
+def test_security_headers_added_without_clobbering_the_apps_own() -> None:
+    async def scenario() -> None:
+        sent: list[dict] = []
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        async def app(_scope, _receive, wrapped_send) -> None:
+            await wrapped_send(
+                {
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"referrer-policy", b"same-origin"),
+                    ],
+                }
+            )
+            await wrapped_send({"type": "http.response.body", "body": b"{}"})
+
+        await SecurityHeadersMiddleware(app)({"type": "http"}, None, send)
+        headers = dict(sent[0]["headers"])
+        assert headers[b"x-content-type-options"] == b"nosniff"
+        assert b"max-age=" in headers[b"strict-transport-security"]
+        assert b"frame-ancestors 'none'" in headers[b"content-security-policy"]
+        # An app-set header wins over the middleware default.
+        assert headers[b"referrer-policy"] == b"same-origin"
 
     asyncio.run(scenario())
 
