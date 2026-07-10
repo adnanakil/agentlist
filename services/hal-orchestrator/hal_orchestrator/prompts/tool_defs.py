@@ -590,13 +590,18 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "nyc_events",
                 "description": (
-                    "Real, freshly-scraped NYC events (concerts, art, culture, "
-                    "nightlife, markets — ~1000 events across all boroughs, "
+                    "Real, freshly-scraped NYC events (including classes, workshops, "
+                    "lectures, talks, concerts, art, culture, and markets across all boroughs, "
                     "updated daily by the Ephemera engine). Use for ANY 'what's "
-                    "going on / events this weekend / things to do in NYC' "
+                    "going on / events this weekend / find a class or lecture / "
+                    "things to do in NYC' "
                     "question instead of web_search — every result is current, "
-                    "structured, and has a link. Filter by date window, "
-                    "category, keyword, or proximity to coordinates."
+                    "structured, and has a link. Results may include exact Calendar "
+                    "start/end values, registration, price, instructor, audience, "
+                    "and recurrence so you can check google_calendar for conflicts "
+                    "or create the event when asked. An '[end estimated]' marker "
+                    "means disclose/confirm the assumed duration before relying on it. "
+                    "Filter by date, event type, format, keyword, or proximity."
                 ),
                 "parameters": {
                     "type": "object",
@@ -614,6 +619,37 @@ MAIN_TOOLS: list[dict] = [
                         "category": {
                             "type": "string",
                             "description": "One of the engine's category buckets, e.g. 'Cultural & Arts'",
+                        },
+                        "event_type": {
+                            "type": "string",
+                            "enum": [
+                                "class",
+                                "workshop",
+                                "lecture",
+                                "talk",
+                                "tour",
+                                "conference",
+                                "performance",
+                                "exhibition",
+                                "market",
+                                "social",
+                                "other",
+                            ],
+                            "description": (
+                                "Semantic type. 'class' also matches workshops; "
+                                "'lecture' also matches talks/conferences."
+                            ),
+                        },
+                        "format": {
+                            "type": "string",
+                            "enum": ["in_person", "online", "hybrid"],
+                        },
+                        "calendar_ready": {
+                            "type": "boolean",
+                            "description": (
+                                "True to require an exact start time suitable for "
+                                "calendar conflict checks/creation."
+                            ),
                         },
                         "near": {
                             "type": "string",

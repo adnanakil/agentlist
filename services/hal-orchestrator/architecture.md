@@ -412,9 +412,12 @@ Separate Next.js service (repo `~/Project/Ephemera`, Railway) that HAL queries v
   venue/aggregator sites (Firecrawl → Scrapfly), extracts events with Claude Haiku,
   geocodes, dedupes, caches in Upstash Redis. Watchdog auto-resets a stall. (No
   serverless ceiling on Railway → the full scrape completes, ~2,071 events.)
-- **API:** `GET /api/events?since&until&near=lat,lng&radius_km&category&q&limit`
-  → `{success, count, events, lastFetched}`. HAL reaches it over private networking
-  (`EPHEMERA_URL`).
+- **API:** `GET /api/events?since&until&near=lat,lng&radius_km&category&q&event_type&format&calendar_ready&limit`
+  → `{success, count, events, lastFetched}`. Events carry a semantic type plus
+  calendar-ready RFC3339 start/end/timezone, format, instructor/organizer,
+  audience, price, registration, and recurrence metadata. Legacy cached events
+  are normalized at read time; inferred end times are explicitly marked.
+  HAL reaches it over private networking (`EPHEMERA_URL`).
 - **Consumers:** HAL's `nyc_events` tool + `/nyc-events` skill + the follow-up
   suggest phase; plus a Next.js web UI and a Swift iOS app.
 
