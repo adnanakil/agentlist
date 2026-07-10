@@ -334,8 +334,21 @@ def _ctx(key=""):
 
 
 no_key = asyncio.run(tool_grocery({"action": "list", "items": "oats, chia"}, _ctx("")))
-check("empty key -> graceful message, not a raw error", no_key == grocery.NO_KEY_MESSAGE, no_key)
+check(
+    "empty key -> automatic Whole Foods fallback links",
+    "amazon.com/s?k=oats&i=wholefoods" in no_key and "amazon.com/s?k=chia&i=wholefoods" in no_key,
+    no_key,
+)
 check("empty-key message never leaks 'error'/'exception'", "error" not in no_key.lower() and "exception" not in no_key.lower(), no_key)
+
+no_key_recipe = asyncio.run(
+    tool_grocery({"action": "recipe", "title": "Smoothie", "ingredients": "oats, chia"}, _ctx(""))
+)
+check(
+    "empty key -> recipe also falls back to WF links",
+    "amazon.com/s?k=oats&i=wholefoods" in no_key_recipe,
+    no_key_recipe,
+)
 
 wf_reply = asyncio.run(
     tool_grocery({"action": "wholefoods_links", "items": "oats, chia"}, _ctx(""))

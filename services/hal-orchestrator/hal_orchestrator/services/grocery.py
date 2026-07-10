@@ -32,22 +32,6 @@ MCP_URL = "https://mcp.instacart.com/mcp"
 # Amazon storefront search scoped to the Whole Foods Market merchant.
 _WF_SEARCH = "https://www.amazon.com/s?k={q}&i=wholefoods"
 
-# Shown when INSTACART_API_KEY isn't configured — honest, never a raw error.
-NO_KEY_MESSAGE = (
-    "I can't build a shoppable grocery link yet — the Instacart integration "
-    "isn't set up on my end. Once it's on I can turn any recipe or list into a "
-    "one-tap cart at your local store. For now, want me to pull up Whole Foods "
-    "search links for each item instead?"
-)
-
-# Shown when the MCP call fails (transport/API/missing-URL) — detail is logged.
-LINK_FAILED_MESSAGE = (
-    "I couldn't put that grocery link together just now — give it another try "
-    "in a moment. If it keeps failing I can send Whole Foods search links for "
-    "each item instead."
-)
-
-
 class GroceryError(Exception):
     """The Instacart link couldn't be built (transport, API, or missing URL)."""
 
