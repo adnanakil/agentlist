@@ -26,8 +26,13 @@ from hal_orchestrator.services.grocery import (  # noqa: E402
     _extract_share_url,
     _mcp_payload,
     _parse_mcp_body,
+    _structure_line,
     coerce_items,
+    coerce_line_items,
     parse_ingredient_lines,
+    parse_line_items,
+    recipe_arguments,
+    shopping_list_arguments,
     wholefoods_search_links,
 )
 
@@ -111,14 +116,164 @@ check("spaces encoded as + in every link", "k=chia+seeds&i=wholefoods" in wf, wf
 check("one line per item", len(wf.splitlines()) == 2, wf)
 
 # --------------------------------------------------------------------------- #
-print("MCP payload construction:")
+print("structured line items — quantity/unit/name/displayText:")
 
-payload = _mcp_payload("create-shopping-list", {"title": "T", "items": ["a", "b"]})
+
+def _one(line):
+    return _structure_line(line)
+
+
+yog = _one("170 g Greek yogurt")
+check("qty parsed", yog["quantity"] == 170, yog)
+check("unit parsed", yog["unit"] == "g", yog)
+check("name is the remainder", yog["name"] == "Greek yogurt", yog)
+check("displayText is verbatim", yog["displayText"] == "170 g Greek yogurt", yog)
+
+half = _one("½ scoop protein powder")
+check("unicode ½ -> 0.5", half["quantity"] == 0.5, half)
+check("scoop is a unit", half["unit"] == "scoop", half)
+check("½ name", half["name"] == "protein powder", half)
+
+check("mixed unicode 1½ cup -> 1.5", _one("1½ cup oats")["quantity"] == 1.5)
+check("ascii fraction 3/4 -> 0.75", _one("3/4 cup rice")["quantity"] == 0.75)
+check("mixed ascii 1 1/2 -> 1.5", _one("1 1/2 tbsp honey")["quantity"] == 1.5)
+check("decimal preserved", _one("0.5 l milk")["quantity"] == 0.5)
+check("integer stays int (not 170.0)", isinstance(yog["quantity"], int), type(yog["quantity"]))
+
+unitless = _one("1 big handful spinach")
+check("unrecognized unit -> each", unitless["unit"] == "each", unitless)
+check("unitless keeps quantity", unitless["quantity"] == 1, unitless)
+check("unitless name keeps the descriptor", unitless["name"] == "big handful spinach", unitless)
+
+bare = _one("Cinnamon")
+check("no quantity -> 1", bare["quantity"] == 1, bare)
+check("no unit -> each", bare["unit"] == "each", bare)
+check("bare name", bare["name"] == "Cinnamon", bare)
+
+smoothie_items = parse_line_items(SMOOTHIE)
+check("every line item has name+quantity+unit", all(i["name"] and i["quantity"] and i["unit"] for i in smoothie_items), smoothie_items)
+check(
+    "protein powder line item structured (whey, scoop)",
+    any(i["unit"] == "scoop" and i["name"] == "protein powder (whey)" for i in smoothie_items),
+    smoothie_items,
+)
+check(
+    "coerce_line_items normalizes a caller dict + drops extra keys",
+    coerce_line_items([{"name": "oats", "quantity": 2, "unit": "cup", "bogus": 1}])
+    == [{"name": "oats", "quantity": 2, "unit": "cup", "displayText": "oats"}],
+    coerce_line_items([{"name": "oats", "quantity": 2, "unit": "cup", "bogus": 1}]),
+)
+
+# --------------------------------------------------------------------------- #
+print("MCP payload construction + validation against the REAL Instacart schemas:")
+
+# Captured verbatim from an unauthenticated tools/list on
+# https://mcp.instacart.com/mcp (2026-07-09). Line items require `name`; a line
+# item missing quantity OR unit is silently dropped, so we always send both.
+_LINE_ITEM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "quantity": {"type": "number"},
+        "unit": {"type": "string"},
+        "displayText": {"type": "string"},
+    },
+    "required": ["name"],
+    "additionalProperties": False,
+}
+SHOPPING_LIST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "image_url": {"type": "string"},
+        "expires_in": {"type": "number"},
+        "instructions": {"type": "array", "items": {"type": "string"}},
+        "lineItems": {"type": "array", "items": _LINE_ITEM_SCHEMA, "minItems": 1},
+        "landingPageConfiguration": {"type": "object", "additionalProperties": True},
+    },
+    "required": ["title", "lineItems"],
+    "additionalProperties": False,
+}
+RECIPE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "image_url": {"type": "string"},
+        "author": {"type": "string"},
+        "servings": {"type": "number"},
+        "cooking_time": {"type": "number"},
+        "instructions": {"type": "array", "items": {"type": "string"}},
+        "ingredients": {"type": "array", "items": _LINE_ITEM_SCHEMA, "minItems": 1},
+    },
+    "required": ["title", "ingredients"],
+    "additionalProperties": False,
+}
+
+_TYPES = {"object": dict, "array": list, "string": str, "number": (int, float), "boolean": bool}
+
+
+def schema_errors(instance, schema, path="$"):
+    """Minimal JSON-Schema check: types, required, additionalProperties, minItems."""
+    errors = []
+    expected = schema.get("type")
+    if expected and not isinstance(instance, _TYPES[expected]):
+        # bool is an int subclass; keep numbers from matching booleans.
+        if not (expected == "number" and isinstance(instance, bool)):
+            errors.append(f"{path}: expected {expected}, got {type(instance).__name__}")
+            return errors
+    if expected == "object":
+        props = schema.get("properties", {})
+        for key in schema.get("required", []):
+            if key not in instance:
+                errors.append(f"{path}: missing required '{key}'")
+        if schema.get("additionalProperties") is False:
+            for key in instance:
+                if key not in props:
+                    errors.append(f"{path}: additionalProperties violation '{key}'")
+        for key, val in instance.items():
+            if key in props:
+                errors += schema_errors(val, props[key], f"{path}.{key}")
+    elif expected == "array":
+        if len(instance) < schema.get("minItems", 0):
+            errors.append(f"{path}: fewer than minItems {schema['minItems']}")
+        item_schema = schema.get("items")
+        if item_schema:
+            for i, el in enumerate(instance):
+                errors += schema_errors(el, item_schema, f"{path}[{i}]")
+    return errors
+
+
+payload = _mcp_payload("create-shopping-list", shopping_list_arguments("Smoothie run", SMOOTHIE))
 check("jsonrpc 2.0", payload["jsonrpc"] == "2.0", payload)
 check("method tools/call", payload["method"] == "tools/call", payload)
 check("params.name is the MCP tool", payload["params"]["name"] == "create-shopping-list", payload)
-check("params.arguments carried through", payload["params"]["arguments"] == {"title": "T", "items": ["a", "b"]}, payload)
 check("has an id", "id" in payload, payload)
+
+sl_args = payload["params"]["arguments"]
+check("shopping list uses lineItems (not items)", "lineItems" in sl_args and "items" not in sl_args, list(sl_args))
+sl_errors = schema_errors(sl_args, SHOPPING_LIST_SCHEMA)
+check("shopping-list payload validates against the real schema", sl_errors == [], sl_errors)
+check(
+    "every shopping-list line item has name+quantity+unit populated",
+    all(li.get("name") and "quantity" in li and li.get("unit") for li in sl_args["lineItems"]),
+    sl_args["lineItems"],
+)
+
+rp_args = recipe_arguments(
+    "Green smoothie", SMOOTHIE, instructions="Blend everything\nServe cold"
+)
+rp_errors = schema_errors(rp_args, RECIPE_SCHEMA)
+check("recipe payload validates against the real schema", rp_errors == [], rp_errors)
+check("recipe instructions are an array of strings", rp_args["instructions"] == ["Blend everything", "Serve cold"], rp_args["instructions"])
+check(
+    "every recipe ingredient has name+quantity+unit populated",
+    all(i.get("name") and "quantity" in i and i.get("unit") for i in rp_args["ingredients"]),
+    rp_args["ingredients"],
+)
+
+# Negative control: the validator actually catches a bad shape.
+bad = {"title": "x", "lineItems": [{"name": "oats", "surprise": 1}]}
+check("validator flags additionalProperties + missing keys", schema_errors(bad, SHOPPING_LIST_SCHEMA) != [], "validator too lax")
 
 # --------------------------------------------------------------------------- #
 print("MCP response -> share URL (JSON, event-stream, and missing):")

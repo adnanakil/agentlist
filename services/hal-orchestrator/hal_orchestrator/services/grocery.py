@@ -184,6 +184,144 @@ def wholefoods_search_links(items: list[str]) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Structured line items — Instacart wants {name, quantity, unit, displayText},
+# and SILENTLY DROPS any line item missing quantity or unit, so both are always
+# populated (defaulting 1 / "each"). displayText carries the verbatim line.
+# --------------------------------------------------------------------------- #
+
+# Unicode vulgar fractions -> decimal value ("½ scoop" -> 0.5).
+_UNICODE_FRACTIONS = {
+    "½": 0.5, "⅓": 1 / 3, "⅔": 2 / 3, "¼": 0.25, "¾": 0.75,
+    "⅕": 0.2, "⅖": 0.4, "⅗": 0.6, "⅘": 0.8, "⅙": 1 / 6, "⅚": 5 / 6,
+    "⅛": 0.125, "⅜": 0.375, "⅝": 0.625, "⅞": 0.875,
+    "⅐": 1 / 7, "⅑": 1 / 9, "⅒": 0.1,
+}
+_FRAC_CHARS = "".join(_UNICODE_FRACTIONS)
+
+# Measurement units recognized right after a quantity. Deliberately excludes
+# vague amounts ("handful", "pinch") so "1 big handful spinach" stays unit=each.
+_UNITS = {
+    "cup", "cups", "tbsp", "tablespoon", "tablespoons", "tsp", "teaspoon",
+    "teaspoons", "g", "gram", "grams", "kg", "mg", "oz", "ounce", "ounces",
+    "lb", "lbs", "pound", "pounds", "ml", "l", "liter", "liters", "litre",
+    "litres", "scoop", "scoops", "clove", "cloves", "can", "cans", "bunch",
+    "bunches", "slice", "slices", "piece", "pieces", "stick", "sticks",
+    "package", "packages", "pkg", "sprig", "sprigs", "head", "heads", "stalk",
+    "stalks", "quart", "quarts", "pint", "pints", "gallon", "gallons",
+}
+
+_QTY_TOKEN = re.compile(
+    r"^\s*("
+    r"\d+\s+\d+/\d+"            # mixed: 1 1/2
+    rf"|\d+\s*[{_FRAC_CHARS}]"  # mixed unicode: 1½ / 1 ½
+    rf"|[{_FRAC_CHARS}]"        # bare unicode: ½
+    r"|\d+/\d+"                 # fraction: 3/4
+    r"|\d+\.\d+"               # decimal: 1.5
+    r"|\d+"                    # integer: 170
+    r")\s+"
+)
+
+
+def _qty_value(token: str) -> float:
+    token = token.strip()
+    for ch, val in _UNICODE_FRACTIONS.items():
+        if ch in token:
+            whole = token.replace(ch, "").strip()
+            return round((float(whole) if whole else 0.0) + val, 4)
+    if "/" in token:
+        parts = token.split()
+        num, den = parts[-1].split("/")
+        whole = float(parts[0]) if len(parts) == 2 else 0.0
+        return round(whole + float(num) / float(den), 4)
+    return float(token)
+
+
+def _tidy_number(q) -> float | int:
+    q = float(q)
+    return int(q) if q.is_integer() else round(q, 4)
+
+
+def _structure_line(line: str) -> dict:
+    """One cleaned ingredient line -> {name, quantity, unit, displayText}."""
+    display = _clean(line)
+    quantity: float = 1
+    rest = display
+    m = _QTY_TOKEN.match(display)
+    if m:
+        quantity = _qty_value(m.group(1))
+        rest = display[m.end() :].strip() or display
+    unit, name = "each", rest
+    head, _, tail = rest.partition(" ")
+    if head.lower().rstrip(".") in _UNITS and tail.strip():
+        unit, name = head.lower().rstrip("."), tail.strip()
+    return {
+        "name": name,
+        "quantity": _tidy_number(quantity),
+        "unit": unit,
+        "displayText": display,
+    }
+
+
+def parse_line_items(text: str) -> list[dict]:
+    """Structured Instacart line items from a pasted recipe/list blob."""
+    return [it for it in map(_structure_line, parse_ingredient_lines(text)) if it["name"]]
+
+
+def _normalize_line_item(item: dict) -> dict:
+    """Coerce a caller-supplied dict into the exact 4-key line-item shape."""
+    name = str(item.get("name") or item.get("displayText") or "").strip()
+    try:
+        quantity = _tidy_number(item.get("quantity", 1) or 1)
+    except (TypeError, ValueError):
+        quantity = 1
+    unit = str(item.get("unit") or "each").strip() or "each"
+    display = str(item.get("displayText") or name).strip() or name
+    return {"name": name, "quantity": quantity, "unit": unit, "displayText": display}
+
+
+def coerce_line_items(value) -> list[dict]:
+    """Accept a pasted blob, a list of strings, or ready-made line-item dicts."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        out = []
+        for v in value:
+            item = _normalize_line_item(v) if isinstance(v, dict) else _structure_line(str(v))
+            if item["name"]:
+                out.append(item)
+        return out
+    return parse_line_items(str(value))
+
+
+def _as_steps(instructions) -> list[str]:
+    if not instructions:
+        return []
+    if isinstance(instructions, str):
+        return [s.strip() for s in re.split(r"[\n\r]+", instructions) if s.strip()]
+    return [str(s).strip() for s in instructions if str(s).strip()]
+
+
+def shopping_list_arguments(title: str, items) -> dict:
+    """Build create-shopping-list arguments (title + lineItems). Pure/testable."""
+    line_items = coerce_line_items(items)
+    if not line_items:
+        raise GroceryError("no items to add to the list")
+    return {"title": (title or "Shopping list").strip(), "lineItems": line_items}
+
+
+def recipe_arguments(title: str, ingredients, instructions=None) -> dict:
+    """Build create-recipe arguments (title + ingredients [+ instructions])."""
+    line_items = coerce_line_items(ingredients)
+    if not (title or "").strip() or not line_items:
+        raise GroceryError("a recipe needs a title and ingredients")
+    args: dict = {"title": title.strip(), "ingredients": line_items}
+    steps = _as_steps(instructions)
+    if steps:
+        args["instructions"] = steps
+    return args
+
+
+# --------------------------------------------------------------------------- #
 # Instacart MCP client.
 # --------------------------------------------------------------------------- #
 
@@ -303,15 +441,8 @@ async def create_shopping_list(
     http: httpx.AsyncClient, api_key: str, title: str, items
 ) -> str:
     """Build an Instacart shopping-list page; return its shareable URL."""
-    cleaned = coerce_items(items)
-    if not cleaned:
-        raise GroceryError("no items to add to the list")
-    return await _call_mcp(
-        http,
-        api_key,
-        "create-shopping-list",
-        {"title": (title or "Shopping list").strip(), "items": cleaned},
-    )
+    args = shopping_list_arguments(title, items)
+    return await _call_mcp(http, api_key, "create-shopping-list", args)
 
 
 async def create_recipe(
@@ -322,15 +453,5 @@ async def create_recipe(
     instructions=None,
 ) -> str:
     """Build an Instacart recipe page; return its shareable URL."""
-    cleaned = coerce_items(ingredients)
-    if not (title or "").strip() or not cleaned:
-        raise GroceryError("a recipe needs a title and ingredients")
-    arguments: dict = {"title": title.strip(), "ingredients": cleaned}
-    steps = (
-        [s.strip() for s in re.split(r"[\n\r]+", instructions) if s.strip()]
-        if isinstance(instructions, str)
-        else [str(s).strip() for s in (instructions or []) if str(s).strip()]
-    )
-    if steps:
-        arguments["instructions"] = steps
-    return await _call_mcp(http, api_key, "create-recipe", arguments)
+    args = recipe_arguments(title, ingredients, instructions)
+    return await _call_mcp(http, api_key, "create-recipe", args)
