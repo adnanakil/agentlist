@@ -203,6 +203,26 @@ def format_catalog(rows: list[dict], now: datetime) -> str | None:
     return "\n".join(lines)
 
 
+async def first_group_name(
+    session: AsyncSession, member_silo: str, now: datetime | None = None
+) -> str | None:
+    """The display NAME of the group this member most recently spoke in (for a
+    warm 1:1 opener), or None. Only returns a NAMED group — a bare chat id isn't
+    warm-intro material. Best-effort; same one-way valve as build_catalog (reads
+    the member's OWN membership, surfaces only the group name they already know).
+    """
+    now = now or datetime.now(timezone.utc)
+    try:
+        rows = await load_catalog_rows(session, member_silo, now)
+    except Exception:
+        log.exception("group_catalog.first_group_failed", member=member_silo)
+        return None
+    for row in rows:
+        if row.get("group_name"):
+            return row["group_name"]
+    return None
+
+
 async def build_catalog(
     session: AsyncSession, member_silo: str, now: datetime | None = None
 ) -> str | None:

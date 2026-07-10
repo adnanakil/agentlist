@@ -21,6 +21,19 @@ EXTRA_KEYS = (
     "home_location",
     "work_location",
     "google_offered",
+    # Onboarding ask-decay + funnel (all JSONB, no columns). asked_* are per-fact
+    # ask counts (incremented in the message route, one per real turn); after the
+    # cap the onboarding flow skips that fact permanently. google_disconnected is
+    # set when a user disconnects Google so the offer step never re-pitches.
+    # onboarding_events is the queryable funnel timeline; onboarded_at stamps
+    # completion. See prompts/system.py (next_onboarding_step / compute_onboarding_progress).
+    "asked_name",
+    "asked_timezone",
+    "asked_home",
+    "asked_work",
+    "google_disconnected",
+    "onboarding_events",
+    "onboarded_at",
     "onboarding_started_at",
     # Heartbeat identity-dedup: {gmail_message_id: iso_ts} of inbox items
     # already surfaced in a proactive alert (services/heartbeat.py).
@@ -50,6 +63,13 @@ def _serialize(profile: HalUserProfile) -> dict:
         "home_location": extra.get("home_location"),
         "work_location": extra.get("work_location"),
         "google_offered": extra.get("google_offered", False),
+        "google_disconnected": extra.get("google_disconnected", False),
+        "asked_name": extra.get("asked_name", 0),
+        "asked_timezone": extra.get("asked_timezone", 0),
+        "asked_home": extra.get("asked_home", 0),
+        "asked_work": extra.get("asked_work", 0),
+        "onboarding_events": extra.get("onboarding_events") or [],
+        "onboarded_at": extra.get("onboarded_at"),
         "extra_data": extra,
     }
 
@@ -67,6 +87,13 @@ def _empty(phone: str) -> dict:
         "home_location": None,
         "work_location": None,
         "google_offered": False,
+        "google_disconnected": False,
+        "asked_name": 0,
+        "asked_timezone": 0,
+        "asked_home": 0,
+        "asked_work": 0,
+        "onboarding_events": [],
+        "onboarded_at": None,
         "extra_data": {},
     }
 

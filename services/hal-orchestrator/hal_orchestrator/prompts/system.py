@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 # Default timezone (fallback when a user's own tz is unknown). Per-user tz now
@@ -518,26 +519,97 @@ message so you can help proactively. That makes restraint critical:
   "ALWAYS TL;DR Shared Links" rule. That overrides the silence default here."""
 
 
-def _onboarding_block(profile: dict | None) -> str | None:
+# Onboarding facts we ask for one at a time. After ONBOARDING_ASK_CAP asks with
+# no answer, a fact decays: the flow stops asking and leans on the background
+# profile_enricher to fill it silently. Ordered — the first unmet, non-decayed
+# fact is the next step.
+ONBOARDING_ASK_CAP = 2
+_ONBOARDING_DECAY_FACTS = ("name", "timezone", "home", "work")
+_ONBOARDING_FACT_FIELD = {
+    "name": "name",
+    "timezone": "timezone",
+    "home": "home_location",
+    "work": "work_location",
+}
+
+# A conservative "is this a real name we can greet with?" filter for an inbound
+# iMessage display name — so a group-known member can be pre-filled instead of
+# asked (change 2). Rejects empty/phone-numbery/email/over-long values.
+_NAME_HAS_LETTER_RX = re.compile(r"[A-Za-z]")
+
+
+def plausible_personal_name(raw: str | None) -> str | None:
+    """A cleaned first name to pre-fill, or None when `raw` isn't safely a name.
+    PURE (unit-testable). Used only for a witnessable name (the sender's own
+    iMessage display name), never another member's data."""
+    if not raw:
+        return None
+    name = " ".join(str(raw).split()).strip()
+    if not (2 <= len(name) <= 40):
+        return None
+    if "@" in name or "/" in name or "http" in name.lower():
+        return None
+    if not _NAME_HAS_LETTER_RX.search(name):
+        return None
+    if sum(c.isdigit() for c in name) >= 3:  # phone-number-ish
+        return None
+    return name
+
+
+def _ask_count(profile: dict, fact: str) -> int:
+    try:
+        return int(profile.get(f"asked_{fact}") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _fact_value(profile: dict, fact: str):
+    return profile.get(_ONBOARDING_FACT_FIELD[fact])
+
+
+def next_onboarding_step(profile: dict | None) -> str | None:
+    """The ONE onboarding thing to do next for a 1:1 user, or None when there's
+    nothing (no profile / already onboarded).
+
+    Facts are asked in order (name → timezone → home → work). A fact that's still
+    unset but has already been asked ONBOARDING_ASK_CAP times is DECAYED — treated
+    as resolved and skipped, so no user (not even one who won't give their name)
+    can get stuck un-onboardable. Then Google is offered once (never re-pitched
+    after a disconnect), and 'done' is the terminal step. PURE."""
+    if not profile or profile.get("onboarded"):
+        return None
+    for fact in _ONBOARDING_DECAY_FACTS:
+        if not _fact_value(profile, fact) and _ask_count(profile, fact) < ONBOARDING_ASK_CAP:
+            return fact
+    if (
+        not profile.get("google_connected")
+        and not profile.get("google_offered")
+        and not profile.get("google_disconnected")
+    ):
+        return "google"
+    return "done"
+
+
+def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> str | None:
     """Step-aware onboarding guidance for a 1:1 user — or None when there's
     nothing to do (already onboarded, or no profile yet).
 
-    The "step" is DERIVED from which fields are populated; there is no stored
-    step column. The message route has a code backstop that flips `onboarded`
-    only when the lightweight flow is actually complete; here we tell the model
-    the ONE next thing to ask and never to re-ask what's captured. Name is the
-    only hard requirement; timezone/location are best-effort and Google is
-    optional.
+    The "step" is DERIVED (see next_onboarding_step): which fields are populated,
+    and how many times each has been asked. We tell the model the ONE next thing
+    and never re-ask what's captured. Name is the only hard requirement, but even
+    it stops being asked after the decay cap. `group_intro` (a group NAME the
+    sender is a known member of) warms the opener instead of a cold intro.
     """
     if not profile or profile.get("onboarded"):
+        return None
+    step_key = next_onboarding_step(profile)
+    if step_key is None:
         return None
 
     have_name = bool(profile.get("name"))
     have_tz = bool(profile.get("timezone"))
     have_home = bool(profile.get("home_location"))
     have_work = bool(profile.get("work_location"))
-    google_done = bool(profile.get("google_connected"))
-    google_offered = bool(profile.get("google_offered"))
 
     captured: list[str] = []
     if have_name:
@@ -554,22 +626,32 @@ def _onboarding_block(profile: dict | None) -> str | None:
         else ""
     )
 
-    # First unmet step wins — ONE ask per turn.
-    if not have_name:
-        step = (
-            "This is your FIRST contact with this user. In ONE short, warm line, "
-            "say who you are (a proactive assistant they can text for planning, "
-            "reminders, research and more — not a feature dump), then ask their "
-            "name. When they give it, save it with contacts(action=update, name=...)."
+    if step_key == "name":
+        place = (
+            f"they already know you from the '{group_intro}' group chat you're both "
+            f"in — so place yourself there warmly ('it's HAL from the {group_intro} "
+            f"chat'), do NOT cold-introduce yourself"
+            if group_intro
+            else "introduce yourself in ONE warm line — a proactive assistant they "
+            "can text for planning, reminders, research and more, not a feature dump"
         )
-    elif not have_tz:
+        step = (
+            "FIRST read what they actually sent. If it's a REAL request or "
+            "question, ANSWER it excellently right now — leading with genuine help "
+            "IS the introduction. THEN, in the SAME reply, " + place + ", and ask "
+            "what to call them. If their message is only a bare greeting ('hi', "
+            "'hey') with no request, just lead with the intro and the name "
+            "question. When they tell you, save it with "
+            "contacts(action=update, name=...)."
+        )
+    elif step_key == "timezone":
         step = (
             "Ask what city or timezone they're in so your times and reminders are "
             "right. Infer the IANA zone from a city/state (e.g. 'I'm in LA' -> "
             "America/Los_Angeles) and save it with "
             "contacts(action=update, timezone='America/Los_Angeles')."
         )
-    elif not have_home:
+    elif step_key == "home":
         step = (
             "Ask where they live (neighborhood/city) so you can help with weather, "
             "day plans and travel. Save it with "
@@ -579,30 +661,46 @@ def _onboarding_block(profile: dict | None) -> str | None:
             "a walk, rain to plan around, a real nearby spot via places) — one "
             "line, genuinely local, never generic."
         )
-    elif not have_work:
+    elif step_key == "work":
         step = (
             "Ask where they work or spend their days (or 'work from home'). Save it "
             "with contacts(action=update, work_location=...)."
         )
-    elif not google_done and not google_offered:
+    elif step_key == "google":
         step = (
             "The basics are captured. OPTIONALLY offer to connect their Google "
             "(calendar + email — lets you see their real schedule, flag important "
-            "email, and add events for them) : call "
-            "google_auth(action=start), send the returned link on its own line, and "
-            "say it's optional and skippable. (The moment they connect, you'll "
-            "automatically text them something useful you can now see — so just "
-            "send the link warmly, no feature pitch.) Then mark it offered so you "
-            "don't ask again with contacts(action=update, google_offered=true)."
+            "email, and add events for them): call google_auth(action=start), send "
+            "the returned link on its own line, and say it's optional and "
+            "skippable. Set expectations in ONE line — you'll flag email that "
+            "genuinely needs them and warn before meetings, and you'll NEVER send "
+            "anything as them or act without asking. (The moment they connect, "
+            "you'll automatically text them something useful you can now see — so "
+            "just send the link warmly, no feature pitch.) Then mark it offered so "
+            "you don't ask again with contacts(action=update, google_offered=true)."
         )
-    else:
+    else:  # "done"
         step = (
             "Onboarding is complete. Mark it done with "
-            "contacts(action=update, onboarded=true). In the same reply, mention "
-            "ONCE that they can also get a short daily morning brief (weather, "
-            "their day, a local idea) — if they want it, enable it with "
-            "helpful_mode(action=on); if they don't respond to that, drop it. "
-            "Then just help them with whatever they need — do NOT keep onboarding."
+            "contacts(action=update, onboarded=true). In the SAME reply, offer to "
+            "SHOW them the morning brief by just sending one: say you'll send "
+            "tomorrow morning's brief (weather, their day, a local idea) as a "
+            "sample and it stops on its own if they don't want it — arm it with "
+            "helpful_mode(action=trial). Don't describe the brief in the abstract; "
+            "the sample IS the pitch. Then just help them with whatever they need "
+            "— do NOT keep onboarding."
+        )
+
+    # Warm-start acknowledgement for a group-known member whose name we already
+    # pre-filled (so the name step, which carries its own group intro, is skipped).
+    # Only on the genuine first onboarding turn (no funnel events yet) so HAL
+    # doesn't re-greet every turn.
+    warm = ""
+    if group_intro and step_key != "name" and not (profile.get("onboarding_events")):
+        warm = (
+            f"This user knows you from the '{group_intro}' group chat you share — "
+            f"open by placing yourself there ('it's HAL from the {group_intro} "
+            "chat') warmly, ONCE, then continue.\n"
         )
 
     return (
@@ -611,22 +709,91 @@ def _onboarding_block(profile: dict | None) -> str | None:
         "for ONE thing at a time, woven into normal help, never as a form or "
         "checklist. Save each fact the moment they give it. If they decline "
         "something, don't push — note it and move on (only their name really "
-        "matters).\n" + captured_line + "Next: " + step
+        "matters, and even that you stop asking after a couple tries).\n"
+        + warm + captured_line + "Next: " + step
     )
 
 
 def is_onboarding_complete(profile: dict | None) -> bool:
     """True when the lightweight 1:1 onboarding flow has reached its terminal
-    state. Keep this in sync with the final branch of _onboarding_block()."""
+    state — every fact captured OR asked to the decay cap, and Google
+    offered/connected/declined. Kept in sync with next_onboarding_step()'s
+    terminal 'done' step (a fact asked twice counts as resolved for completion,
+    so a user who declines facts still becomes onboardable)."""
     if not profile:
         return False
-    return bool(
-        profile.get("name")
-        and profile.get("timezone")
-        and profile.get("home_location")
-        and profile.get("work_location")
-        and (profile.get("google_connected") or profile.get("google_offered"))
+    if profile.get("onboarded"):
+        return True
+    return next_onboarding_step(profile) == "done"
+
+
+def _has_onboarding_event(events: list, step: str, event: str) -> bool:
+    return any(
+        isinstance(e, dict) and e.get("step") == step and e.get("event") == event
+        for e in events
     )
+
+
+def compute_onboarding_progress(
+    pre: dict | None, post: dict | None
+) -> tuple[dict, list[dict]]:
+    """Pure funnel accounting for ONE completed 1:1 turn.
+
+    Given the profile BEFORE (`pre`) and AFTER (`post`) the turn, return
+    (updates, events): `updates` is profile fields to persist (asked_<fact>
+    increments, the appended onboarding_events timeline, onboarded_at), and
+    `events` is structlog payloads to emit. Both empty when nothing
+    onboarding-relevant happened.
+
+    The ask increment lives HERE (applied by the message route once per real,
+    idempotent turn) rather than in the prompt builder, so one turn = at most
+    one increment and a replayed message can't double-count."""
+    if not pre or pre.get("onboarded"):
+        return {}, []
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    events_log = list(pre.get("onboarding_events") or [])
+    original_len = len(events_log)
+    # `emitted` feeds structlog: the funnel-event type is under "kind", NOT
+    # "event" — structlog's log.info(event, ...) reserves the "event" kwarg, and
+    # spreading a dict with an "event" key would raise. The persisted timeline
+    # (events_log) keeps its own "event" field; it's plain JSON.
+    emitted: list[dict] = []
+    updates: dict = {}
+
+    fact = next_onboarding_step(pre)  # what this turn's block asked/showed
+
+    # skipped-by-decay: any unset decay fact ordered BEFORE `fact` hit the cap
+    # and is now being skipped. Log once each.
+    order = list(_ONBOARDING_DECAY_FACTS)
+    upto = order.index(fact) if fact in order else len(order)
+    for f in order[:upto]:
+        if not _fact_value(pre, f) and _ask_count(pre, f) >= ONBOARDING_ASK_CAP:
+            if not _has_onboarding_event(events_log, f, "skipped_decay"):
+                events_log.append({"step": f, "event": "skipped_decay", "at": now_iso})
+                emitted.append({"kind": "skipped_decay", "step": f})
+
+    if fact in order:
+        if _fact_value(post, fact):  # answered this turn
+            if not _has_onboarding_event(events_log, fact, "answered"):
+                events_log.append({"step": fact, "event": "answered", "at": now_iso})
+                emitted.append({"kind": "answered", "step": fact})
+        else:  # not answered — this turn asked for it; count the ask
+            n = _ask_count(pre, fact) + 1
+            updates[f"asked_{fact}"] = n
+            events_log.append({"step": fact, "event": "asked", "at": now_iso, "n": n})
+            emitted.append({"kind": "asked", "step": fact, "n": n})
+
+    if is_onboarding_complete(post) and not _has_onboarding_event(
+        events_log, "done", "completed"
+    ):
+        events_log.append({"step": "done", "event": "completed", "at": now_iso})
+        emitted.append({"kind": "completed", "step": "done"})
+        updates["onboarded_at"] = now_iso
+
+    if len(events_log) != original_len:
+        updates["onboarding_events"] = events_log
+    return updates, emitted
 
 
 def build_user_context(
@@ -637,6 +804,7 @@ def build_user_context(
     is_group: bool = False,
     group_name: str | None = None,
     ambient_watch: bool = False,
+    group_intro: str | None = None,
 ) -> str:
     """Build per-silo context to append to the system prompt.
 
@@ -677,7 +845,7 @@ def build_user_context(
                 "\n## Saved Profile (your living notes on this user — "
                 "update with the profile tool)\n" + profile["notes"]
             )
-        onboarding = _onboarding_block(profile)
+        onboarding = _onboarding_block(profile, group_intro=group_intro)
         if onboarding:
             parts.append(onboarding)
 

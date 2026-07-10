@@ -51,7 +51,11 @@ check("no profile -> None", _onboarding_block(None) is None)
 base = _empty("+15550001111")
 
 b0 = _onboarding_block(base)
-check("step1 first contact + asks name", b0 and "FIRST contact" in b0 and "name" in b0.lower())
+# Value-first (change 1): answer a real request first, THEN intro + ask the name.
+check(
+    "step1 value-first + asks name",
+    b0 and "ANSWER it" in b0 and "name" in b0.lower(),
+)
 
 b1 = _onboarding_block({**base, "name": "Sarah"})
 check("step2 asks timezone", b1 and "timezone" in b1.lower())

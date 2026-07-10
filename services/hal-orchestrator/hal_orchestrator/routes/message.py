@@ -23,7 +23,9 @@ from hal_orchestrator.prompts.system import (
     SYSTEM_PROMPT,
     USER_TZ,
     build_user_context,
+    compute_onboarding_progress,
     is_onboarding_complete,
+    plausible_personal_name,
     resolve_tz,
 )
 from hal_orchestrator.services.conversation import (
@@ -1123,6 +1125,32 @@ def build_message_router() -> APIRouter:
             log.info("message.muted_silent", silo=silo, until=str(group_muted_until))
             return await finish(MessageResponse(reply=""))
 
+        # Group-aware warm start (1:1, brand-new user only): if this sender is a
+        # known member of a group HAL is in, the onboarding opener places itself
+        # in that shared context instead of a cold intro. If we can already
+        # WITNESS their name (their own iMessage display name), pre-fill it rather
+        # than ask a fact we effectively have. One-way valve: their OWN membership
+        # + OWN name only — never another member's data. Best-effort.
+        group_intro: str | None = None
+        if not is_group and not body.internal and not profile.get("onboarded"):
+            try:
+                from hal_orchestrator.services.group_catalog import first_group_name
+
+                group_intro = await first_group_name(session, silo)
+            except Exception:
+                log.exception("message.first_group_failed", silo=silo)
+            if group_intro and not profile.get("name"):
+                cand = plausible_personal_name(body.sender_name)
+                if cand:
+                    try:
+                        await update_profile(session, silo, name=cand)
+                        profile["name"] = cand
+                        log.info(
+                            "onboarding.prefill_name", silo=silo, source="group_member"
+                        )
+                    except Exception:
+                        log.exception("message.prefill_name_failed", silo=silo)
+
         user_context = build_user_context(
             silo=silo,
             profile=profile,
@@ -1131,6 +1159,7 @@ def build_message_router() -> APIRouter:
             is_group=is_group,
             group_name=body.group_name,
             ambient_watch=ambient_watch,
+            group_intro=group_intro,
         )
         system_prompt = SYSTEM_PROMPT + user_context
 
@@ -1849,12 +1878,21 @@ def build_message_router() -> APIRouter:
                 capture_trajectory,
             )
 
-            # Onboarding auto-complete backstop (1:1 only): once the lightweight
-            # flow is complete, mark the user onboarded even if the model forgot
-            # to flip it. Re-read the row because the model may have saved facts
-            # during this turn. Idempotent.
+            # Onboarding funnel + auto-complete backstop (1:1 only). Re-read the
+            # row because the model may have saved facts during this turn.
+            # compute_onboarding_progress counts asks (code-enforced decay, one
+            # per real turn), records answered/skipped/completed with timestamps,
+            # and emits structlog funnel events. The backstop then flips
+            # `onboarded` if the flow reached its terminal state and the model
+            # forgot to. Both idempotent; best-effort (already inside the wrapped
+            # post-hooks, so a failure here can never break the reply).
             if not is_group and not body.internal:
                 fresh = await get_profile(session, silo)
+                onb_updates, onb_events = compute_onboarding_progress(profile, fresh)
+                for ev in onb_events:
+                    log.info("onboarding.step", silo=silo, **ev)
+                if onb_updates:
+                    await update_profile(session, silo, **onb_updates)
                 if is_onboarding_complete(fresh) and not fresh.get("onboarded"):
                     await update_profile(session, silo, onboarded=True)
 
