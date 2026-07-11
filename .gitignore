@@ -44,5 +44,7 @@ uv.lock
 # eval sidecar snapshots (may contain real conversation data)
 scripts/.eval_snap_*.json
 
-# Claude Code (local tooling, worktrees, session state)
-.claude/
+# Claude Code (local tooling, worktrees, session state) — but project skills
+# are shared: they're how conventions reach every agent session in this repo.
+.claude/*
+!.claude/skills/
