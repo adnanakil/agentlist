@@ -58,9 +58,20 @@ async def _dispatch_model(
     max_retries, max_output_tokens, thinking_level, *, is_primary: bool,
 ) -> dict | None:
     """Run one request on one model: claude-* via the Anthropic shim, glm-* via
-    the Z.ai (Anthropic-compatible) shim, else the native Gemini path. A
-    non-primary model gets the primary's raw provider blocks stripped (they're
-    model-specific — a different model would mis-replay them)."""
+    the Z.ai (Anthropic-compatible) shim, gpt-* via the OpenAI shim, else the
+    native Gemini path. A non-primary model gets the primary's raw provider
+    blocks stripped (they're model-specific — a different model would
+    mis-replay them)."""
+    if model.startswith("gpt"):
+        from hal_orchestrator.services.openai_provider import call_openai
+
+        # The shim runs the Responses API statelessly (store:false — no signed
+        # blocks to replay), so Claude-primary raw blocks are never consumable
+        # here — always strip, like the native Gemini path.
+        return await call_openai(
+            client, settings, _strip_claude_blocks(history), tools, system, model,
+            max_retries, max_output_tokens, thinking_level,
+        )
     if model.startswith("claude"):
         from hal_orchestrator.services.claude_provider import call_claude
 

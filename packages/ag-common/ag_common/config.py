@@ -56,6 +56,17 @@ class HalOrchestratorConfig(BaseConfig):
     # Needs glm_api_key funded; the base URL rarely changes.
     glm_api_key: str = ""
     glm_base_url: str = "https://api.z.ai/api/anthropic"
+    # OpenAI — set ANY task's model id to "gpt-*" (e.g. GEMINI_MODEL =
+    # gpt-5.6-luna) to route it through the Responses-API shim
+    # (services/openai_provider.py).
+    openai_api_key: str = ""
+    # Reasoning depth for gpt-* models (none/low/medium/high/xhigh). Deliberately
+    # NOT driven by gemini_thinking_level: pushing that global to MAX to get
+    # frontier depth on OpenAI would also send thinkingLevel=MAX to the native
+    # Gemini fallback, which rejects it — nulling the exact fallback that's
+    # supposed to catch an OpenAI outage. An explicit per-call thinking_level
+    # (e.g. the watch poll forcing MINIMAL) still overrides this.
+    openai_reasoning_effort: str = "xhigh"
     gemini_model: str = "gemini-3.5-flash"  # MAIN user-facing agent loop
     # Resilience: if the MAIN loop's model fails (Anthropic 529 Overloaded, a
     # depleted-credits error, timeouts), try these models in order before giving
