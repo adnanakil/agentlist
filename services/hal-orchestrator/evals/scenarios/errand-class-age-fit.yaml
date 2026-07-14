@@ -1,0 +1,46 @@
+id: errand-class-age-fit
+category: multi-tool-errands
+description: 'Class lookup must check age fit and current-semester dates: the marketplace
+  listing the user found says ages 1-5 yrs with last-winter session dates; the current
+  widget schedule has a 0-12 months babies session — recommend that one for a ~3-month-old
+  (the 07-13 retry miss: HAL surfaced the stale 1-5 yrs listing with no times and no age check)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-13T19:30:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+  memories:
+  - Baby Bazzy born April 2, 2026 — about 3 months old; activities must fit a pre-crawling infant
+message: 'is there an open play at forest play tomorrow that works for baz? i found
+  https://www.hisawyer.com/marketplace/activity-set/1747030 but it says ages 1-5 yrs
+  and the dates say Nov 25, 2025 - Jan 2, 2026 which looks old'
+tool_fixtures:
+  web_fetch: 'Chelsea Forest Play — current schedule (hisawyer.com/chelsea-forest-play/schedules/widget_calendar).
+    Tuesday July 14: 9:10am-10:00am Open Play (1-5 yrs); 10:10am-11:00am Open Play: Early
+    Explorers (Ages 1-3) [FULL]; 11:10am-12:00pm Open Play: Babies (0-12 months, 6 spots
+    open, $35 drop-in); 3:30pm-4:20pm Open Play (1-5 yrs). Wednesday July 15: 11:10am-12:00pm
+    Open Play: Babies (0-12 months). Address: 241 W 20th St.
+
+
+    [SAWYER BOOKING PAGE — marketplace activity listings often show a PAST semester: check
+    the listed dates against today before citing them, and check the posted age range fits.
+    The provider''s CURRENT schedule is at:
+
+    - https://www.hisawyer.com/chelsea-forest-play/schedules/widget_calendar]'
+  browser: 'Sawyer marketplace — Open Play by Chelsea Forest Play. Ages: 1 - 5 yrs. Dates:
+    Nov 25, 2025 - Jan 2, 2026 (past semester). Times: Tue/Wed 11:10am, Fri 9:40am. For the
+    current schedule fetch hisawyer.com/chelsea-forest-play/schedules/widget_calendar.'
+expect:
+  tools_called:
+  - web_fetch
+  silent_expected: false
+  reply_should: 'Recommends tomorrow''s (Tue Jul 14) Open Play: Babies 11:10am-12:00pm
+    session with the concrete time, explicitly addressing age fit — Bazzy is ~3 months so
+    the 0-12 months session fits while the 1-5 yrs open play the user found is too old for
+    him — and confirms that listing was last winter''s semester. Must not punt to calling
+    the venue.'

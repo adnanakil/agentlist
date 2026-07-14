@@ -237,6 +237,12 @@ async def tool_web_fetch(args: dict, ctx: ToolContext) -> str:
         log.warning("web_fetch.blocked", url=url[:120], reason=reason)
         return f"Can't fetch that URL ({reason})."
 
+    # Raw HTML is kept for widget detection: _extract_page_text strips <script>
+    # tags, which is exactly where booking embeds (Sawyer et al.) live — the
+    # 07-13 chelseaforestplay miss. See services/booking_widgets.py.
+    from hal_orchestrator.services.booking_widgets import booking_widget_note
+
+    raw_html = ""
     native_error: Exception | None = None
     try:
         resp = await ctx.http_client.get(
@@ -253,8 +259,11 @@ async def tool_web_fetch(args: dict, ctx: ToolContext) -> str:
             timeout=20,
         )
         content_type = resp.headers.get("content-type", "")
+        if "text/html" in content_type.lower():
+            raw_html = resp.text
         if not _needs_browser_fallback(resp.status_code, resp.text, content_type):
-            return _extract_page_text(resp.text, content_type)
+            note = await booking_widget_note(raw_html, url, ctx) if raw_html else ""
+            return _extract_page_text(resp.text, content_type) + note
         native_error = RuntimeError(f"HTTP {resp.status_code} returned a block page or JS shell")
     except Exception as exc:
         log.exception("web_fetch.error", url=url)
@@ -262,5 +271,8 @@ async def tool_web_fetch(args: dict, ctx: ToolContext) -> str:
 
     rendered = await _self_hosted_scrape(url, ctx)
     if rendered:
-        return rendered
+        # A JS shell's raw body still carries the embed <script> tags even
+        # though the scraper's markdown won't — detect from the raw body.
+        note = await booking_widget_note(raw_html, url, ctx) if raw_html else ""
+        return rendered + note
     return f"Fetch error: {native_error or 'page returned no usable content'}"
