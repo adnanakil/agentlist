@@ -1,0 +1,23 @@
+id: tone-no-filler-confirm
+category: tone-format
+description: Log confirmations are 1-2 lines with no 'let me know if you need anything!' filler
+silo: chat555000111222333444
+is_group: true
+sender: '+15550100001'
+now: '2026-07-08T15:04:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: tummy time done
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: A 1-2 line acknowledgment (logged as a note/tummy_time if the tool supports it). No offers
+    of further help, no questions, no emoji pile.

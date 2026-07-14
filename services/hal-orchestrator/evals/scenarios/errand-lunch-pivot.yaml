@@ -1,0 +1,29 @@
+id: errand-lunch-pivot
+category: multi-tool-errands
+description: '''For lunch tho'' after a dinner search must pivot and re-search, not punt (prod: 18 tool
+  calls then asked for ''one more detail'')'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T10:55:00-04:00'
+internal: false
+seed:
+  history:
+  - role: user
+    text: good dinner options in the west village saturday?
+  - role: model
+    text: 'Three solid ones: Via Carota (walk-in, go early), L''Artusi (book on Resy), and Dame for seafood.'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: For lunch tho
+tool_fixtures:
+  places: 'West Village lunch: Buvette — 42 Grove St, opens 8 AM. Fairfax — 234 W 4th St, all-day cafe.
+    Elephant & Castle — 68 Greenwich Ave, opens 11 AM.'
+expect:
+  tools_called:
+  - places
+  silent_expected: false
+  reply_should: Understands the pivot (same area/day, lunch instead of dinner) and returns lunch picks
+    from the fixture. Asking 'can you give me one more detail?' is the tested failure.

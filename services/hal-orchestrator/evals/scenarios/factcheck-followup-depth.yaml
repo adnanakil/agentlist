@@ -1,0 +1,26 @@
+id: factcheck-followup-depth
+category: fact-check-links
+description: Rabbit-hole follow-up continues from established context with substance (the retention driver)
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T22:30:00-04:00'
+internal: false
+seed:
+  history:
+  - role: user
+    text: so girard thinks all desire is imitated?
+  - role: model
+    text: 'That''s mimetic theory: we want things because others want them, which breeds rivalry, and
+      societies historically discharged that rivalry on scapegoats.'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: How did Christ expose the sacrificial mechanism according to him?
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: A substantive continuation of the Girard thread (the Passion narrated from the innocent
+    victim's side, unmasking scapegoating rather than re-sacralizing it) — building on the established
+    context without re-introducing who Girard is. Depth is the point; a two-line brush-off fails.

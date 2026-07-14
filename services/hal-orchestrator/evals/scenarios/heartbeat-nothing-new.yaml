@@ -1,0 +1,35 @@
+id: heartbeat-nothing-new
+category: proactive-judgment
+description: Everything in the gathered context was already surfaced — the correct output is the silent
+  token
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T15:00:00-04:00'
+internal: true
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: '[HEARTBEAT CHECK — internal, the user did NOT text you. Most checks must be silent: reply with
+  EXACTLY "..." unless something genuinely new needs them RIGHT NOW.]
+
+
+  ## Gathered for you (reason over this — don''t re-fetch):
+
+  Current time — Wednesday 3:00 PM
+
+  Today''s weather — Sunny, 82F, no rain expected
+
+  Today''s calendar — No events today
+
+  Recent unread email — [id: m101] Chase: Your statement is ready  [ALREADY TOLD THE USER — do not re-alert
+  about this item]
+
+  [id: m102] Substack: This week in AI (newsletter)'
+tool_fixtures: {}
+expect:
+  silent_expected: true
+  reply_should: Exactly '...' — statement already surfaced, a newsletter is never alert-worthy, weather
+    is fine. Any sent message here is spam.

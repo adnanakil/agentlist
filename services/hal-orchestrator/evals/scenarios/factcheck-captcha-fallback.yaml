@@ -1,0 +1,28 @@
+id: factcheck-captcha-fallback
+category: fact-check-links
+description: 'Captcha-blocked link: fall back to web_search on the link/topic before punting to the user
+  (playbook rule)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T16:05:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: Hal is this true? https://www.tiktok.com/t/ZTfixture02/
+tool_fixtures:
+  browser: 'ERROR: TikTok returned a CAPTCHA challenge — page content unavailable.'
+  web_search: 'TikTok ZTfixture02 shared widely: claim that NYC banned gas stoves in all new buildings
+    starting 2026. Coverage: NY State''s 2023 law phases in all-electric NEW construction from 2026 (buildings
+    under 7 stories), NYC Local Law 154 already restricts fossil-fuel combustion in new buildings since
+    2024. Existing homes unaffected.'
+expect:
+  tools_called:
+  - web_search
+  silent_expected: false
+  reply_should: 'Doesn''t stop at the captcha: uses search to address the underlying claim (mostly-true-with-nuance:
+    new construction only, phased, existing stoves unaffected). May note the video itself was blocked.
+    Asking the user to describe the video without first trying search fails.'

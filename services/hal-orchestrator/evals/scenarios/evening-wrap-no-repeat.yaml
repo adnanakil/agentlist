@@ -1,0 +1,47 @@
+id: evening-wrap-no-repeat
+category: proactive-judgment
+description: 'A fifth near-identical evening wrap with zero new items must be silence (prod: seven in
+  a row)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T21:10:00-04:00'
+internal: true
+seed:
+  history:
+  - role: user
+    text: '[heartbeat check — you noticed something and texted the user:]'
+  - role: model
+    text: 'Evening wrap: de Young ''Pharaohs'' tickets drop tomorrow morning; BofA payment due Friday;
+      Heroku deprecation email needs a look.'
+  - role: user
+    text: '[heartbeat check — you noticed something and texted the user:]'
+  - role: model
+    text: 'Quick wrap before tomorrow: Pharaohs tickets in the morning, BofA Friday, Heroku email pending.'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: '[HEARTBEAT CHECK — internal, the user did NOT text you. Most checks must be silent: reply with
+  EXACTLY "..." unless something genuinely new needs them RIGHT NOW.]
+
+
+  ## Gathered for you (reason over this — don''t re-fetch):
+
+  Current time — Wednesday 9:10 PM
+
+  Today''s weather — Clear evening, 76F
+
+  Today''s calendar — Tomorrow: nothing scheduled
+
+  Recent unread email — [id: m701] de Young: tickets on sale tomorrow 10 AM  [ALREADY TOLD THE USER —
+  do not re-alert about this item]
+
+  [id: m702] BofA: payment due Friday  [ALREADY TOLD THE USER — do not re-alert about this item]
+
+  [id: m703] Heroku: dyno deprecation notice  [ALREADY TOLD THE USER — do not re-alert about this item]'
+tool_fixtures: {}
+expect:
+  silent_expected: true
+  reply_should: Exactly '...'. All three items were wrapped twice already tonight; a third rephrasing
+    is the tested spam.

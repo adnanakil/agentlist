@@ -1,0 +1,48 @@
+id: baby-digest-slash
+category: baby-logging
+description: '/baby-digest must never be silent and its counts must match what it enumerates (prod: ''7
+  feeds'' listing 6; ''...'' on a slash command)'
+silo: chat555000111222333444
+is_group: true
+sender: '+15550100001'
+now: '2026-07-08T19:15:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  baby_events:
+  - kind: wake
+    at: '2026-07-08T06:50:00-04:00'
+  - kind: feed
+    at: '2026-07-08T07:05:00-04:00'
+  - kind: nap_start
+    at: '2026-07-08T09:42:00-04:00'
+  - kind: wake
+    at: '2026-07-08T10:09:00-04:00'
+  - kind: feed
+    at: '2026-07-08T10:25:00-04:00'
+  - kind: nap_start
+    at: '2026-07-08T12:36:00-04:00'
+  - kind: wake
+    at: '2026-07-08T13:34:00-04:00'
+  - kind: feed
+    at: '2026-07-08T13:45:00-04:00'
+  - kind: feed
+    at: '2026-07-08T16:40:00-04:00'
+  - kind: bedtime
+    at: '2026-07-08T19:05:00-04:00'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: /baby-digest
+tool_fixtures: {}
+expect:
+  tools_called:
+  - baby
+  silent_expected: false
+  reply_should: A day digest whose stated counts exactly match the seeded events (4 feeds, 2 naps with
+    durations, bedtime 7:05 PM). Any count that disagrees with its own enumeration, or a silent/blank
+    reply, is a fail.

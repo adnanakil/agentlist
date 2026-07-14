@@ -1,0 +1,25 @@
+id: reminder-weekday-math
+category: reminders-time
+description: '''Thursday at 1:30'' from a Monday resolves to the correct date'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-13T09:00:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: remind me Thursday at 1:30 about the Dr. Raetz ultrasound
+tool_fixtures: {}
+expect:
+  tools_called:
+  - set_reminder
+  args_match:
+    set_reminder:
+      action: create
+      due_time: 2026-07-16T13:30
+  silent_expected: false
+  reply_should: Reminder for Thursday July 16, 1:30 PM confirmed with the explicit date. Off-by-a-week
+    or wrong-day resolution fails.

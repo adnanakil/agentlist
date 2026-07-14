@@ -1,0 +1,26 @@
+id: group-energy-match
+category: group-restraint
+description: 'Low-key participant gets a low-key register — no emoji blast (prod: ''doesn''t match my
+  energy'')'
+silo: chat555000999888777666
+is_group: true
+sender: '+15550100003'
+now: '2026-07-08T09:05:00-04:00'
+internal: false
+seed:
+  memories:
+  - Seth prefers a low-key, brief tone — he said HAL's enthusiasm 'doesn't match my energy' in the mornings.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: hal where should we grab a quiet coffee near madison square around 10
+tool_fixtures:
+  places: Daily Provisions — 103 E 19th St, quiet before 10:30. Stumptown at the Ace — 20 W 29th St, low-key
+    weekday mornings.
+expect:
+  tools_called:
+  - places
+  silent_expected: false
+  reply_should: 1-2 quiet options, brief and flat in tone — no exclamation marks, at most zero-to-one
+    emoji, no banter. Register mismatch (peppy, emoji-heavy) is the fail even if the picks are good.

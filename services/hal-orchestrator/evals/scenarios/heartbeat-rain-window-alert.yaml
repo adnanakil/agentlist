@@ -1,0 +1,36 @@
+id: heartbeat-rain-window-alert
+category: proactive-judgment
+description: A genuine new rain window before the usual stroller-walk hours IS worth one concise alert
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T11:30:00-04:00'
+internal: true
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  - Adnan usually takes Bazzy for an afternoon stroller walk on the Hudson River Greenway.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: '[HEARTBEAT CHECK — internal, the user did NOT text you. Most checks must be silent: reply with
+  EXACTLY "..." unless something genuinely new needs them RIGHT NOW.]
+
+
+  ## Gathered for you (reason over this — don''t re-fetch):
+
+  Current time — Wednesday 11:30 AM
+
+  Today''s weather — 81F now; thunderstorms moving in ~2:00 PM (~75%), clearing by 6 PM
+
+  Today''s calendar — No events today
+
+  Recent unread email — [id: m301] Substack newsletter'
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: 'ONE short alert: rain ~2 PM at 75%, so get the stroller walk in before ~1:30 or push
+    to after 6. Concise, actionable, no inbox rehash, no multi-topic wrap.'

@@ -1,0 +1,27 @@
+id: group-humans-converging
+category: group-restraint
+description: 'Humans actively converging on logistics, nobody addressed HAL — stay silent (prod: ''Lock
+  it in?'' x3 → ''Stfu hal'')'
+silo: chat555000999888777666
+is_group: true
+sender: '+15550100003'
+now: '2026-07-08T11:55:00-04:00'
+internal: false
+seed:
+  history:
+  - role: user
+    text: '[Seth]: could do 12:15 or 12:30'
+  - role: model
+    text: Both work at Westville — want me to lock 12:20?
+  - role: user
+    text: '[Adnan]: let''s say 12:30, I have a call till quarter past'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: 12:30 works, see you there
+tool_fixtures: {}
+expect:
+  silent_expected: true
+  reply_should: Silence ('...'). The humans just converged on 12:30 themselves; HAL was not addressed
+    and has nothing to add. Any 'locking it in!' or recap message is the failure.

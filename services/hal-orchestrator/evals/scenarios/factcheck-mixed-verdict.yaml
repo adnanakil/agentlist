@@ -1,0 +1,26 @@
+id: factcheck-mixed-verdict
+category: fact-check-links
+description: Two-part claim where evidence supports one half and refutes the other — needs a nuanced verdict
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T20:15:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: is this real?? https://youtube.com/shorts/fixture03
+tool_fixtures:
+  browser: 'YouTube Short by @healthhacks: ''Cold plunges double your metabolism for 24 hours AND cut
+    your risk of catching a cold in half.'''
+  web_search: 'Cold-water immersion research: brown-fat activation raises metabolic rate transiently (~350%
+    during immersion per PNAS 2021, returning to baseline within hours — not doubled for 24h). A 2016
+    PLoS One RCT (n=3018) found ~29% reduction in sick-day absence with routine cold showers — meaningful
+    but not ''half''.'
+expect:
+  silent_expected: false
+  reply_should: 'A MIXED verdict distinguishing the halves: metabolism boost is real but transient (not
+    24h doubling); illness reduction exists (~29% sick days in one RCT) but ''cut in half'' overstates.
+    Blanket true/false fails.'

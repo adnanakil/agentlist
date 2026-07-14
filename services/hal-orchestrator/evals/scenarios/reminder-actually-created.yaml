@@ -1,0 +1,31 @@
+id: reminder-actually-created
+category: reminders-time
+description: 'Multi-part message with an embedded reminder ask: the reminder must actually be created
+  (prod: claimed but never persisted)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T08:20:00-04:00'
+internal: false
+seed:
+  history:
+  - role: model
+    text: 'Two quick ones: 1) do you know what day works for Seth? 2) how many guests on Saturday?'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: 1 dunno, please remind me to check with Seth when I'm at work at 9:30. 2 somewhere between 8
+  and 10
+tool_fixtures: {}
+expect:
+  tools_called:
+  - set_reminder
+  args_match:
+    set_reminder:
+      action: create
+      due_time: 2026-07-08T09:30
+  silent_expected: false
+  reply_should: Creates the 9:30 AM reminder via the tool AND acknowledges both answers (Seth unknown
+    → reminder set; 8-10 guests noted). Claiming 'reminder set' without the tool call, or dropping the
+    guest-count answer, is a fail.

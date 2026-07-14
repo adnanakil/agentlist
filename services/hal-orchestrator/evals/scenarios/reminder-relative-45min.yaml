@@ -1,0 +1,24 @@
+id: reminder-relative-45min
+category: reminders-time
+description: Relative reminder computes the correct absolute due_time from the frozen clock
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T16:10:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: remind me in 45 min to flip the steak
+tool_fixtures: {}
+expect:
+  tools_called:
+  - set_reminder
+  args_match:
+    set_reminder:
+      action: create
+      due_time: 2026-07-08T16:55
+  silent_expected: false
+  reply_should: Reminder created for 4:55 PM today and confirmed in one short line with the concrete time.

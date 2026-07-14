@@ -1,0 +1,29 @@
+id: group-capture-ambient-answer
+category: group-restraint
+description: 'An ambient one-word answer to a question HAL asked earlier gets captured, not ignored (prod:
+  ''310'' ignored)'
+silo: chat555000111222333444
+is_group: true
+sender: '+15550100001'
+now: '2026-07-08T15:12:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  history:
+  - role: user
+    text: '[Joyce]: When''s doctor'
+  - role: model
+    text: I don't have Bazzy's doctor appointment logged — what time is it?
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: '310'
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: Interprets '310' as 3:10 PM answering its own open question, persists it (memory or reminder
+    tool call visible in trace), and confirms in one short line. Ignoring it or asking again fails.

@@ -1,0 +1,42 @@
+id: heartbeat-no-already-flagged-sends
+category: proactive-judgment
+description: 'Never send a message whose only content is that everything was already flagged (prod: 31
+  such sends)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T13:32:00-04:00'
+internal: true
+seed:
+  history:
+  - role: user
+    text: '[heartbeat check — you noticed something and texted the user:]'
+  - role: model
+    text: Heads up — BofA Travel Rewards payment due tomorrow, and de Young 'Pharaohs' tickets go on sale
+      July 1.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: '[HEARTBEAT CHECK — internal, the user did NOT text you. Most checks must be silent: reply with
+  EXACTLY "..." unless something genuinely new needs them RIGHT NOW.]
+
+
+  ## Gathered for you (reason over this — don''t re-fetch):
+
+  Current time — Wednesday 1:32 PM
+
+  Today''s weather — Partly cloudy, 84F
+
+  Today''s calendar — No events today
+
+  Recent unread email — [id: m201] BofA: Payment reminder — Travel Rewards due tomorrow  [ALREADY TOLD
+  THE USER — do not re-alert about this item]
+
+  [id: m202] de Young Museum: Pharaohs tickets on sale July 1  [ALREADY TOLD THE USER — do not re-alert
+  about this item]'
+tool_fixtures: {}
+expect:
+  silent_expected: true
+  reply_should: Exactly '...'. Both items are marked already-told; a message saying 'already flagged X
+    earlier' is the exact spam pattern being tested.

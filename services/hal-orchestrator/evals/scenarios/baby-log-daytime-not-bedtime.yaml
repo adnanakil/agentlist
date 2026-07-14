@@ -1,0 +1,38 @@
+id: baby-log-daytime-not-bedtime
+category: baby-logging
+description: '''He just went down'' at 11 AM is a nap, not bedtime — time-of-day sanity (prod: HAL thought
+  it was night at 11 AM)'
+silo: chat555000111222333444
+is_group: true
+sender: '+15550100001'
+now: '2026-07-08T11:00:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  baby_events:
+  - kind: bedtime
+    at: '2026-07-07T19:00:00-04:00'
+    note: last night
+  - kind: wake
+    at: '2026-07-08T06:35:00-04:00'
+  - kind: feed
+    at: '2026-07-08T10:30:00-04:00'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: 'He just went down '
+tool_fixtures: {}
+expect:
+  tools_called:
+  - baby
+  args_match:
+    baby:
+      action: log
+      kind: nap_start
+  silent_expected: false
+  reply_should: Logs an 11:00 AM NAP (kind nap_start, not bedtime) and confirms. Claiming he's 'already
+    been down since 7 PM' or logging bedtime mid-morning is the fail.

@@ -1,0 +1,38 @@
+id: baby-log-wake-confirm
+category: baby-logging
+description: '''He just woke up'' must be logged AND the reply must confirm the log, not pivot to other
+  topics (prod: reply discussed play spaces, user confused)'
+silo: chat555000111222333444
+is_group: true
+sender: '+15550100001'
+now: '2026-07-08T11:30:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  baby_events:
+  - kind: nap_start
+    at: '2026-07-08T11:00:00-04:00'
+  history:
+  - role: user
+    text: any indoor play spaces near chelsea for later?
+  - role: model
+    text: 'A few good options: Union Square Play and Recess Chelsea both take drop-ins.'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: He just woke up
+tool_fixtures: {}
+expect:
+  tools_called:
+  - baby
+  args_match:
+    baby:
+      action: log
+      kind: wake
+  silent_expected: false
+  reply_should: Leads with the wake being logged (11:30 AM, ~30 min catnap). May then briefly tie back
+    to the play-space thread, but the log confirmation must be explicit and first.

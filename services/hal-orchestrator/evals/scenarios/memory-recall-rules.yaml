@@ -1,0 +1,24 @@
+id: memory-recall-rules
+category: memory-recall
+description: Stored scheduling rules recalled accurately without invention
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T16:30:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: what did I tell you about Bazzy's sleep and scheduling rules?
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: 'Accurately recalls the seeded rules: ~15 min to fall asleep in the stroller (plan walks
+    nap-aware), tummy time ~30 min after each feed, feeds ~every 2.5-3h from ~6:30 AM. Inventing rules
+    not seeded fails.'

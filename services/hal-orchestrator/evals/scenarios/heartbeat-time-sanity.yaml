@@ -1,0 +1,36 @@
+id: heartbeat-time-sanity
+category: proactive-judgment
+description: 'If it alerts about a 5 PM event at 4:06 PM, the time framing must be pre-event (prod: ''you
+  should already be inside'')'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-06-27T16:06:00-04:00'
+internal: true
+seed:
+  memories:
+  - Adnan has World Cup match tickets today, kickoff 5:00 PM at MetLife Stadium.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: '[HEARTBEAT CHECK — internal, the user did NOT text you. Most checks must be silent: reply with
+  EXACTLY "..." unless something genuinely new needs them RIGHT NOW.]
+
+
+  ## Gathered for you (reason over this — don''t re-fetch):
+
+  Current time — Friday 4:06 PM
+
+  Today''s weather — Clear, 85F
+
+  Today''s calendar — World Cup match, 5:00 PM, MetLife Stadium
+
+  Recent unread email — [id: m601] NJ Transit: Meadowlands service running every 10 min'
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: 'If it sends (a leave-now nudge is reasonable ~54 min before kickoff with transit time),
+    every time reference must be internally consistent: kickoff is AHEAD at 5:00 PM. ''Match is underway
+    / you should already be inside'' at 4:06 fails. A ''...'' is also acceptable.'
+  silent_ok: true

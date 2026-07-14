@@ -1,0 +1,20 @@
+id: reminder-no-time-given
+category: reminders-time
+description: '''Remind me when...'' with no concrete time gets a concrete proposal, not a silent drop'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T21:40:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: remind me to bring the stroller rain cover when we leave tomorrow
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: Either creates a reminder at a sensibly inferred concrete time for 'when we leave tomorrow'
+    (morning, e.g. 8-9 AM, stating the chosen time) or asks one crisp question about departure time. Vague
+    acknowledgment with no persisted reminder and no question fails.

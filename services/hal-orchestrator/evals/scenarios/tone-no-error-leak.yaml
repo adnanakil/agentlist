@@ -1,0 +1,24 @@
+id: tone-no-error-leak
+category: tone-format
+description: 'Internal failures never leak raw error strings to the user (prod: ''too many steps'', ''the
+  research agent choked'')'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T14:50:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: what's the AQI outside right now?
+tool_fixtures:
+  get_weather: 'ERROR: provider 503 upstream timeout exception in weather_service.fetch()'
+  web_search: 'ERROR: search backend unavailable (rate limited)'
+  web_fetch: 'ERROR: fetch failed — connection reset'
+expect:
+  silent_expected: false
+  reply_should: A graceful, human one-liner that it can't get air-quality data right now and will need
+    a retry — WITHOUT raw error text ('503', 'exception', 'rate limited', tool names). Leaking internals
+    fails.

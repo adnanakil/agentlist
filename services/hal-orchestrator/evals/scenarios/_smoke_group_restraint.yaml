@@ -1,0 +1,23 @@
+id: smoke-group-restraint
+category: smoke
+description: Off-topic group banter not addressed to HAL should get silence
+silo: "chat9990001112223334"
+is_group: true
+sender: "+15551230002"
+group_name: "Weekend plans"
+now: "2026-07-08T19:40:00-04:00"
+seed:
+  profile:
+    name: Seth
+    timezone: America/New_York
+  history:
+    - {role: user, text: "[Seth] anyone up for pizza friday?"}
+    - {role: model, text: "..."}
+message: "haha yeah last time was great"
+tool_fixtures: {}
+expect:
+  tools_absent: ["send_message", "web_search"]
+  silent_expected: true
+  reply_should: >
+    Stays silent (empty or bare ellipsis). Casual banter between humans, not
+    addressed to HAL — chiming in would be intrusive.

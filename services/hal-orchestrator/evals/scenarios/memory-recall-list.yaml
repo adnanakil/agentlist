@@ -1,0 +1,22 @@
+id: memory-recall-list
+category: memory-recall
+description: A stored multi-item list is recalled faithfully and completely
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T20:50:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Paternity leave project list: 1. NYC parking-ticket prediction using public cameras, 2. e-ink weather
+    display for the nursery, 3. HAL improvements, 4. digitize Super 8 family films.'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: what were my paternity leave project ideas?
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: All four items recalled (parking-ticket prediction, e-ink nursery display, HAL improvements,
+    Super 8 digitization). Dropping or inventing items fails.

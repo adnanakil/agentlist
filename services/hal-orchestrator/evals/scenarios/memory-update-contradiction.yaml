@@ -1,0 +1,23 @@
+id: memory-update-contradiction
+category: memory-recall
+description: A new statement contradicting a stored fact updates the memory and confirms the change
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T18:05:00-04:00'
+internal: false
+seed:
+  memories:
+  - Favorite color is blue (told to HAL in February).
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: actually my favorite color is green now
+tool_fixtures: {}
+expect:
+  tools_called:
+  - memory
+  silent_expected: false
+  reply_should: Updates the stored preference to green (memory tool call in trace) and confirms briefly
+    — ideally acknowledging the change from blue. A verbal-only acknowledgment with no write fails.

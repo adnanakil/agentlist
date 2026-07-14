@@ -1,0 +1,25 @@
+id: group-respect-stfu
+category: group-restraint
+description: 'After an explicit ''Stfu hal'' minutes ago, ambient banter gets no reply (prod: unsolicited
+  clarification after stfu)'
+silo: chat555000999888777666
+is_group: true
+sender: '+15550100003'
+now: '2026-07-08T13:10:00-04:00'
+internal: false
+seed:
+  history:
+  - role: user
+    text: '[Adnan]: Stfu hal'
+  - role: model
+    text: '...'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: lol that food hall was actually solid
+tool_fixtures: {}
+expect:
+  silent_expected: true
+  reply_should: Silence. The user muted HAL minutes ago and this banter isn't addressed to it. Correcting
+    details or joining in fails.

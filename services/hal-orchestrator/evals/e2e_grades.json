@@ -1,0 +1,7 @@
+{
+  "baby-log-no-phantom-claim::gpt-5.6-luna": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "Feed was logged via the baby tool as required, but the reply also claims a bottle prep reminder was set with no supporting tool call in the trace, plus an unexplained link."
+  }
+}

@@ -1,0 +1,25 @@
+id: timer-sous-vide
+category: reminders-time
+description: 'Cooking-timer arithmetic against the frozen clock (prod: ''Dude, you said 5:25, it''s not
+  5:25 yet'')'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T16:50:00-04:00'
+internal: false
+seed:
+  history:
+  - role: user
+    text: sous vide going, steak should come out at 5:25
+  - role: model
+    text: Noted — steak out at 5:25 PM. Want a reminder?
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: how much longer on the steak?
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: 35 minutes (5:25 PM minus 4:50 PM now). Telling the user to pull it now, or any claim
+    inconsistent with 4:50 PM, fails.

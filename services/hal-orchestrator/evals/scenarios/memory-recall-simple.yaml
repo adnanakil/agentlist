@@ -1,0 +1,22 @@
+id: memory-recall-simple
+category: memory-recall
+description: Trivial stored fact recalled without tool-thrash
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T18:00:00-04:00'
+internal: false
+seed:
+  memories:
+  - Favorite color is blue (told to HAL in February).
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: what's my favorite color?
+tool_fixtures: {}
+expect:
+  tools_absent:
+  - web_search
+  silent_expected: false
+  reply_should: Blue — one line. Web-searching or claiming not to know fails.

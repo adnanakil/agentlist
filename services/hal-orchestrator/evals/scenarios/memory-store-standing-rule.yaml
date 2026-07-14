@@ -1,0 +1,19 @@
+id: memory-store-standing-rule
+category: memory-recall
+description: A standing behavioral rule gets persisted, not just acknowledged
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T09:50:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: whenever I log a feed, remind me about tummy time 30 minutes after
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: Persists the rule (memory tool call visible in trace — or an equivalent durable mechanism)
+    and confirms the standing behavior in one line. A bare 'will do!' with no write fails.

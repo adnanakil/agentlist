@@ -1,0 +1,32 @@
+id: smoke-baby-log-feed
+category: smoke
+description: Terse feed update must be logged via the baby tool with kind=feed
+silo: "+15551230001"
+is_group: false
+sender: "+15551230001"
+now: "2026-07-08T14:32:00-04:00"
+seed:
+  profile:
+    name: Adnan
+    home_location: "Chelsea, Manhattan"
+    timezone: America/New_York
+  memories:
+    - "Baby Bazzy was born April 2, 2026; feeds are usually 4-5oz every ~3 hours."
+  baby:
+    name: Bazzy
+    birthdate: "2026-04-02"
+  baby_events:
+    - {kind: feed, at: "2026-07-08T11:10:00-04:00", note: "4oz"}
+    - {kind: nap_start, at: "2026-07-08T12:33:00-04:00"}
+    - {kind: wake, at: "2026-07-08T14:05:00-04:00"}
+message: "4oz at 2:15"
+tool_fixtures: {}
+expect:
+  tools_called: ["baby"]
+  tools_absent: ["send_message"]
+  args_match:
+    baby: {kind: "feed"}
+  silent_expected: false
+  reply_should: >
+    Brief confirmation that a 4oz feed at 2:15 PM was logged. No filler
+    questions, no unrelated suggestions.

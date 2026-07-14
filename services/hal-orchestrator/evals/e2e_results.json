@@ -1,0 +1,60 @@
+[
+ {
+  "scenario_id": "baby-log-no-phantom-claim",
+  "category": "baby-logging",
+  "model": "gpt-5.6-luna",
+  "reply": "Logged \u2705 Bottle prep reminder set for 12:53 PM\n\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783952580&sig=9289e31ef572bb40904d3a58da50c2cf&t=1783951680",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "",
+     "note": "",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 27829,
+   "cached": 13784,
+   "output": 215,
+   "reasoning": 50
+  },
+  "usage_other": {},
+  "latency_ms": 4057,
+  "error": null,
+  "description": "The #1 prod failure: HAL says 'logged' without calling the baby tool \u2014 the tool call itself is the assertion",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "feed"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Feed logged at ~12:28 PM via the tool and confirmed briefly. Any 'logged \u2705' claim without the baby tool call in the trace is an automatic fail."
+  }
+ }
+]

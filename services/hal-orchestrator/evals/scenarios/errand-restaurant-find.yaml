@@ -1,0 +1,27 @@
+id: errand-restaurant-find
+category: multi-tool-errands
+description: Concrete lunch pick near a landmark using places data, no invented hours
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T11:20:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: find us a lunch spot near the High Line, stroller friendly
+tool_fixtures:
+  places: Santina — 820 Washington St, under the High Line, spacious patio, opens 11:30. Bubby's High
+    Line — 73 Gansevoort St, kid-friendly, opens 11:00. Both ~0.7 mi from Chelsea.
+expect:
+  tools_called:
+  - places
+  silent_expected: false
+  reply_should: 1-2 picks from the fixture with the stroller-relevant details (patio/space, opening times,
+    distance). Recommending places or hours not in the fixture fails.

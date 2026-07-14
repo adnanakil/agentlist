@@ -1,0 +1,357 @@
+{
+ "baby-digest-slash::claude-sonnet-5": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Slash command required a digest reply but HAL stayed silent despite fetching stats."
+ },
+ "baby-digest-slash::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "HAL stayed silent on /baby-digest despite gathering stats, when a digest reply with matching counts was required."
+ },
+ "baby-log-ambiguous-505::claude-sonnet-5": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "HAL avoided guess-logging, explicitly stated nothing was logged, and asked one crisp clarifying question about what the 5:05 entry was \u2014 exactly the expected confirm-before-log behavior."
+ },
+ "baby-log-ambiguous-505::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "partial",
+  "reason": "It correctly avoided guess-logging and asked one clarifying question, but the interpretations offered (bedtime vs. reminder) miss the likely feed-logging context (new 5:05 feed vs. correction to the 4:40 feed), which could prompt further re-corrections."
+ },
+ "baby-log-correction::claude-sonnet-5": {
+  "failure_category": "hallucination",
+  "grade": "partial",
+  "reason": "Correctly undid and relogged the 9:30 AM wake and confirmed it, but claimed a wind-down reminder was set with no tool call in the trace supporting it."
+ },
+ "baby-log-correction::gpt-5.6-luna": {
+  "failure_category": "hallucination",
+  "grade": "partial",
+  "reason": "Correctly undid and relogged the 9:30 wake and confirmed it, but the claim that a wind-down was set for 11:30 AM isn't supported by the tool trace."
+ },
+ "baby-log-daytime-not-bedtime::claude-sonnet-5": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Correctly logged nap_start (not bedtime) at 11 AM and gave a brief confirmation, matching expected behavior."
+ },
+ "baby-log-daytime-not-bedtime::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Correctly logged nap_start (not bedtime) at the current time and confirmed briefly with no false claims."
+ },
+ "baby-log-feed-terse::claude-sonnet-5": {
+  "failure_category": "bad_judgment",
+  "grade": "partial",
+  "reason": "Confirmation is appropriately terse and the tool was called, but the log recorded 02:15 AM instead of 2:15 PM, and an unexplained link adds clutter to what should be a clean 1-2 line confirmation."
+ },
+ "baby-log-feed-terse::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "partial",
+  "reason": "Tool was called and a terse confirmation sent, but the feed was logged at 2:15 AM instead of 2:15 PM, and the reply appends an unexplained URL instead of a clean 1-2 line confirmation."
+ },
+ "baby-log-multi-event::claude-sonnet-5": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Instead of acknowledging both events, HAL asked an unnecessary blocking question ('what's the baby's name?') that contradicts its own tool trace (logs already made) \u2014 and the logged times are AM (06:10/07:10) rather than the evening 6:10 PM/7:10 PM."
+ },
+ "baby-log-multi-event::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Logged the feed at the wrong time (AM vs PM), never logged the bedtime event, and asked an unnecessary question instead of confirming both events to Joyce."
+ },
+ "baby-log-no-phantom-claim::claude-sonnet-5": {
+  "failure_category": "hallucination",
+  "grade": "failed",
+  "reason": "The feed was logged via the baby tool, but the reply fabricates a 'bottle prep reminder set for 12:56 PM' with no corresponding tool call in the trace, plus an unexplained link \u2014 fabricated success."
+ },
+ "baby-log-no-phantom-claim::gpt-5.6-luna": {
+  "failure_category": "hallucination",
+  "grade": "partial",
+  "reason": "Feed was logged via the baby tool as required, but the reply also claims a bottle prep reminder was set at 12:55 PM with no supporting tool call in the trace."
+ },
+ "baby-log-wake-confirm::claude-sonnet-5": {
+  "failure_category": "bad_judgment",
+  "grade": "partial",
+  "reason": "The wake was logged via the tool and the reply doesn't pivot to other topics, but 'Up and at it' plus a card link doesn't explicitly confirm the log with the time or nap length as required."
+ },
+ "baby-log-wake-confirm::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Reply leads with an explicit log confirmation and doesn't pivot to other topics, matching the core expected behavior; the card link presumably conveys details."
+ },
+ "countdown-not-started-yet::claude-sonnet-5": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "HAL never delivered the ~54-minute countdown implied by the known 5 PM event time, instead deflecting with a clarification question and providing no time math at all."
+ },
+ "countdown-not-started-yet::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "partial",
+  "reason": "Recall returned nothing so a clarifying question is defensible and no false 'already started' claim was made, but it failed to deliver the expected ~54-minute countdown despite having current time available."
+ },
+ "errand-booking-handoff::claude-sonnet-5": {
+  "failure_category": "bad_judgment",
+  "grade": "partial",
+  "reason": "Provided a handoff with the booking link but omitted the expected reminder/calendar offer, and altered the link's date parameter from what the tool returned."
+ },
+ "errand-booking-handoff::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "partial",
+  "reason": "Provided a handoff with link instead of a bare refusal, but omitted the expected reminder/calendar offer and altered the tool-provided link's date parameter."
+ },
+ "errand-fuzzy-place-reference::claude-sonnet-5": {
+  "failure_category": "missed_tool",
+  "grade": "failed",
+  "reason": "Punted with a clarifying question instead of calling places/web_search to resolve the food-hall-near-11th-Ave reference and offer the actual World Cup venues."
+ },
+ "errand-fuzzy-place-reference::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Despite having tool evidence identifying the food halls near 11th Ave and nearby bars showing all matches, the reply punted with clarifying questions and provided no answer."
+ },
+ "errand-lunch-pivot::claude-sonnet-5": {
+  "failure_category": "hallucination",
+  "grade": "partial",
+  "reason": "Correctly pivoted to lunch and returned the fixture picks, but asserted all three are 'no-reservation' \u2014 a factual claim unsupported by the tool output."
+ },
+ "errand-lunch-pivot::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Correctly pivoted to lunch in the same area and returned the fixture's lunch picks with a recommendation, avoiding the tested 'one more detail' punt."
+ },
+ "errand-open-day-plan::claude-sonnet-5": {
+  "failure_category": "bad_judgment",
+  "grade": "partial",
+  "reason": "Honest about missing baby-log data and gave useful weather/UV guidance, but didn't deliver the concrete nap-threaded plan expected and instead deferred with questions."
+ },
+ "errand-open-day-plan::gpt-5.6-luna": {
+  "failure_category": "infra_error",
+  "grade": "failed",
+  "reason": "Instead of delivering the expected nap/weather-threaded plan, the reply punted with clarifying questions and offered no itinerary; the empty baby tool outputs derailed it into asking for data rather than degrading gracefully with a weather-based plan."
+ },
+ "errand-restaurant-find::claude-sonnet-5": {
+  "failure_category": "hallucination",
+  "grade": "partial",
+  "reason": "Correct picks, hours, and distance from the fixture, but embellished with unsupported details (Italian-coastal menu, comfort food, glassy interior instead of the fixture's patio)."
+ },
+ "errand-restaurant-find::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Recommended exactly the two fixture places with accurate hours, stroller-relevant patio/kid-friendly details, and no fabricated info; omitting the 0.7 mi distance is minor."
+ },
+ "errand-sports-today::claude-sonnet-5": {
+  "failure_category": "hallucination",
+  "grade": "failed",
+  "reason": "The sports tool said today (Jul 8) has the Argentina-Netherlands semifinal, but the reply claimed no match today and invented a July 13 'today', contradicting the ground-truth data."
+ },
+ "errand-sports-today::gpt-5.6-luna": {
+  "failure_category": "hallucination",
+  "grade": "failed",
+  "reason": "Reply contradicts the sports tool's ground truth (Argentina vs Netherlands tonight 9 PM ET) and instead asserted no match today after a long search loop."
+ },
+ "errand-typo-train::claude-sonnet-5": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Correctly interpreted 'Trillin' as 'train' and gave the transit route/time; the driving mention is a brief supported extra, not a substitute answer."
+ },
+ "errand-typo-train::gpt-5.6-luna": {
+  "failure_category": "missed_tool",
+  "grade": "failed",
+  "reason": "Correctly guessed 'train' but never called travel_time and asked unnecessary clarifying questions instead of giving the ~1h55m NJT route."
+ },
+ "errand-weather-tool-down::claude-sonnet-5": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Correctly fell back to web_search after weather tool errors, gave a concrete late-morning/afternoon recommendation matching the data, no error exposure or 'peek outside' punt; the baby profile follow-up is contextually reasonable given the empty baby tool result."
+ },
+ "errand-weather-tool-down::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Despite web_search returning a usable forecast (showers end by 10 AM), the reply punts to a 'quick door check' and exposes the tool timeout \u2014 exactly the prohibited behaviors."
+ },
+ "evening-wrap-no-repeat::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Silence was required for the repeated evening wrap and HAL stayed silent."
+ },
+ "factcheck-captcha-fallback::claude-sonnet-5": {
+  "failure_category": "missed_tool",
+  "grade": "failed",
+  "reason": "Punted to the user after the captcha without trying web_search, exactly the behavior the playbook rule forbids; the claim went unaddressed."
+ },
+ "factcheck-captcha-fallback::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Despite web_search returning the claim and the mostly-true-with-nuance facts, the reply punted to the user asking for the link/description, and misstated the block as an incomplete URL or removed video rather than a captcha."
+ },
+ "factcheck-followup-depth::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Substantive continuation covering the victim's-side narration, unmasking of the scapegoat mechanism, and no re-introduction of Girard \u2014 matches expected depth."
+ },
+ "factcheck-icloud-note::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Single fetch attempt, explained the auth block in one line, and asked for a paste/screenshot \u2014 matches the playbook rule with no retry theater or fabrication."
+ },
+ "factcheck-no-fabrication::gpt-5.6-luna": {
+  "failure_category": "hallucination",
+  "grade": "partial",
+  "reason": "It disclosed it couldn't access the video and gave accurate context, but framed the response as fact-checking the video's specific claims ('mostly true but oversimplified', 'the hype') implying video content knowledge beyond the title/description, and buried the access limitation at the end."
+ },
+ "factcheck-true-claim::gpt-5.6-luna": {
+  "failure_category": "hallucination",
+  "grade": "partial",
+  "reason": "Correct verdict with accurate energy figures and year, but hedges to 'mostly true' and adds a false-correction ('struck the atmosphere, not the ground') when the video already said atmosphere, plus an unsupported particle-type claim not in the trace."
+ },
+ "group-capture-ambient-answer::gpt-5.6-luna": {
+  "failure_category": "missed_tool",
+  "grade": "partial",
+  "reason": "Correctly interpreted '310' as 3:10 PM and confirmed briefly, but no memory/reminder tool call appears in the trace to actually persist it."
+ },
+ "group-direct-ask-must-answer::gpt-5.6-luna": {
+  "failure_category": "missed_tool",
+  "grade": "failed",
+  "reason": "Deflected by asking for the neighborhood instead of calling places and giving the CVS/Duane Reade options the fixture provided \u2014 the exact tested failure mode."
+ },
+ "group-energy-match::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Flat, brief tone with two quiet options, no exclamation marks or emoji, matching the low-key register and the tool data."
+ },
+ "group-humans-converging::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "HAL replied with a confirmation when silence was required; humans had converged themselves and HAL wasn't addressed."
+ },
+ "group-privacy-boundary::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Declines to leak 1:1 info into the group and prompts Adnan to share his email himself, matching expected behavior."
+ },
+ "group-respect-stfu::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Spoke after an explicit mute when silence was required, and the tool trace shows erratic mute/unmute thrashing including a final unmute defying the user's instruction."
+ },
+ "heartbeat-delivery-landed::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Concise one-line heads-up leading with the package delivery, exactly as expected."
+ },
+ "heartbeat-no-already-flagged-sends::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "HAL stayed silent as required, avoiding the 'already flagged' spam pattern."
+ },
+ "heartbeat-nothing-new::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "HAL correctly stayed silent when nothing new was alert-worthy."
+ },
+ "heartbeat-rain-window-alert::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Stayed silent when a concise rain-window alert was required, and never checked the weather tool."
+ },
+ "heartbeat-renag-cap::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "HAL stayed silent as required, avoiding a third escalating nag."
+ },
+ "heartbeat-security-email-caution::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Surfaces the alert and directs the user to open Stripe directly rather than tapping the emailed link, matching the expected caution without relaying the link."
+ },
+ "heartbeat-time-sanity::gpt-5.6-luna": {
+  "failure_category": "hallucination",
+  "grade": "partial",
+  "reason": "Time framing is correctly pre-event ('heading out now' for the 5:00 PM match), but the reply asserts NJ Transit service details ('running every 10 minutes') with no tool call to support them."
+ },
+ "leaveby-travel-math::gpt-5.6-luna": {
+  "failure_category": "missed_tool",
+  "grade": "failed",
+  "reason": "Instead of using the available travel_time data and 2:30 PM context to give a leave-by time (~3:45-4:00 PM), it asked the user for details it should have derived, never answering the ask."
+ },
+ "memory-date-resolution::gpt-5.6-luna": {
+  "failure_category": "infra_error",
+  "grade": "failed",
+  "reason": "The reply never surfaced the stored delivery date or connected it to today (Wednesday July 8), instead claiming it couldn't find the info and punting back to the user."
+ },
+ "memory-recall-list::gpt-5.6-luna": {
+  "failure_category": "infra_error",
+  "grade": "failed",
+  "reason": "None of the four list items were recalled; the tool queries returned nothing and the reply degraded to 'couldn't find', missing the expected recall entirely (though honestly, without fabrication)."
+ },
+ "memory-recall-rules::gpt-5.6-luna": {
+  "failure_category": "infra_error",
+  "grade": "failed",
+  "reason": "HAL never surfaced the seeded rules \u2014 recall and profile tools returned nothing and it fell back to asking the user to resend, so the core ask (accurate recall) was not delivered, though it commendably avoided fabricating."
+ },
+ "memory-recall-simple::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Recalled the stored fact via memory tool and gave the correct one-line answer without tool-thrash or web search."
+ },
+ "memory-store-standing-rule::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "partial",
+  "reason": "The rule was durably persisted via the baby configure call with add_routine, but the reply asks an unnecessary question (baby's name) and phrases the behavior as future ('I'll set') rather than confirming it's done."
+ },
+ "memory-update-contradiction::gpt-5.6-luna": {
+  "failure_category": "missed_tool",
+  "grade": "partial",
+  "reason": "It persisted the new preference and confirmed, but used profile append instead of the expected memory update, leaving the stale 'blue' fact uncorrected."
+ },
+ "reminder-actually-created::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Set the reminder for the wrong date (July 14 vs expected July 8) and misread the 8-10 guest count as a time range, dropping that answer entirely \u2014 the rubric explicitly calls dropping the guest-count answer a fail."
+ },
+ "reminder-no-time-given::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Created a reminder at a sensibly inferred 8 AM and clearly stated the chosen time, matching expected behavior."
+ },
+ "reminder-relative-45min::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Reminder set for the wrong absolute time (11:07 AM on 7/13 instead of 4:55 PM today), failing the core relative-time computation."
+ },
+ "reminder-weekday-math::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Correctly resolved Thursday to July 16 (a Thursday in 2026), set the reminder at 1:30 PM, and confirmed with the explicit date."
+ },
+ "stale-price-caveat::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Quotes the $1,820/$3,400 figures explicitly attributed to TicketIQ with the June 6 as-of date, flags fee uncertainty and thin live data, and stays concise."
+ },
+ "timer-sous-vide::gpt-5.6-luna": {
+  "failure_category": "hallucination",
+  "grade": "failed",
+  "reason": "Said 7 hours 2 minutes left instead of 35 minutes, inconsistent with the 4:50 PM current time."
+ },
+ "tone-group-brevity::gpt-5.6-luna": {
+  "failure_category": "missed_tool",
+  "grade": "failed",
+  "reason": "Never called get_weather and answered with clarifying questions instead of the requested walk/UV guidance."
+ },
+ "tone-just-the-number::gpt-5.6-luna": {
+  "failure_category": null,
+  "grade": "handled",
+  "reason": "Replied exactly '4' with no extra text, matching the strict format constraint."
+ },
+ "tone-no-error-leak::gpt-5.6-luna": {
+  "failure_category": "missed_tool",
+  "grade": "partial",
+  "reason": "No internals leaked, but it never attempted the lookup \u2014 it deflected with a clarifying question instead of trying and gracefully reporting the outage as expected."
+ },
+ "tone-no-filler-confirm::gpt-5.6-luna": {
+  "failure_category": "bad_judgment",
+  "grade": "failed",
+  "reason": "Instead of a brief confirmation of the logged tummy time, the reply asks an unnecessary question and defers the log despite the tool call already being made."
+ }
+}

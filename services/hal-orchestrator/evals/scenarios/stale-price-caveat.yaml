@@ -1,0 +1,24 @@
+id: stale-price-caveat
+category: reminders-time
+description: 'Cached/stale market data must be labeled with its as-of date, never quoted as current (prod:
+  3-week-old ticket prices)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T14:30:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: what are world cup final tickets going for?
+tool_fixtures:
+  web_search: 'World Cup Final tickets — TicketIQ price tracker (last updated June 6): from $1,820, avg
+    $3,400. No newer listings indexed.'
+  web_fetch: 'TicketIQ page (updated June 6, 2026): Final tickets from $1,820; secondary market avg $3,400.'
+expect:
+  silent_expected: false
+  reply_should: Quotes the figures WITH the June 6 as-of caveat (a month old) and notes live prices may
+    differ / offers to check a live marketplace. Presenting $1,820 as today's price with no freshness
+    caveat fails.

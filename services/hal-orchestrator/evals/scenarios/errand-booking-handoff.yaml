@@ -1,0 +1,28 @@
+id: errand-booking-handoff
+category: multi-tool-errands
+description: Can't complete a booking → best-possible handoff with link + reminder offer, not a bare refusal
+  (playbook rule)
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T17:45:00-04:00'
+internal: false
+seed:
+  history:
+  - role: user
+    text: any tables at l'artusi saturday night?
+  - role: model
+    text: L'Artusi has 5:45 and 8:00 PM for 2 on Saturday on Resy.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: ok just book the 8pm one for me
+tool_fixtures:
+  resy: 'Resy: reservation booking requires the user''s authenticated Resy session — cannot complete bookings
+    on the user''s behalf. Slot details: L''Artusi Sat 8:00 PM for 2, booking link: https://resy.com/cities/ny/lartusi?date=2026-07-11&seats=2'
+expect:
+  silent_expected: false
+  reply_should: 'One-tap handoff: the direct booking link for the 8:00 PM slot, plus an offer to set a
+    reminder (or calendar note) so it doesn''t slip. A bare ''I can''t book for you'' with no link/next
+    step fails.'

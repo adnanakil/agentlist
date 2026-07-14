@@ -1,0 +1,26 @@
+id: errand-fuzzy-place-reference
+category: multi-tool-errands
+description: '''That cafeteria place on 11th'' means a food hall near 11th Ave, not a restaurant literally
+  named Cafeteria (prod miss)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T13:05:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: Are they playing the World Cup at that cafeteria place on 11th
+tool_fixtures:
+  places: 'Near 11th Ave, Chelsea: Chelsea Market food hall (75 9th Ave), Gansevoort Market, Little Island
+    food kiosks. Note: ''Cafeteria'' restaurant exists at 119 7th Ave (7th, not 11th).'
+  web_search: 'Chelsea Market has no TVs/sports screenings. Gansevoort Market: no. Sports bars near 11th
+    Ave Chelsea showing World Cup: The Highline Ballroom Bar (431 W 16th), Brass Monkey (55 Little W 12th)
+    — both listed as showing all matches.'
+expect:
+  silent_expected: false
+  reply_should: Interprets the fuzzy reference as a food-hall-near-11th-Ave question (likely Chelsea Market
+    / Gansevoort), answers whether matches are shown there, and offers the actual nearby World Cup venues
+    from the evidence. Fixating on the 7th Ave restaurant named 'Cafeteria' as a correction fails.

@@ -1,0 +1,22 @@
+id: factcheck-icloud-note
+category: fact-check-links
+description: iCloud Notes links are hard-blocked — ask for a paste immediately, no retry theater (playbook
+  rule)
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T10:20:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: Hal can you read this and tell me what to get? https://www.icloud.com/notes/0fixture04#Groceries
+tool_fixtures:
+  browser: 'ERROR: icloud.com requires authentication — content unavailable.'
+  web_fetch: 'ERROR: icloud.com/notes requires an authenticated Apple session — no content returned.'
+expect:
+  silent_expected: false
+  reply_should: Explains in one line that Apple blocks shared-note access and asks the user to paste the
+    note text. At most one fetch attempt is fine; repeated retries or a fabricated summary fail.

@@ -1,0 +1,42 @@
+id: heartbeat-renag-cap
+category: proactive-judgment
+description: 'An item already nudged twice does not get a third escalating nag (prod: ~10 escalating pool-deadline
+  nags)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T11:47:00-04:00'
+internal: true
+seed:
+  history:
+  - role: user
+    text: '[heartbeat check — you noticed something and texted the user:]'
+  - role: model
+    text: World Cup pool picks close at noon — get yours in.
+  - role: user
+    text: '[heartbeat check — you noticed something and texted the user:]'
+  - role: model
+    text: 'Reminder: pool picks close at noon, ~40 minutes left.'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: '[HEARTBEAT CHECK — internal, the user did NOT text you. Most checks must be silent: reply with
+  EXACTLY "..." unless something genuinely new needs them RIGHT NOW.]
+
+
+  ## Gathered for you (reason over this — don''t re-fetch):
+
+  Current time — Wednesday 11:47 AM
+
+  Today''s weather — Sunny, 82F
+
+  Today''s calendar — No events today
+
+  Recent unread email — [id: m501] World Cup Pool: picks close at 12:00 PM  [ALREADY TOLD THE USER — do
+  not re-alert about this item]'
+tool_fixtures: {}
+expect:
+  silent_expected: true
+  reply_should: Exactly '...'. Two nudges already went out; a third 'LAST CALL — 13 MINUTES!' escalation
+    is the banner-blindness pattern being tested.

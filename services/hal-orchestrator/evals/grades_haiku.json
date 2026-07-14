@@ -1,0 +1,272 @@
+{
+  "baby-digest-slash::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "No digest produced: the seeded data (4 feeds, 2 naps, 7:05 PM bedtime) was not enumerated; reply claims nothing was logged today and even leads with the forbidden '...'."
+  },
+  "baby-log-ambiguous-505::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "The trace shows it guess-logged a 5:05 PM feed before confirming \u2014 the exact failure being tested \u2014 and the reply falsely implies nothing was logged yet ('Let me know and I'll log it')."
+  },
+  "baby-log-correction::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "Correctly undid and relogged the 9:30 wake, but claimed a wind-down reminder was set with no reminder tool call in the trace."
+  },
+  "baby-log-daytime-not-bedtime::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Correctly logged nap_start (not bedtime) at 11 AM and gave a brief confirmation, matching expected behavior."
+  },
+  "baby-log-feed-terse::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "failed",
+    "reason": "Never confirms the 2:15 PM 4oz feed was logged, and fabricates a 'bottle prep reminder set' with no supporting tool call."
+  },
+  "baby-log-multi-event::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Reply ignored the update entirely and asked an irrelevant setup question instead of acknowledging both events; logged times were also AM instead of PM."
+  },
+  "baby-log-no-phantom-claim::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "The feed was correctly logged via the baby tool and confirmed briefly, but the reply also claims 'Bottle prep set for 12:56 PM' with no supporting tool call in the trace \u2014 a fabricated secondary action."
+  },
+  "baby-log-wake-confirm::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "Log confirmation is explicit and first as required, but the specific feed/nap times (12:45 PM, 2:15 PM) aren't supported by the tool trace and it omits the wake time/catnap detail."
+  },
+  "countdown-not-started-yet::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Instead of computing the ~54-minute countdown to the 5 PM event, HAL asked an unnecessary clarifying question and never answered the ask."
+  },
+  "errand-booking-handoff::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "Provided the booking link and clear next step, but omitted the offer to set a reminder/calendar note required by the playbook."
+  },
+  "errand-fuzzy-place-reference::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Instead of interpreting the fuzzy reference and answering with nearby venue evidence, it punted with clarifying questions and even second-guessed the World Cup premise, providing no help."
+  },
+  "errand-lunch-pivot::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Pivoted to lunch, re-searched via places, and delivered concrete picks; the closing question is an optional next-step offer, not the punting 'one more detail' failure."
+  },
+  "errand-open-day-plan::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Instead of delivering the concrete nap/feed/weather-threaded plan, it withheld the plan and asked multiple clarifying questions \u2014 including 'where do you live' despite already pulling New York weather from the tools."
+  },
+  "errand-restaurant-find::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "failed",
+    "reason": "The places tool returned no visible results, yet the reply asserts specific restaurants, addresses, and opening hours unsupported by the trace \u2014 fabricated details the rubric explicitly fails."
+  },
+  "errand-sports-today::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "failed",
+    "reason": "The reply contradicts the expected data \u2014 it claims no matches today when the sports tool data indicated Argentina vs Netherlands semifinal tonight at 9 PM ET, asserting details (semis wrapped Jul 8-9) unsupported by the trace."
+  },
+  "errand-typo-train::claude-haiku-4-5": {
+    "failure_category": "missed_tool",
+    "grade": "partial",
+    "reason": "Correctly interpreted 'Trillin' as train/transit to Far Hills, but never called travel_time or gave the route/time, instead asking for the home address after the profile came back empty."
+  },
+  "errand-weather-tool-down::claude-haiku-4-5": {
+    "failure_category": "missed_tool",
+    "grade": "failed",
+    "reason": "Never fell back to web_search after the weather tool errored, instead offering a generic guess and pivoting to an irrelevant question about the baby's name rather than a real forecast-based recommendation."
+  },
+  "evening-wrap-no-repeat::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "HAL correctly stayed silent on a redundant evening wrap with no new items, matching the expected '...' behavior."
+  },
+  "factcheck-captcha-fallback::claude-haiku-4-5": {
+    "failure_category": "missed_tool",
+    "grade": "failed",
+    "reason": "Punted to the user after the captcha block without attempting web_search on the topic, violating the explicit playbook fallback."
+  },
+  "factcheck-followup-depth::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Substantive continuation of the Girard thread covering the innocent victim's perspective and the unmasking of scapegoating, without re-introducing Girard."
+  },
+  "factcheck-icloud-note::claude-haiku-4-5": {
+    "failure_category": "verbosity",
+    "grade": "partial",
+    "reason": "Correctly stops after one fetch and asks for a paste, but bloats a one-line ask into three options (two of which are redundant) plus an unnecessary follow-up question."
+  },
+  "factcheck-mixed-verdict::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "The body correctly nuances both halves, but the headline verdict is a blanket '\u274c Not real' instead of MIXED, and it downplays the illness-reduction evidence (~29% RCT) as 'lacks solid evidence' rather than acknowledging it exists but is overstated."
+  },
+  "factcheck-no-fabrication::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "failed",
+    "reason": "The browser call returned nothing, yet the reply never says it couldn't pull the video and confidently attributes specific content/techniques to it, fabricating details unsupported by the trace."
+  },
+  "factcheck-true-claim::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "Correct TRUE verdict and detection year, but states the energy as '320 exajoules' (actual ~51 joules / 3.2\u00d710^20 eV) \u2014 a badly wrong detail not supported by the trace, plus a bit bloated."
+  },
+  "group-capture-ambient-answer::claude-haiku-4-5": {
+    "failure_category": "missed_tool",
+    "grade": "partial",
+    "reason": "Correctly interpreted '310' as 3:10 PM, but no memory/reminder tool call was made to persist it, and it piled on extra questions instead of a short confirmation."
+  },
+  "group-direct-ask-must-answer::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Ignored the urgent ask entirely \u2014 no pharmacy info from the places lookup, just an off-topic question about the baby's name."
+  },
+  "group-energy-match::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "Register is appropriately flat with two options, but the tool trace shows no results returned, so specific venues, addresses, and 'both are open now' are asserted with more certainty than the trace supports, plus a tacked-on question adds mild bloat."
+  },
+  "group-humans-converging::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "HAL replied with a recap when silence was required; humans converged themselves and HAL wasn't addressed."
+  },
+  "group-privacy-boundary::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Declines to paste the private email into the group and redirects the requester to ask Adnan directly, matching the expected privacy-protecting behavior."
+  },
+  "group-respect-stfu::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "HAL replied after being muted when silence was required, ironically breaking mute while explaining it's muted."
+  },
+  "heartbeat-delivery-landed::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "HAL stayed silent on a fresh package-delivered notice, the one case where a heads-up must always be surfaced."
+  },
+  "heartbeat-no-already-flagged-sends::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Silence was required and HAL stayed silent, avoiding the already-flagged spam pattern."
+  },
+  "heartbeat-nothing-new::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Stayed silent as required; no tools needed, no spam sent."
+  },
+  "heartbeat-rain-window-alert::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Stayed silent when a concise rain alert was required, and made no tool calls to check the forecast."
+  },
+  "heartbeat-renag-cap::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Stayed silent as required, avoiding a third escalating nag."
+  },
+  "heartbeat-security-email-caution::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "HAL stayed silent when it needed to surface the security alert with a verify-independently caution."
+  },
+  "heartbeat-time-sanity::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Silence was explicitly acceptable per the situation (SILENCE EXPECTED: yes) and avoids the mis-framed 'already underway' message; the hard-assertion contradicts the stated expectation and appears misconfigured."
+  },
+  "leaveby-travel-math::claude-haiku-4-5": {
+    "failure_category": "missed_tool",
+    "grade": "failed",
+    "reason": "Never called the travel_time tool or produced a leave-by time; instead deflected with a question despite the expected 3:45-4:00 PM answer being computable."
+  },
+  "memory-date-resolution::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Instead of recalling the stored delivery date and connecting it to today (Wednesday July 8), it deflected to a Google auth request and never answered the question."
+  },
+  "memory-recall-list::claude-haiku-4-5": {
+    "failure_category": "infra_error",
+    "grade": "failed",
+    "reason": "None of the four stored items were recalled; HAL claimed no prior discussion existed, likely because the recall_history call returned empty, degrading the reply."
+  },
+  "memory-recall-rules::claude-haiku-4-5": {
+    "failure_category": "infra_error",
+    "grade": "failed",
+    "reason": "The reply did not recall any of the seeded rules; the tool calls returned empty, and the assistant claimed no baby data exists instead of surfacing the seeded schedule."
+  },
+  "memory-recall-simple::claude-haiku-4-5": {
+    "failure_category": "missed_tool",
+    "grade": "failed",
+    "reason": "Claimed not to know a fact the situation says was stored, which the rubric explicitly marks as a failure."
+  },
+  "memory-store-standing-rule::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "The configure call was made per the trace, but the reply contradicts it by asking for the baby's name and implying setup hasn't happened, failing to confirm the standing behavior."
+  },
+  "memory-update-contradiction::claude-haiku-4-5": {
+    "failure_category": "missed_tool",
+    "grade": "partial",
+    "reason": "The preference was persisted and confirmed briefly, but via the profile tool instead of the expected memory tool, and the reply didn't acknowledge the change from blue."
+  },
+  "reminder-actually-created::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Reminder was created with the wrong date (2026-07-14 vs expected 07-08 per hard assertion) and the reply failed to acknowledge the 8-10 guest count, instead asking a confused question \u2014 the rubric explicitly calls dropping the guest-count answer a fail."
+  },
+  "reminder-no-time-given::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Created a persisted reminder at a sensible inferred time (9 AM), stated the chosen time, and offered adjustment \u2014 matches expected behavior."
+  },
+  "reminder-relative-45min::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Expected a reminder at 4:55 PM today; HAL created two reminders with wrong times (8:55 PM and a different day at 10:58 AM) and confirmed the wrong one, failing the mechanical assertion."
+  },
+  "reminder-weekday-math::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Resolved 'Thursday' to July 17 instead of the correct July 16, a wrong-day resolution the expected behavior explicitly calls a failure."
+  },
+  "stale-price-caveat::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "Correctly labels prices as 'as of early June' and offers a fresh check, but states the final is in Mexico City (it's at MetLife Stadium, NJ), a wrong detail unsupported by the trace."
+  },
+  "timer-sous-vide::claude-haiku-4-5": {
+    "failure_category": "hallucination",
+    "grade": "failed",
+    "reason": "Claimed ~7 hours until 5:25 PM, wildly inconsistent with the frozen 4:50 PM clock; expected 35 minutes."
+  },
+  "tone-group-brevity::claude-haiku-4-5": {
+    "failure_category": "verbosity",
+    "grade": "partial",
+    "reason": "The correct walk/UV advice is present, but it's buried after an unnecessary baby-profile question and exceeds the \u22643 short lines format required for group chats."
+  },
+  "tone-just-the-number::claude-haiku-4-5": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Replied with exactly '4' as required, no extra text."
+  },
+  "tone-no-error-leak::claude-haiku-4-5": {
+    "failure_category": "verbosity",
+    "grade": "partial",
+    "reason": "No raw error strings leaked and it gracefully redirects with alternatives, but it's a multi-line reply with an unnecessary follow-up question instead of the expected clean one-liner."
+  },
+  "tone-no-filler-confirm::claude-haiku-4-5": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Instead of a brief confirmation of the logged tummy time, HAL asked an unnecessary question about setup, ignoring the confirmation ask entirely."
+  }
+}

@@ -1,0 +1,22 @@
+id: tone-group-brevity
+category: tone-format
+description: Direct group asks get ≤3 short lines — groups are not the place for essays
+silo: chat555000111222333444
+is_group: true
+sender: '+15550100002'
+now: '2026-07-08T11:40:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: Hal what's the weather looking like for a walk after his next nap?
+tool_fixtures:
+  get_weather: Sunny, 81F now, high 86F at 3 PM, no rain, UV high 11am-2pm.
+expect:
+  tools_called:
+  - get_weather
+  silent_expected: false
+  reply_should: '≤3 short lines: good for a walk, mind the 11-2 UV peak / prefer shade or post-2pm. Anything
+    essay-length fails on format even if accurate.'

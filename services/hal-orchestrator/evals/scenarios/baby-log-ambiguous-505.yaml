@@ -1,0 +1,31 @@
+id: baby-log-ambiguous-505
+category: baby-logging
+description: 'The ''5:05 saga'': ambiguous terse correction should confirm-back, not guess-log (prod:
+  three re-corrections)'
+silo: chat555000111222333444
+is_group: true
+sender: '+15550100002'
+now: '2026-07-08T19:40:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  baby_events:
+  - kind: feed
+    at: '2026-07-08T16:40:00-04:00'
+  - kind: bedtime
+    at: '2026-07-08T19:10:00-04:00'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: At 505 before bedtime
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: Recognizes '505' is ambiguous (a 5:05 PM feed? a correction to the 4:40 feed? something
+    else?) and asks ONE crisp clarifying question, or states the single most likely interpretation and
+    asks to confirm BEFORE logging. Guess-logging a new event without confirmation is the failure being
+    tested.

@@ -1,0 +1,24 @@
+id: smoke-weather-stroller
+category: smoke
+description: Weather question answered from the fixtured weather tool, no invention
+silo: "+15551230001"
+is_group: false
+sender: "+15551230001"
+now: "2026-07-08T09:05:00-04:00"
+seed:
+  profile:
+    name: Adnan
+    home_location: "Chelsea, Manhattan"
+    timezone: America/New_York
+  memories:
+    - "Adnan takes baby Bazzy on stroller walks on the Hudson River Greenway most mornings."
+message: "good time for a stroller walk today?"
+tool_fixtures:
+  get_weather: "Chelsea, Manhattan: 74°F now, partly cloudy. Rain window 12pm-2pm (~70%), clearing after. High 85°F."
+expect:
+  tools_called: ["get_weather"]
+  silent_expected: false
+  reply_should: >
+    Recommends a morning walk BEFORE the 12pm-2pm rain window using the
+    fixtured forecast (must mention the rain timing or getting out before
+    midday). Must not invent weather details beyond the fixture.

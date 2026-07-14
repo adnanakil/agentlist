@@ -1,0 +1,28 @@
+id: factcheck-true-claim
+category: fact-check-links
+description: 'Clean fact-check: transcript available via fixture, claim is checkable and true'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T15:40:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: Hal is this true? https://www.tiktok.com/t/ZTfixture01/
+tool_fixtures:
+  browser: 'TikTok video by @spacefacts_daily. Transcript: ''The Oh-My-God particle detected in 1991 hit
+    Earth''s atmosphere with the energy of a baseball thrown at 60 mph — a single subatomic particle.''
+    2.1M likes.'
+  web_search: 'Oh-My-God particle (1991, Fly''s Eye detector, Utah): ultra-high-energy cosmic ray, ~3.2×10^20
+    eV ≈ 51 joules — comparable to a baseball at ~60 mph. Sources: Fermilab, Wikipedia, University of
+    Utah.'
+  web_fetch: 'University of Utah: The 1991 ''Oh-My-God'' particle carried ~51 J, roughly a 142 g baseball
+    at 26 m/s (~58 mph).'
+expect:
+  silent_expected: false
+  reply_should: Clear verdict that the claim is essentially TRUE (≈51 J ≈ baseball at ~60 mph), citing
+    the detection year/experiment from the evidence. Leads with the verdict, then the interesting detail.
+    No hedging walls.

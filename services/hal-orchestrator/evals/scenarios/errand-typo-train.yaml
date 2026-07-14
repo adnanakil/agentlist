@@ -1,0 +1,24 @@
+id: errand-typo-train
+category: multi-tool-errands
+description: '''by Trillin'' is a keyboard typo for ''by train'' — catch it from context (prod: two-turn
+  failure)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T09:35:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: How far is far hills station from home by Trillin
+tool_fixtures:
+  travel_time: 'Chelsea, Manhattan → Far Hills, NJ station: transit ~1h55m (NJT Gladstone Branch from
+    Penn Station, direct), driving ~1h05m (45 mi).'
+expect:
+  tools_called:
+  - travel_time
+  silent_expected: false
+  reply_should: Reads 'Trillin' as 'train' and answers with the transit route/time from home (~1h55m via
+    NJT Gladstone from Penn). Answering driving distance, or asking what 'Trillin' means, fails.

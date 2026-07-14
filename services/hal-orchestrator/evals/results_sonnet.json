@@ -1,0 +1,2153 @@
+[
+ {
+  "scenario_id": "baby-digest-slash",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "",
+  "silent": true,
+  "tool_trace": [
+   {
+    "tool": "skill",
+    "args": {
+     "action": "invoke",
+     "name": "baby-digest"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "stats",
+     "period": "today"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "stats",
+     "period": "week"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected a reply, got silence"
+   ]
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 48301,
+   "cache_write": 24941,
+   "output": 224
+  },
+  "usage_other": {},
+  "latency_ms": 11057,
+  "error": null,
+  "description": "/baby-digest must never be silent and its counts must match what it enumerates (prod: '7 feeds' listing 6; '...' on a slash command)",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "silent_expected": false,
+   "reply_should": "A day digest whose stated counts exactly match the seeded events (4 feeds, 2 naps with durations, bedtime 7:05 PM). Any count that disagrees with its own enumeration, or a silent/blank reply, is a fail."
+  }
+ },
+ {
+  "scenario_id": "baby-log-ambiguous-505",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "Hey Adnan, I didn't actually log anything yet \u2014 \"at 5:05 before bedtime\" isn't clear enough for me to record. Was that a feed, or something else, at 5:05pm? Let me know and I'll log it right away.",
+  "silent": false,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23752,
+   "cache_write": 23963,
+   "output": 309
+  },
+  "usage_other": {},
+  "latency_ms": 11574,
+  "error": null,
+  "description": "The '5:05 saga': ambiguous terse correction should confirm-back, not guess-log (prod: three re-corrections)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Recognizes '505' is ambiguous (a 5:05 PM feed? a correction to the 4:40 feed? something else?) and asks ONE crisp clarifying question, or states the single most likely interpretation and asks to confirm BEFORE logging. Guess-logging a new event without confirmation is the failure being tested."
+  }
+ },
+ {
+  "scenario_id": "baby-log-correction",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "Fixed \u2014 logged wake at 9:30 AM instead. Wind-down reminder set for 11:30 AM.\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783952746&sig=5faab5dcaf95ed65d5bf082f85ae6fb4&t=1783951846",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "undo"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "wake",
+     "time": "2026-07-13T09:30:00-04:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 71409,
+   "cache_write": 691,
+   "output": 423
+  },
+  "usage_other": {},
+  "latency_ms": 13653,
+  "error": null,
+  "description": "Correcting a mislogged wake time updates the record rather than adding a duplicate or arguing",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "silent_expected": false,
+   "reply_should": "Fixes the record to a 9:30 AM wake (undo+relog or a corrected log \u2014 trace must show baby tool activity) and confirms the corrected time. Must not keep both 8:50 and 9:30 as two wakes, must not argue."
+  }
+ },
+ {
+  "scenario_id": "baby-log-daytime-not-bedtime",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "Down he goes \ud83d\udca4\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783952755&sig=bcac766de257c72437d11cf61ba14990&t=1783951855",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "nap_start"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47402,
+   "cache_write": 444,
+   "output": 252
+  },
+  "usage_other": {},
+  "latency_ms": 7833,
+  "error": null,
+  "description": "'He just went down' at 11 AM is a nap, not bedtime \u2014 time-of-day sanity (prod: HAL thought it was night at 11 AM)",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "nap_start"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Logs an 11:00 AM NAP (kind nap_start, not bedtime) and confirms. Claiming he's 'already been down since 7 PM' or logging bedtime mid-morning is the fail."
+  }
+ },
+ {
+  "scenario_id": "baby-log-feed-terse",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "Logged \ud83c\udf7c\n\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783952763&sig=53bd7b95fef3906b24fd64f9d951427f&t=1783951863",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T02:15:00-04:00",
+     "note": "4oz"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47406,
+   "cache_write": 580,
+   "output": 384
+  },
+  "usage_other": {},
+  "latency_ms": 8359,
+  "error": null,
+  "description": "Terse group feed update must be written via the baby tool and briefly confirmed",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "feed"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Short confirmation that a 2:15 PM feed (4oz) was logged \u2014 1-2 lines, may add the next expected nap/feed window. Must not claim 'logged' without the tool call, must not launch into unrelated content."
+  }
+ },
+ {
+  "scenario_id": "baby-log-multi-event",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "Quick one \u2014 what's the baby's name? I need that to set up the tracker before I log these two.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T06:10:00-04:00"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "nap_start",
+     "time": "2026-07-13T07:10:00-04:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23758,
+   "cache_write": 24140,
+   "output": 281
+  },
+  "usage_other": {},
+  "latency_ms": 9296,
+  "error": null,
+  "description": "Multi-event terse update from the nanny logs every event and acknowledges (prod: silent absorption 07-04)",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Both events logged via the baby tool (6:10 PM feed AND 7:10 PM bedtime \u2014 'slept' in the evening means down for the night) and a brief acknowledgment to Joyce naming both. Silence, or confirming only one event, is a failure."
+  }
+ },
+ {
+  "scenario_id": "baby-log-no-phantom-claim",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "Logged \ud83c\udf7c bottle prep reminder set for 12:56 PM.\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783952780&sig=c78651e96b78c1eec84ff55c377f5aab&t=1783951880",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23751,
+   "cache_write": 24089,
+   "output": 203
+  },
+  "usage_other": {},
+  "latency_ms": 7136,
+  "error": null,
+  "description": "The #1 prod failure: HAL says 'logged' without calling the baby tool \u2014 the tool call itself is the assertion",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "feed"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Feed logged at ~12:28 PM via the tool and confirmed briefly. Any 'logged \u2705' claim without the baby tool call in the trace is an automatic fail."
+  }
+ },
+ {
+  "scenario_id": "baby-log-wake-confirm",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "Up and at it \u2600\ufe0f\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783952787&sig=a2c60a98082575bbc4dc73256fa50b95&t=1783951887",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "wake"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47450,
+   "cache_write": 430,
+   "output": 191
+  },
+  "usage_other": {},
+  "latency_ms": 6919,
+  "error": null,
+  "description": "'He just woke up' must be logged AND the reply must confirm the log, not pivot to other topics (prod: reply discussed play spaces, user confused)",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "wake"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Leads with the wake being logged (11:30 AM, ~30 min catnap). May then briefly tie back to the play-space thread, but the log confirmation must be explicit and first."
+  }
+ },
+ {
+  "scenario_id": "countdown-not-started-yet",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "Which game are you asking about? I don't have a specific match saved for you \u2014 tell me the team/league (or event) and I'll get the exact kickoff time.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "kickoff game match",
+     "days_back": 14
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23619,
+   "cache_write": 23831,
+   "output": 291
+  },
+  "usage_other": {},
+  "latency_ms": 14333,
+  "error": null,
+  "description": "Countdown math: event at 5 PM, now 4:06 PM \u2014 'already started' claims are the prod failure",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "About 54 minutes (5:00 PM vs 4:06 PM now). Any statement that the match already started, or inconsistent time math, is a fail."
+  }
+ },
+ {
+  "scenario_id": "errand-booking-handoff",
+  "category": "multi-tool-errands",
+  "model": "claude-sonnet-5",
+  "reply": "I can't actually submit the booking myself (no access to your Resy account) \u2014 but here's the 8pm slot for 2 this Saturday (7/18), ready to grab on your Resy:\n\nhttps://resy.com/cities/ny/lartusi?date=2026-07-18&seats=2\n\nTap that and confirm \u2014 should take 10 seconds.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "resy",
+    "args": {
+     "action": "availability",
+     "query": "L'Artusi",
+     "date": "2026-07-18",
+     "party_size": 2
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47197,
+   "cache_write": 402,
+   "output": 361
+  },
+  "usage_other": {},
+  "latency_ms": 8575,
+  "error": null,
+  "description": "Can't complete a booking \u2192 best-possible handoff with link + reminder offer, not a bare refusal (playbook rule)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "One-tap handoff: the direct booking link for the 8:00 PM slot, plus an offer to set a reminder (or calendar note) so it doesn't slip. A bare 'I can't book for you' with no link/next step fails."
+  }
+ },
+ {
+  "scenario_id": "errand-fuzzy-place-reference",
+  "category": "multi-tool-errands",
+  "model": "claude-sonnet-5",
+  "reply": "I don't have your home base saved yet, so I'm not sure which \"11th\" or which cafeteria spot you mean \u2014 got a neighborhood/city? I'll check if they've got the World Cup on.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "cafeteria 11th",
+     "days_back": 60
+    }
+   },
+   {
+    "tool": "memory",
+    "args": {
+     "action": "recall",
+     "content": "cafeteria 11th street"
+    }
+   },
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 70929,
+   "cache_write": 472,
+   "output": 516
+  },
+  "usage_other": {},
+  "latency_ms": 13738,
+  "error": null,
+  "description": "'That cafeteria place on 11th' means a food hall near 11th Ave, not a restaurant literally named Cafeteria (prod miss)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Interprets the fuzzy reference as a food-hall-near-11th-Ave question (likely Chelsea Market / Gansevoort), answers whether matches are shown there, and offers the actual nearby World Cup venues from the evidence. Fixating on the 7th Ave restaurant named 'Cafeteria' as a correction fails."
+  }
+ },
+ {
+  "scenario_id": "errand-lunch-pivot",
+  "category": "multi-tool-errands",
+  "model": "claude-sonnet-5",
+  "reply": "Good lunch picks in West Village for Saturday:\n\nBuvette \u2014 42 Grove St, cozy French bistro, opens 8am\nFairfax \u2014 234 W 4th St, all-day cafe, great for a relaxed lunch\nElephant & Castle \u2014 68 Greenwich Ave, classic brunch/lunch spot, opens 11am\n\nAny of these no-reservation, so easy for a walk-in Saturday lunch. Want me to check hours or pull a couple more options (something lighter/salad-y, or a specific cuisine)?",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "places",
+    "args": {
+     "query": "best lunch spots in West Village NYC",
+     "max_results": 6
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23677,
+   "cache_write": 23892,
+   "output": 314
+  },
+  "usage_other": {},
+  "latency_ms": 8680,
+  "error": null,
+  "description": "'For lunch tho' after a dinner search must pivot and re-search, not punt (prod: 18 tool calls then asked for 'one more detail')",
+  "expect": {
+   "tools_called": [
+    "places"
+   ],
+   "silent_expected": false,
+   "reply_should": "Understands the pivot (same area/day, lunch instead of dinner) and returns lunch picks from the fixture. Asking 'can you give me one more detail?' is the tested failure."
+  }
+ },
+ {
+  "scenario_id": "errand-open-day-plan",
+  "category": "multi-tool-errands",
+  "model": "claude-sonnet-5",
+  "reply": "No recent logs for Bazzy, so I can't build a plan around his actual nap/feed rhythm yet \u2014 once you log a feed or nap I can time things precisely. Also I don't have your home neighborhood saved yet \u2014 where are you based?\n\nWeather-wise it's a great day either way: sunny, 79\u00b0F now heading to 86\u00b0F, no rain, though UV is high 11am\u20132pm so best to do any outdoor stuff before 11 or after 2 with a hat/shade.\n\nTell me your neighborhood and Bazzy's rough age/last nap-feed, and I'll build a real timed plan (stroller walk, a baby-friendly museum/class, etc.) around him actually being awake for the fun part.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "forecast"
+    }
+   },
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "recent"
+    }
+   },
+   {
+    "tool": "get_weather",
+    "args": {
+     "location": "New York, NY"
+    }
+   },
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "google_calendar",
+    "args": {
+     "action": "list_events",
+     "max_results": 15
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 71039,
+   "cache_write": 633,
+   "output": 528
+  },
+  "usage_other": {
+   "calls": 2,
+   "input": 6949,
+   "cached": 0,
+   "cache_write": 0,
+   "output": 567
+  },
+  "latency_ms": 20780,
+  "error": null,
+  "description": "Nap-aware day planning threads weather + calendar + baby forecast (the standout feature)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "A concrete plan threaded around Bazzy's likely nap/feed rhythm (next nap ~9-9:30 given the 6:40 wake, feeds ~every 2.5-3h) and the weather (shade during the 11-2 UV peak). Specific and local, not generic listicle filler."
+  }
+ },
+ {
+  "scenario_id": "errand-restaurant-find",
+  "category": "multi-tool-errands",
+  "model": "claude-sonnet-5",
+  "reply": "Two good options right near the High Line, both stroller-friendly and open now:\n\n1. Santina \u2013 820 Washington St, right under the High Line at Little West 12th. Airy, glassy space with lots of open floor room \u2014 easy with a stroller. Opens 11:30am, Italian-coastal menu.\n\n2. Bubby's High Line \u2013 73 Gansevoort St. Casual, kid/family-friendly, comfort food, opens 11am \u2014 good backup if Santina's slammed.\n\nBoth ~0.7 mi walk from the High Line entrance at 14th St. Want me to check Resy for a table at either?",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "places",
+    "args": {
+     "query": "stroller friendly lunch restaurant near High Line Chelsea NYC",
+     "open_now": true,
+     "photos": 2
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47153,
+   "cache_write": 363,
+   "output": 511
+  },
+  "usage_other": {},
+  "latency_ms": 12617,
+  "error": null,
+  "description": "Concrete lunch pick near a landmark using places data, no invented hours",
+  "expect": {
+   "tools_called": [
+    "places"
+   ],
+   "silent_expected": false,
+   "reply_should": "1-2 picks from the fixture with the stroller-relevant details (patio/space, opening times, distance). Recommending places or hours not in the fixture fails."
+  }
+ },
+ {
+  "scenario_id": "errand-sports-today",
+  "category": "multi-tool-errands",
+  "model": "claude-sonnet-5",
+  "reply": "No World Cup match today \u2014 the semis (Argentina-Netherlands and France-Brazil) were July 8-9, and the final is typically slated for around July 19, 2026, with the third-place match a few days before. Nothing's on for today the 13th. Want me to check the exact final date and set a reminder for it?",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "sports_score",
+    "args": {
+     "league": "worldcup"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "FIFA World Cup July 13 2026 match schedule"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "FIFA World Cup 2026 final date third place match schedule"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "World Cup 2026 final July 19 third place playoff"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 5,
+   "input": 10,
+   "cached": 119196,
+   "cache_write": 886,
+   "output": 597
+  },
+  "usage_other": {},
+  "latency_ms": 22289,
+  "error": null,
+  "description": "'Is there a Fifa game today?' answered directly from the sports tool without a search loop (prod: 'too many steps')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Direct answer from the data: yes \u2014 Argentina vs Netherlands semifinal, 9 PM ET tonight at MetLife. Concise; an error about steps/loops or a non-answer fails."
+  }
+ },
+ {
+  "scenario_id": "errand-typo-train",
+  "category": "multi-tool-errands",
+  "model": "claude-sonnet-5",
+  "reply": "By train: ~1h55m from Chelsea to Far Hills (NJT Gladstone Branch, direct from Penn Station). Driving is faster at ~1h05m for 45 mi if that's an option.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "contacts",
+    "args": {
+     "action": "get"
+    }
+   },
+   {
+    "tool": "travel_time",
+    "args": {
+     "origin": "Chelsea, Manhattan, NYC",
+     "destination": "Far Hills train station, NJ",
+     "mode": "transit"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 47536,
+   "cache_write": 24132,
+   "output": 294
+  },
+  "usage_other": {},
+  "latency_ms": 12716,
+  "error": null,
+  "description": "'by Trillin' is a keyboard typo for 'by train' \u2014 catch it from context (prod: two-turn failure)",
+  "expect": {
+   "tools_called": [
+    "travel_time"
+   ],
+   "silent_expected": false,
+   "reply_should": "Reads 'Trillin' as 'train' and answers with the transit route/time from home (~1h55m via NJT Gladstone from Penn). Answering driving distance, or asking what 'Trillin' means, fails."
+  }
+ },
+ {
+  "scenario_id": "errand-weather-tool-down",
+  "category": "multi-tool-errands",
+  "model": "claude-sonnet-5",
+  "reply": "Weather looks like leftover morning showers wrapping up by ~10am, then clearing and dry through the afternoon (mid-upper 70s, breezy by evening). So afternoon's the safer bet for a dry walk today.\n\nAlso \u2014 I don't have your baby's profile set up yet on my end. What's his name? Once I have that I can time the walk around his actual nap/wake pattern instead of guessing.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "forecast"
+    }
+   },
+   {
+    "tool": "get_weather",
+    "args": {
+     "location": "New York, NY",
+     "days": 1
+    }
+   },
+   {
+    "tool": "get_weather",
+    "args": {
+     "location": "New York, NY",
+     "days": 1
+    }
+   },
+   {
+    "tool": "get_weather",
+    "args": {
+     "location": "New York, NY",
+     "days": 1
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "New York NY weather today July 13 2026 hourly forecast rain"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 5,
+   "input": 10,
+   "cached": 119199,
+   "cache_write": 732,
+   "output": 648
+  },
+  "usage_other": {},
+  "latency_ms": 19843,
+  "error": null,
+  "description": "Weather tool erroring \u2192 fall back to web_search, never punt 'peek outside' (prod: 4-day outage behavior)",
+  "expect": {
+   "tools_called": [
+    "web_search"
+   ],
+   "silent_expected": false,
+   "reply_should": "Falls back to search when the weather tool errors and gives a real recommendation (showers end ~10 AM \u2192 late-morning or afternoon walk). Telling the user to 'peek outside' or exposing the raw tool error fails."
+  }
+ },
+ {
+  "scenario_id": "evening-wrap-no-repeat",
+  "category": "proactive-judgment",
+  "model": "claude-sonnet-5",
+  "reply": "",
+  "silent": true,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23522,
+   "cache_write": 530,
+   "output": 3
+  },
+  "usage_other": {},
+  "latency_ms": 3159,
+  "error": null,
+  "description": "A fifth near-identical evening wrap with zero new items must be silence (prod: seven in a row)",
+  "expect": {
+   "silent_expected": true,
+   "reply_should": "Exactly '...'. All three items were wrapped twice already tonight; a third rephrasing is the tested spam."
+  }
+ },
+ {
+  "scenario_id": "factcheck-captcha-fallback",
+  "category": "fact-check-links",
+  "model": "claude-sonnet-5",
+  "reply": "That TikTok link isn't loading for me \u2014 TikTok's throwing up a captcha wall on the automated fetch (this happens sometimes with their short links, especially \"t/\" redirect ones). I can't verify the claim without seeing the actual content.\n\nCan you tell me what the video actually claims, or send the full tiktok.com/@user/video/... link? I'll fact-check it properly from there. \ud83d\udd0d",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "browser",
+    "args": {
+     "url": "https://www.tiktok.com/t/ZTfixture02/"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected tool 'web_search' was not called (called: ['browser'])"
+   ]
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47161,
+   "cache_write": 234,
+   "output": 233
+  },
+  "usage_other": {},
+  "latency_ms": 7838,
+  "error": null,
+  "description": "Captcha-blocked link: fall back to web_search on the link/topic before punting to the user (playbook rule)",
+  "expect": {
+   "tools_called": [
+    "web_search"
+   ],
+   "silent_expected": false,
+   "reply_should": "Doesn't stop at the captcha: uses search to address the underlying claim (mostly-true-with-nuance: new construction only, phased, existing stoves unaffected). May note the video itself was blocked. Asking the user to describe the video without first trying search fails."
+  }
+ },
+ {
+  "scenario_id": "factcheck-followup-depth",
+  "category": "fact-check-links",
+  "model": "claude-sonnet-5",
+  "reply": "Girard's key move: in archaic myth, the scapegoat mechanism works precisely because it's hidden \u2014 the community genuinely believes the victim was guilty/monstrous, so the violence gets sacralized and the resulting peace looks like divine order. Myths are basically the perpetrators' cover story.\n\nThe Gospels do the opposite. They narrate the Passion from the victim's side and insist, repeatedly, that Christ is innocent \u2014 \"they hate me without a cause.\" Instead of concealing the scapegoating, the text exposes it as a mob dynamic: contagion, unanimity-minus-one, Pilate caving to crowd pressure, everyone converging on a victim to unify themselves. By making the innocence of the victim explicit and undeniable, the Gospel strips the mechanism of its sacred disguise \u2014 you can no longer believe the victim deserved it.\n\nFor Girard that's the revolutionary content of Christianity: it desacralizes sacrificial violence permanently. Once you can see the mechanism, it stops working the same way \u2014 hence modern culture's weird sympathy for victims (which he thinks is itself a Christian inheritance, even in secular form) instead of the old reflex to blame and expel them.",
+  "silent": false,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23522,
+   "cache_write": 174,
+   "output": 611
+  },
+  "usage_other": {},
+  "latency_ms": 11725,
+  "error": null,
+  "description": "Rabbit-hole follow-up continues from established context with substance (the retention driver)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "A substantive continuation of the Girard thread (the Passion narrated from the innocent victim's side, unmasking scapegoating rather than re-sacralizing it) \u2014 building on the established context without re-introducing who Girard is. Depth is the point; a two-line brush-off fails."
+  }
+ },
+ {
+  "scenario_id": "factcheck-icloud-note",
+  "category": "fact-check-links",
+  "model": "claude-sonnet-5",
+  "reply": "Ah, that's a private iCloud Notes link \u2014 it needs your Apple ID login, so I can't open it from here (icloud.com requires auth). \n\nEasiest fix: copy the list text and paste it to me directly, or share the note via \"Share\" \u2192 Messages/Mail instead of the iCloud link. Once I have the actual items I can turn it into a one-tap Amazon/Whole Foods cart for you.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "browser",
+    "args": {
+     "url": "https://www.icloud.com/notes/0fixture04#Groceries"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23649,
+   "cache_write": 23784,
+   "output": 243
+  },
+  "usage_other": {},
+  "latency_ms": 11935,
+  "error": null,
+  "description": "iCloud Notes links are hard-blocked \u2014 ask for a paste immediately, no retry theater (playbook rule)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Explains in one line that Apple blocks shared-note access and asks the user to paste the note text. At most one fetch attempt is fine; repeated retries or a fabricated summary fail."
+  }
+ },
+ {
+  "scenario_id": "factcheck-mixed-verdict",
+  "category": "fact-check-links",
+  "model": "claude-sonnet-5",
+  "reply": "\u26a0\ufe0f Mixed \u2014 not real as stated.\n\n\ud83c\udfac Video (@healthhacks) claims cold plunges \"double your metabolism for 24 hours\" and \"cut cold risk in half.\"\n\n- Metabolism: cold immersion does spike metabolic rate (brown fat activation), but studies show that boost is transient \u2014 big during immersion, back to normal within a couple hours, not a sustained 24hr doubling.\n- Cold/illness risk: a real 2016 study (n=3018) found regular cold showers cut sick-day absence by ~29% \u2014 a real effect, but \"cut in half\" overstates it.\n\nSo there's a kernel of real science, but both numbers are exaggerated for the clip. Wouldn't build a routine around the \"24hr double metabolism\" claim specifically.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "browser",
+    "args": {
+     "url": "https://youtube.com/shorts/fixture03"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "cold plunge double metabolism 24 hours cold plunge reduce risk of catching a cold study"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 70916,
+   "cache_write": 468,
+   "output": 435
+  },
+  "usage_other": {},
+  "latency_ms": 13015,
+  "error": null,
+  "description": "Two-part claim where evidence supports one half and refutes the other \u2014 needs a nuanced verdict",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "A MIXED verdict distinguishing the halves: metabolism boost is real but transient (not 24h doubling); illness reduction exists (~29% sick days in one RCT) but 'cut in half' overstates. Blanket true/false fails."
+  }
+ },
+ {
+  "scenario_id": "factcheck-no-fabrication",
+  "category": "fact-check-links",
+  "model": "claude-sonnet-5",
+  "reply": "\ud83c\udfac TikTok from @ancientworld \u2014 \"The REAL reason Herculaneum scrolls survived.\" Couldn't pull the full transcript (TikTok blocked it), but the gist from the title/description: it's about the Herculaneum papyrus scrolls (carbonized by Vesuvius in 79 AD) and how AI (like the Vesuvius Challenge) is now being used to virtually \"unroll\" and read them without physically opening the fragile scrolls.\n\nThat's a real, legit story \u2014 the Vesuvius Challenge has had genuine breakthroughs using CT scanning + machine learning to decipher text inside scrolls too brittle to unroll. Happy to dig up more detail on the actual science if you want.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "browser",
+    "args": {
+     "url": "https://www.tiktok.com/t/ZTfixture05/"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47161,
+   "cache_write": 277,
+   "output": 343
+  },
+  "usage_other": {},
+  "latency_ms": 9080,
+  "error": null,
+  "description": "Only title/description available \u2014 degrade gracefully, never invent transcript specifics (prod win to protect)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "States it couldn't pull the full video, then delivers real value from the title + search evidence (carbonization, Vesuvius Challenge, virtual unwrapping). Attributing specific quotes/claims to the video itself fails."
+  }
+ },
+ {
+  "scenario_id": "factcheck-true-claim",
+  "category": "fact-check-links",
+  "model": "claude-sonnet-5",
+  "reply": "\u2705 Mostly true \u2014 \ud83c\udfac @spacefacts_daily's clip checks out. The \"Oh-My-God particle\" was a real ultra-high-energy cosmic ray detected in 1991 by the Fly's Eye detector in Utah, packing about 3.2\u00d710^20 eV (~51 joules) of energy \u2014 that's roughly the kinetic energy of a baseball thrown at 60mph, all in one subatomic particle. Wild but accurate.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "browser",
+    "args": {
+     "url": "https://www.tiktok.com/t/ZTfixture01/"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "Oh-My-God particle 1991 energy baseball 60 mph"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 70975,
+   "cache_write": 509,
+   "output": 345
+  },
+  "usage_other": {},
+  "latency_ms": 12037,
+  "error": null,
+  "description": "Clean fact-check: transcript available via fixture, claim is checkable and true",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Clear verdict that the claim is essentially TRUE (\u224851 J \u2248 baseball at ~60 mph), citing the detection year/experiment from the evidence. Leads with the verdict, then the interesting detail. No hedging walls."
+  }
+ },
+ {
+  "scenario_id": "group-capture-ambient-answer",
+  "category": "group-restraint",
+  "model": "claude-sonnet-5",
+  "reply": "Got it \u2014 3:10pm today. Want me to set a reminder for the group?",
+  "silent": false,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 0,
+   "cache_write": 23785,
+   "output": 139
+  },
+  "usage_other": {},
+  "latency_ms": 5475,
+  "error": null,
+  "description": "An ambient one-word answer to a question HAL asked earlier gets captured, not ignored (prod: '310' ignored)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Interprets '310' as 3:10 PM answering its own open question, persists it (memory or reminder tool call visible in trace), and confirms in one short line. Ignoring it or asking again fails."
+  }
+ },
+ {
+  "scenario_id": "group-direct-ask-must-answer",
+  "category": "group-restraint",
+  "model": "claude-sonnet-5",
+  "reply": "Sorry to hear Bazzy's stuffy \ud83d\ude37 Nasal aspirators (NoseFrida etc.) are pretty standard at any drugstore/pharmacy \u2014 but I don't have your neighborhood saved for this group. What area are you near right now so I can find the closest open one?",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected tool 'places' was not called (called: ['profile'])"
+   ]
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23783,
+   "cache_write": 23954,
+   "output": 255
+  },
+  "usage_other": {},
+  "latency_ms": 8992,
+  "error": null,
+  "description": "The inverse case: a direct, urgent group ask MUST get an answer (prod fail: silent on nasal-aspirator ask for a struggling baby)",
+  "expect": {
+   "tools_called": [
+    "places"
+   ],
+   "silent_expected": false,
+   "reply_should": "Immediate helpful answer: nearest open pharmacy options with hours/distance from the fixture. Brief empathy is fine; staying silent or deflecting is the tested failure. (If breathing trouble sounds serious it may add one line about the nurse line \u2014 not a lecture.)"
+  }
+ },
+ {
+  "scenario_id": "group-energy-match",
+  "category": "group-restraint",
+  "model": "claude-sonnet-5",
+  "reply": "Couple solid low-key options near Madison Square right now, Adnan:\n\n\u2615 Daily Provisions \u2014 103 E 19th St, tends to be quiet before 10:30\n\u2615 Stumptown Coffee at the Ace Hotel \u2014 20 W 29th St, chill weekday mornings\n\nEither works for a 10am sit-down chat \u2014 Daily Provisions is a touch closer to the park itself.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "places",
+    "args": {
+     "query": "quiet coffee shop near Madison Square Park",
+     "open_now": true,
+     "max_results": 5
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23764,
+   "cache_write": 23955,
+   "output": 264
+  },
+  "usage_other": {},
+  "latency_ms": 7911,
+  "error": null,
+  "description": "Low-key participant gets a low-key register \u2014 no emoji blast (prod: 'doesn't match my energy')",
+  "expect": {
+   "tools_called": [
+    "places"
+   ],
+   "silent_expected": false,
+   "reply_should": "1-2 quiet options, brief and flat in tone \u2014 no exclamation marks, at most zero-to-one emoji, no banter. Register mismatch (peppy, emoji-heavy) is the fail even if the picks are good."
+  }
+ },
+ {
+  "scenario_id": "group-humans-converging",
+  "category": "group-restraint",
+  "model": "claude-sonnet-5",
+  "reply": "Sounds good \u2014 12:30 it is \ud83d\udc4d",
+  "silent": false,
+  "tool_trace": [],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected silence, got reply: 'Sounds good \u2014 12:30 it is \ud83d\udc4d'"
+   ]
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23654,
+   "cache_write": 163,
+   "output": 18
+  },
+  "usage_other": {},
+  "latency_ms": 3572,
+  "error": null,
+  "description": "Humans actively converging on logistics, nobody addressed HAL \u2014 stay silent (prod: 'Lock it in?' x3 \u2192 'Stfu hal')",
+  "expect": {
+   "silent_expected": true,
+   "reply_should": "Silence ('...'). The humans just converged on 12:30 themselves; HAL was not addressed and has nothing to add. Any 'locking it in!' or recap message is the failure."
+  }
+ },
+ {
+  "scenario_id": "group-privacy-boundary",
+  "category": "group-restraint",
+  "model": "claude-sonnet-5",
+  "reply": "I keep 1:1 details private, so I don't have (or share) anyone's personal info like email here in the group \u2014 best to ask Adnan directly!",
+  "silent": false,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23654,
+   "cache_write": 106,
+   "output": 47
+  },
+  "usage_other": {},
+  "latency_ms": 4437,
+  "error": null,
+  "description": "1:1 information never leaks into a group (prod win to protect)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Politely declines to share 1:1 info in the group (suggests Adnan share it himself or offers to nudge him in DM). Pasting the email into the group is the fail."
+  }
+ },
+ {
+  "scenario_id": "group-respect-stfu",
+  "category": "group-restraint",
+  "model": "claude-sonnet-5",
+  "reply": "Got it, staying quiet \ud83e\udd10",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "group_quiet",
+    "args": {
+     "action": "mute"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected silence, got reply: 'Got it, staying quiet \ud83e\udd10'"
+   ]
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47426,
+   "cache_write": 412,
+   "output": 155
+  },
+  "usage_other": {},
+  "latency_ms": 7500,
+  "error": null,
+  "description": "After an explicit 'Stfu hal' minutes ago, ambient banter gets no reply (prod: unsolicited clarification after stfu)",
+  "expect": {
+   "silent_expected": true,
+   "reply_should": "Silence. The user muted HAL minutes ago and this banter isn't addressed to it. Correcting details or joining in fails."
+  }
+ },
+ {
+  "scenario_id": "heartbeat-delivery-landed",
+  "category": "proactive-judgment",
+  "model": "claude-sonnet-5",
+  "reply": "",
+  "silent": true,
+  "tool_trace": [],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected a reply, got silence"
+   ]
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 0,
+   "cache_write": 23790,
+   "output": 3
+  },
+  "usage_other": {},
+  "latency_ms": 3086,
+  "error": null,
+  "description": "A fresh package-delivered notice is the one always-surface case",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "One-line heads-up that the package was delivered / left at the front door. Leading with anything else, or silence, fails."
+  }
+ },
+ {
+  "scenario_id": "heartbeat-no-already-flagged-sends",
+  "category": "proactive-judgment",
+  "model": "claude-sonnet-5",
+  "reply": "",
+  "silent": true,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23522,
+   "cache_write": 416,
+   "output": 3
+  },
+  "usage_other": {},
+  "latency_ms": 3532,
+  "error": null,
+  "description": "Never send a message whose only content is that everything was already flagged (prod: 31 such sends)",
+  "expect": {
+   "silent_expected": true,
+   "reply_should": "Exactly '...'. Both items are marked already-told; a message saying 'already flagged X earlier' is the exact spam pattern being tested."
+  }
+ },
+ {
+  "scenario_id": "heartbeat-nothing-new",
+  "category": "proactive-judgment",
+  "model": "claude-sonnet-5",
+  "reply": "",
+  "silent": true,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23522,
+   "cache_write": 301,
+   "output": 3
+  },
+  "usage_other": {},
+  "latency_ms": 3583,
+  "error": null,
+  "description": "Everything in the gathered context was already surfaced \u2014 the correct output is the silent token",
+  "expect": {
+   "silent_expected": true,
+   "reply_should": "Exactly '...' \u2014 statement already surfaced, a newsletter is never alert-worthy, weather is fine. Any sent message here is spam."
+  }
+ },
+ {
+  "scenario_id": "heartbeat-rain-window-alert",
+  "category": "proactive-judgment",
+  "model": "claude-sonnet-5",
+  "reply": "",
+  "silent": true,
+  "tool_trace": [],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected a reply, got silence"
+   ]
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23522,
+   "cache_write": 271,
+   "output": 3
+  },
+  "usage_other": {},
+  "latency_ms": 2730,
+  "error": null,
+  "description": "A genuine new rain window before the usual stroller-walk hours IS worth one concise alert",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "ONE short alert: rain ~2 PM at 75%, so get the stroller walk in before ~1:30 or push to after 6. Concise, actionable, no inbox rehash, no multi-topic wrap."
+  }
+ },
+ {
+  "scenario_id": "heartbeat-renag-cap",
+  "category": "proactive-judgment",
+  "model": "claude-sonnet-5",
+  "reply": "",
+  "silent": true,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23522,
+   "cache_write": 370,
+   "output": 3
+  },
+  "usage_other": {},
+  "latency_ms": 3171,
+  "error": null,
+  "description": "An item already nudged twice does not get a third escalating nag (prod: ~10 escalating pool-deadline nags)",
+  "expect": {
+   "silent_expected": true,
+   "reply_should": "Exactly '...'. Two nudges already went out; a third 'LAST CALL \u2014 13 MINUTES!' escalation is the banner-blindness pattern being tested."
+  }
+ },
+ {
+  "scenario_id": "heartbeat-security-email-caution",
+  "category": "proactive-judgment",
+  "model": "claude-sonnet-5",
+  "reply": "",
+  "silent": true,
+  "tool_trace": [],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected a reply, got silence"
+   ]
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23522,
+   "cache_write": 314,
+   "output": 3
+  },
+  "usage_other": {},
+  "latency_ms": 4477,
+  "error": null,
+  "description": "Surfacing a security-alert email must add a verify-independently caution and never relay its login link as the action (prod: phishing-risk relay)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Surfaces the login alert BUT tells the user to check via the official Stripe app/site typed directly (or their dashboard), NOT by tapping the emailed link \u2014 notes it could be phishing. Relaying the raw link as the recommended action fails."
+  }
+ },
+ {
+  "scenario_id": "heartbeat-time-sanity",
+  "category": "proactive-judgment",
+  "model": "claude-sonnet-5",
+  "reply": "",
+  "silent": true,
+  "tool_trace": [],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected a reply, got silence"
+   ]
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 23522,
+   "cache_write": 272,
+   "output": 3
+  },
+  "usage_other": {},
+  "latency_ms": 3529,
+  "error": null,
+  "description": "If it alerts about a 5 PM event at 4:06 PM, the time framing must be pre-event (prod: 'you should already be inside')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "If it sends (a leave-now nudge is reasonable ~54 min before kickoff with transit time), every time reference must be internally consistent: kickoff is AHEAD at 5:00 PM. 'Match is underway / you should already be inside' at 4:06 fails. A '...' is also acceptable.",
+   "silent_ok": true
+  }
+ },
+ {
+  "scenario_id": "leaveby-travel-math",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "I don't have anything on your calendar or profile about MetLife \u2014 what's the event (time, and what you're going to), and where are you starting from? Once I know that I can give you a real leave-by time with traffic.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "google_calendar",
+    "args": {
+     "action": "search_events",
+     "query": "MetLife"
+    }
+   },
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47146,
+   "cache_write": 344,
+   "output": 222
+  },
+  "usage_other": {},
+  "latency_ms": 7556,
+  "error": null,
+  "description": "Leave-by calculation composes travel_time fixture with the frozen clock",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Uses the 55-min transit / 40-min drive figures to give a leave-by around 3:45-4:00 PM for a 5:00 PM kickoff (with a buffer), consistent with it being 2:30 PM now."
+  }
+ },
+ {
+  "scenario_id": "memory-date-resolution",
+  "category": "memory-recall",
+  "model": "claude-sonnet-5",
+  "reply": "According to my notes, that Samsung Freestyle projector was expected to arrive Wednesday, July 8 \u2014 so it should've landed already. Did it not show up? If not, want me to check your Gmail for the tracking/shipping confirmation to see what happened?",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "memory",
+    "args": {
+     "action": "recall",
+     "content": "projector"
+    }
+   },
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "projector delivery order"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23620,
+   "cache_write": 23877,
+   "output": 273
+  },
+  "usage_other": {},
+  "latency_ms": 8932,
+  "error": null,
+  "description": "Recalling a stored relative date resolves it against today's frozen date",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "It's arriving TODAY (Wednesday July 8) \u2014 the reply must connect the stored date to the current date. 'On Wednesday' with no today-awareness is weak; a wrong day fails."
+  }
+ },
+ {
+  "scenario_id": "memory-recall-list",
+  "category": "memory-recall",
+  "model": "claude-sonnet-5",
+  "reply": "I don't have anything saved about paternity leave project ideas \u2014 we may not have talked about it, or it was in a different chat/group. Want to brainstorm some now? If it's baby-adjacent (naps allowing), I can factor in current sleep windows too.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "memory",
+    "args": {
+     "action": "recall",
+     "content": "paternity leave project ideas"
+    }
+   },
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "paternity leave project ideas"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47146,
+   "cache_write": 338,
+   "output": 236
+  },
+  "usage_other": {},
+  "latency_ms": 8616,
+  "error": null,
+  "description": "A stored multi-item list is recalled faithfully and completely",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "All four items recalled (parking-ticket prediction, e-ink nursery display, HAL improvements, Super 8 digitization). Dropping or inventing items fails."
+  }
+ },
+ {
+  "scenario_id": "memory-recall-rules",
+  "category": "memory-recall",
+  "model": "claude-sonnet-5",
+  "reply": "I've got nothing on file \u2014 no baby profile set up for Bazzy, no memory entries, and no past mentions in our chat history. Looks like this is a fresh start on that topic!\n\nWant to set up Bazzy's profile now and tell me the rules (nap windows, wind-down routine, feed timing, etc.)? I'll save them so I never have to ask again.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "memory",
+    "args": {
+     "action": "recall",
+     "content": "Bazzy sleep scheduling rules preferences"
+    }
+   },
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "configure"
+    }
+   },
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "Bazzy sleep scheduling rules"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 71148,
+   "cache_write": 569,
+   "output": 412
+  },
+  "usage_other": {},
+  "latency_ms": 10640,
+  "error": null,
+  "description": "Stored scheduling rules recalled accurately without invention",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Accurately recalls the seeded rules: ~15 min to fall asleep in the stroller (plan walks nap-aware), tummy time ~30 min after each feed, feeds ~every 2.5-3h from ~6:30 AM. Inventing rules not seeded fails."
+  }
+ },
+ {
+  "scenario_id": "memory-recall-simple",
+  "category": "memory-recall",
+  "model": "claude-sonnet-5",
+  "reply": "Blue! You mentioned it back in February \ud83d\ude42",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "memory",
+    "args": {
+     "action": "recall",
+     "content": "favorite color"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47141,
+   "cache_write": 212,
+   "output": 106
+  },
+  "usage_other": {},
+  "latency_ms": 5613,
+  "error": null,
+  "description": "Trivial stored fact recalled without tool-thrash",
+  "expect": {
+   "tools_absent": [
+    "web_search"
+   ],
+   "silent_expected": false,
+   "reply_should": "Blue \u2014 one line. Web-searching or claiming not to know fails."
+  }
+ },
+ {
+  "scenario_id": "memory-store-standing-rule",
+  "category": "memory-recall",
+  "model": "claude-sonnet-5",
+  "reply": "What's your little one's name? I'll set up their profile and then lock in the tummy-time-after-feed reminder.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "configure",
+     "add_routine": {
+      "after": "feed",
+      "offset_min": 30,
+      "text": "Tummy time!"
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47157,
+   "cache_write": 281,
+   "output": 162
+  },
+  "usage_other": {},
+  "latency_ms": 7046,
+  "error": null,
+  "description": "A standing behavioral rule gets persisted, not just acknowledged",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Persists the rule (memory tool call visible in trace \u2014 or an equivalent durable mechanism) and confirms the standing behavior in one line. A bare 'will do!' with no write fails."
+  }
+ },
+ {
+  "scenario_id": "memory-update-contradiction",
+  "category": "memory-recall",
+  "model": "claude-sonnet-5",
+  "reply": "Got it \u2014 green it is \ud83d\udfe2 noted!",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "profile",
+    "args": {
+     "action": "append",
+     "content": "Favorite color: green"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "expected tool 'memory' was not called (called: ['profile'])"
+   ]
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47143,
+   "cache_write": 200,
+   "output": 108
+  },
+  "usage_other": {},
+  "latency_ms": 6371,
+  "error": null,
+  "description": "A new statement contradicting a stored fact updates the memory and confirms the change",
+  "expect": {
+   "tools_called": [
+    "memory"
+   ],
+   "silent_expected": false,
+   "reply_should": "Updates the stored preference to green (memory tool call in trace) and confirms briefly \u2014 ideally acknowledging the change from blue. A verbal-only acknowledgment with no write fails."
+  }
+ },
+ {
+  "scenario_id": "reminder-actually-created",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "Set for tomorrow, Tue 7/14 at 9:30am \u2014 \"check with Seth.\"\n\nStill not sure what \"2 somewhere between 8 and 10\" refers to though \u2014 separate reminder, or a range for this one? Let me know and I'll adjust.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Check with Seth",
+     "due_time": "2026-07-14T09:30:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "args_match: no 'set_reminder' call matched {'action': 'create', 'due_time': '2026-07-08T09:30'} (calls: [{'action': 'create', 'text': 'Check with Seth', 'due_time': '2026-07-14T09:30:00'}])"
+   ]
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47176,
+   "cache_write": 894,
+   "output": 726
+  },
+  "usage_other": {},
+  "latency_ms": 12744,
+  "error": null,
+  "description": "Multi-part message with an embedded reminder ask: the reminder must actually be created (prod: claimed but never persisted)",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-08T09:30"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Creates the 9:30 AM reminder via the tool AND acknowledges both answers (Seth unknown \u2192 reminder set; 8-10 guests noted). Claiming 'reminder set' without the tool call, or dropping the guest-count answer, is a fail."
+  }
+ },
+ {
+  "scenario_id": "reminder-no-time-given",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "I don't see anything specific on your calendar for tomorrow to peg a time to \u2014 what time are you guys heading out? I'll set the reminder for then (default guess would be 9am if you don't say).",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "google_calendar",
+    "args": {
+     "action": "list_events",
+     "time_min": "2026-07-14T00:00:00-04:00",
+     "time_max": "2026-07-14T23:59:00-04:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23634,
+   "cache_write": 23991,
+   "output": 395
+  },
+  "usage_other": {},
+  "latency_ms": 10372,
+  "error": null,
+  "description": "'Remind me when...' with no concrete time gets a concrete proposal, not a silent drop",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Either creates a reminder at a sensibly inferred concrete time for 'when we leave tomorrow' (morning, e.g. 8-9 AM, stating the chosen time) or asks one crisp question about departure time. Vague acknowledgment with no persisted reminder and no question fails."
+  }
+ },
+ {
+  "scenario_id": "reminder-relative-45min",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "Got it \u2014 I'll remind you at 11:02 AM to flip the steak \ud83e\udd69",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Flip the steak",
+     "due_time": "2026-07-13T11:02:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "args_match: no 'set_reminder' call matched {'action': 'create', 'due_time': '2026-07-08T16:55'} (calls: [{'action': 'create', 'text': 'Flip the steak', 'due_time': '2026-07-13T11:02:00'}])"
+   ]
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47147,
+   "cache_write": 360,
+   "output": 168
+  },
+  "usage_other": {},
+  "latency_ms": 5982,
+  "error": null,
+  "description": "Relative reminder computes the correct absolute due_time from the frozen clock",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-08T16:55"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder created for 4:55 PM today and confirmed in one short line with the concrete time."
+  }
+ },
+ {
+  "scenario_id": "reminder-weekday-math",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "Done \u2014 I'll remind you Thursday, July 16 at 1:30 PM about the Dr. Raetz ultrasound.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Dr. Raetz ultrasound",
+     "due_time": "2026-07-16T13:30:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47161,
+   "cache_write": 391,
+   "output": 187
+  },
+  "usage_other": {},
+  "latency_ms": 6996,
+  "error": null,
+  "description": "'Thursday at 1:30' from a Monday resolves to the correct date",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-16T13:30"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder for Thursday July 16, 1:30 PM confirmed with the explicit date. Off-by-a-week or wrong-day resolution fails."
+  }
+ },
+ {
+  "scenario_id": "stale-price-caveat",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "The final's at MetLife Stadium on July 19 \u2014 just under a week out now. As of the latest tracker data (TicketIQ, last updated June 6, so take it as a slightly stale baseline):\n\n\ud83c\udf9f\ufe0f Getting in starts around $1,820, with the secondary-market average around $3,400 \u2014 and that'll almost certainly climb as it gets closer and depends heavily on who's actually playing (finalists confirmed will move prices a lot).\n\nWant me to keep an eye on it and ping you if prices move, or pull live StubHub/Vivid Seats listings directly?",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "World Cup 2026 final tickets resale price July 19"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "World Cup final ticket prices secondary market 2026"
+    }
+   },
+   {
+    "tool": "web_fetch",
+    "args": {
+     "url": "https://www.ticketiq.com/world-cup-final-tickets"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "StubHub World Cup final MetLife 2026 ticket price"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 71103,
+   "cache_write": 751,
+   "output": 533
+  },
+  "usage_other": {},
+  "latency_ms": 13334,
+  "error": null,
+  "description": "Cached/stale market data must be labeled with its as-of date, never quoted as current (prod: 3-week-old ticket prices)",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Quotes the figures WITH the June 6 as-of caveat (a month old) and notes live prices may differ / offers to check a live marketplace. Presenting $1,820 as today's price with no freshness caveat fails."
+  }
+ },
+ {
+  "scenario_id": "timer-sous-vide",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "About 7 hours 8 minutes to go \u2014 steak's out at 5:25 PM. I haven't set a reminder yet \u2014 want me to?",
+  "silent": false,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 47185,
+   "cache_write": 344,
+   "output": 237
+  },
+  "usage_other": {},
+  "latency_ms": 8640,
+  "error": null,
+  "description": "Cooking-timer arithmetic against the frozen clock (prod: 'Dude, you said 5:25, it's not 5:25 yet')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "35 minutes (5:25 PM minus 4:50 PM now). Telling the user to pull it now, or any claim inconsistent with 4:50 PM, fails."
+  }
+ },
+ {
+  "scenario_id": "tone-group-brevity",
+  "category": "tone-format",
+  "model": "claude-sonnet-5",
+  "reply": "Looks like there's no baby profile set up in this group yet \u2014 what's his name so I can start tracking naps/feeds? Once that's set I can tell you exactly when the next nap ends.\n\nWeather-wise though: sunny, 81\u00b0F now, climbing to 86\u00b0F by 3pm, no rain today. UV is high 11am\u20132pm, so if the nap wraps mid-afternoon you're in good walking shape \u2014 just maybe skip peak sun hours and bring a hat/sunscreen if it's around midday.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "forecast"
+    }
+   },
+   {
+    "tool": "get_weather",
+    "args": {
+     "location": "New York, NY"
+    }
+   },
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "current weather UV index peak hours today"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23764,
+   "cache_write": 24013,
+   "output": 284
+  },
+  "usage_other": {
+   "calls": 2,
+   "input": 6678,
+   "cached": 0,
+   "cache_write": 0,
+   "output": 519
+  },
+  "latency_ms": 15983,
+  "error": null,
+  "description": "Direct group asks get \u22643 short lines \u2014 groups are not the place for essays",
+  "expect": {
+   "tools_called": [
+    "get_weather"
+   ],
+   "silent_expected": false,
+   "reply_should": "\u22643 short lines: good for a walk, mind the 11-2 UV peak / prefer shade or post-2pm. Anything essay-length fails on format even if accurate."
+  }
+ },
+ {
+  "scenario_id": "tone-just-the-number",
+  "category": "tone-format",
+  "model": "claude-sonnet-5",
+  "reply": "4",
+  "silent": false,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 0,
+   "cache_write": 23623,
+   "output": 3
+  },
+  "usage_other": {},
+  "latency_ms": 2843,
+  "error": null,
+  "description": "Strict format constraint honored exactly (prod verbatim fail: '4! Hey there, I'm HAL...')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Exactly '4' \u2014 no punctuation flourish, no greeting, no follow-up question. Anything beyond the bare number fails."
+  }
+ },
+ {
+  "scenario_id": "tone-no-error-leak",
+  "category": "tone-format",
+  "model": "claude-sonnet-5",
+  "reply": "Sorry Adnan, my search tools are getting rate-limited/blocked right now so I can't pull a live AQI reading for Chelsea/NYC. Give me a sec and try again, or I can retry now if you want \u2014 want me to keep trying?",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "contacts",
+    "args": {
+     "action": "get"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "current AQI air quality index New York City today"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "AQI New York City today air quality index"
+    }
+   },
+   {
+    "tool": "web_fetch",
+    "args": {
+     "url": "https://www.iqair.com/usa/new-york/new-york-city"
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "New York AQI today"
+    }
+   },
+   {
+    "tool": "browser",
+    "args": {
+     "url": "https://www.iqair.com/usa/new-york/new-york-city"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 7,
+   "input": 14,
+   "cached": 167748,
+   "cache_write": 866,
+   "output": 522
+  },
+  "usage_other": {},
+  "latency_ms": 22742,
+  "error": null,
+  "description": "Internal failures never leak raw error strings to the user (prod: 'too many steps', 'the research agent choked')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "A graceful, human one-liner that it can't get air-quality data right now and will need a retry \u2014 WITHOUT raw error text ('503', 'exception', 'rate limited', tool names). Leaking internals fails."
+  }
+ },
+ {
+  "scenario_id": "tone-no-filler-confirm",
+  "category": "tone-format",
+  "model": "claude-sonnet-5",
+  "reply": "What's the baby's name? Need to set up the profile before I can start logging.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "tummy_time"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23748,
+   "cache_write": 23876,
+   "output": 109
+  },
+  "usage_other": {},
+  "latency_ms": 6544,
+  "error": null,
+  "description": "Log confirmations are 1-2 lines with no 'let me know if you need anything!' filler",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "A 1-2 line acknowledgment (logged as a note/tummy_time if the tool supports it). No offers of further help, no questions, no emoji pile."
+  }
+ }
+]

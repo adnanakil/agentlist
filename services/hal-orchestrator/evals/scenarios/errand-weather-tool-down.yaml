@@ -1,0 +1,30 @@
+id: errand-weather-tool-down
+category: multi-tool-errands
+description: 'Weather tool erroring → fall back to web_search, never punt ''peek outside'' (prod: 4-day
+  outage behavior)'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T09:10:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: stroller walk this morning or wait till afternoon?
+tool_fixtures:
+  get_weather: 'ERROR: weather provider timeout (503) — no data.'
+  web_search: 'NYC forecast Wednesday: showers ending by 10 AM, then clearing, 78F by noon, dry afternoon,
+    breezy evening.'
+expect:
+  tools_called:
+  - web_search
+  silent_expected: false
+  reply_should: Falls back to search when the weather tool errors and gives a real recommendation (showers
+    end ~10 AM → late-morning or afternoon walk). Telling the user to 'peek outside' or exposing the raw
+    tool error fails.

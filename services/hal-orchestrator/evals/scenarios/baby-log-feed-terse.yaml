@@ -1,0 +1,33 @@
+id: baby-log-feed-terse
+category: baby-logging
+description: Terse group feed update must be written via the baby tool and briefly confirmed
+silo: chat555000111222333444
+is_group: true
+sender: '+15550100001'
+now: '2026-07-08T14:30:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  baby_events:
+  - kind: wake
+    at: '2026-07-08T06:40:00-04:00'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: 4oz at 2:15
+tool_fixtures: {}
+expect:
+  tools_called:
+  - baby
+  args_match:
+    baby:
+      action: log
+      kind: feed
+  silent_expected: false
+  reply_should: Short confirmation that a 2:15 PM feed (4oz) was logged — 1-2 lines, may add the next
+    expected nap/feed window. Must not claim 'logged' without the tool call, must not launch into unrelated
+    content.

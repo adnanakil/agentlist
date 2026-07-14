@@ -1,0 +1,23 @@
+id: leaveby-travel-math
+category: reminders-time
+description: Leave-by calculation composes travel_time fixture with the frozen clock
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T14:30:00-04:00'
+internal: false
+seed:
+  memories:
+  - Adnan has World Cup match tickets today, kickoff 5:00 PM at MetLife Stadium.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: when do I need to leave for MetLife?
+tool_fixtures:
+  travel_time: 'Chelsea, Manhattan → MetLife Stadium: ~55 min by transit (A to Port Authority + NJT bus),
+    ~40 min driving in current traffic.'
+expect:
+  silent_expected: false
+  reply_should: Uses the 55-min transit / 40-min drive figures to give a leave-by around 3:45-4:00 PM
+    for a 5:00 PM kickoff (with a buffer), consistent with it being 2:30 PM now.

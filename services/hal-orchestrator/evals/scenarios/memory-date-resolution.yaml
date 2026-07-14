@@ -1,0 +1,21 @@
+id: memory-date-resolution
+category: memory-recall
+description: Recalling a stored relative date resolves it against today's frozen date
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T10:15:00-04:00'
+internal: false
+seed:
+  memories:
+  - '[2026-07-06] Adnan ordered a Samsung Freestyle projector ($335.86), arriving Wednesday July 8.'
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: when is the projector arriving?
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: It's arriving TODAY (Wednesday July 8) — the reply must connect the stored date to the
+    current date. 'On Wednesday' with no today-awareness is weak; a wrong day fails.

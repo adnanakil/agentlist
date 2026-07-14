@@ -1,0 +1,30 @@
+id: baby-log-multi-event
+category: baby-logging
+description: 'Multi-event terse update from the nanny logs every event and acknowledges (prod: silent
+  absorption 07-04)'
+silo: chat555000111222333444
+is_group: true
+sender: '+15550100002'
+now: '2026-07-08T19:20:00-04:00'
+internal: false
+seed:
+  memories:
+  - 'Son''s name: Bazzy. Age: 5 months old. Feed schedule roughly every 2.5-3h from ~6:30am.'
+  - 'Rule for Bazzy: tummy time about 30 minutes after each feed.'
+  - Bazzy takes about 15 minutes to fall asleep in the stroller; nap-aware walk planning preferred.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: Baby ate at 610 and slept at 710
+tool_fixtures: {}
+expect:
+  tools_called:
+  - baby
+  args_match:
+    baby:
+      action: log
+  silent_expected: false
+  reply_should: Both events logged via the baby tool (6:10 PM feed AND 7:10 PM bedtime — 'slept' in the
+    evening means down for the night) and a brief acknowledgment to Joyce naming both. Silence, or confirming
+    only one event, is a failure.

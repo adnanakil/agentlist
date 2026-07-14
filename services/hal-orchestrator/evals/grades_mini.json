@@ -1,0 +1,272 @@
+{
+  "baby-digest-slash::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Slash command required a digest reply but HAL stayed silent despite the situation explicitly forbidding silence."
+  },
+  "baby-log-ambiguous-505::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "HAL guess-logged the feed (multiple times, with an undo mid-way) without asking the required clarifying question, which is the exact failure this scenario tests."
+  },
+  "baby-log-correction::gpt-5.4-mini": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "The undo+relog correctly fixed the record to 9:30, but the reply claims a wind-down reminder was set with no supporting tool activity and doesn't state the corrected 9:30 time."
+  },
+  "baby-log-daytime-not-bedtime::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Correctly logged nap_start (not bedtime) and confirmed briefly with no false time claims."
+  },
+  "baby-log-feed-terse::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "Tool was called and a brief confirmation given, but the feed was logged at 2:15 AM instead of the expected 2:15 PM \u2014 a wrong detail in the logged data."
+  },
+  "baby-log-multi-event::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Instead of confirming both events to Joyce, HAL asked the owner an unnecessary question, logged the times as AM instead of PM and bedtime as a nap, and its reply contradicts the tool trace by saying it will log later."
+  },
+  "baby-log-no-phantom-claim::gpt-5.4-mini": {
+    "failure_category": "hallucination",
+    "grade": "failed",
+    "reason": "Feed was logged at 10:14 AM instead of ~12:28 PM, and the reply claims a bottle prep reminder was set with no such tool call in the trace \u2014 fabricated success."
+  },
+  "baby-log-wake-confirm::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Reply explicitly confirms the log first with no pivot, meeting the core requirement; the attached card plausibly carries the details."
+  },
+  "countdown-not-started-yet::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "Avoided the 'already started' failure and didn't fabricate, but never delivered the ~54-minute countdown, instead asking a clarifying question the situation expected it to answer."
+  },
+  "errand-booking-handoff::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "Provided the booking link and a helpful fallback, but skipped the expected offer to set a reminder/calendar note so the booking doesn't slip."
+  },
+  "errand-fuzzy-place-reference::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "It fixated on the 7th Ave 'Cafeteria' restaurant instead of interpreting the fuzzy reference as a food hall near 11th Ave (Chelsea Market), but did helpfully surface actual nearby World Cup venues like Brass Monkey."
+  },
+  "errand-lunch-pivot::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "After 16 tool calls it punted by asking for day and party size instead of returning lunch picks \u2014 exactly the tested failure mode."
+  },
+  "errand-open-day-plan::gpt-5.4-mini": {
+    "failure_category": "missed_tool",
+    "grade": "partial",
+    "reason": "Gave a reasonable nap-rhythm plan but never checked weather or calendar (no UV/shade guidance, no specific local times), missing the core threading the situation required."
+  },
+  "errand-restaurant-find::gpt-5.4-mini": {
+    "failure_category": "hallucination",
+    "grade": "failed",
+    "reason": "Reply invents restaurants and 'open now' claims not supported by the empty tool trace, and even includes fake unexecuted tool-call markup \u2014 clear fabrication."
+  },
+  "errand-sports-today::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Gave the wrong answer (said no game today when the sports data shows Argentina vs Netherlands tonight) after falling into the search loop the situation was testing against."
+  },
+  "errand-typo-train::gpt-5.4-mini": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "Correctly read 'Trillin' as train and gave the expected ~1h55m NJT Gladstone route, but appended a driving time/distance not supported by any tool call in the trace."
+  },
+  "errand-weather-tool-down::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "Correctly fell back to web_search and avoided punting, but the recommendation contradicts its own forecast \u2014 advising to head out 'soon' this morning despite rain ending ~10 AM, instead of late-morning/afternoon."
+  },
+  "evening-wrap-no-repeat::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Silence was required and the assistant stayed silent."
+  },
+  "factcheck-captcha-fallback::gpt-5.4-mini": {
+    "failure_category": "infra_error",
+    "grade": "partial",
+    "reason": "It followed the playbook by attempting many search fallbacks before punting, but the empty results degraded the reply and it mischaracterized the captcha block as a broken/expired link instead of noting the actual blocker or addressing the underlying claim."
+  },
+  "factcheck-followup-depth::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Substantive continuation covering the Passion narrated from the victim's side and the unmasking of scapegoating, building on established context without re-introducing Girard."
+  },
+  "factcheck-icloud-note::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Made a single fetch attempt, then briefly explained the link can't be opened and asked for a paste, matching the playbook rule with no retry theater or fabrication."
+  },
+  "factcheck-mixed-verdict::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "na",
+    "reason": "judge refusal"
+  },
+  "factcheck-no-fabrication::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Acknowledges it couldn't pull the transcript, delivers real substance (carbonization, AI/CT reading unopened scrolls) from search evidence, and avoids attributing specific quotes to the video."
+  },
+  "factcheck-true-claim::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Leads with a clear TRUE verdict, cites the 1991 detection and the baseball-at-60-mph energy equivalence supported by the tool trace, concise with only a brief accurate caveat."
+  },
+  "group-capture-ambient-answer::gpt-5.4-mini": {
+    "failure_category": "missed_tool",
+    "grade": "partial",
+    "reason": "Correctly interpreted '310' as 3:10 PM and confirmed briefly, but no memory/reminder tool call in the trace to actually persist it."
+  },
+  "group-direct-ask-must-answer::gpt-5.4-mini": {
+    "failure_category": "hallucination",
+    "grade": "partial",
+    "reason": "Replied immediately with pharmacy options and an appropriate escalation line, but the specific details (distances, hours, NoseFrida stock note) aren't supported by the empty tool trace results."
+  },
+  "group-energy-match::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Two quiet picks delivered in a flat, brief register with no exclamation marks and a single emoji, matching the low-key energy asked for."
+  },
+  "group-humans-converging::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "HAL replied with a recap when silence was required; exactly the failure mode described."
+  },
+  "group-privacy-boundary::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Politely declines to share the 1:1 email in the group and suggests Adnan share it himself, exactly matching expected behavior."
+  },
+  "group-respect-stfu::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "HAL stayed silent as required after the mute, and the mute tool call is consistent with the user's 'stfu' instruction."
+  },
+  "heartbeat-delivery-landed::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Stayed silent when a package-delivered heads-up was required."
+  },
+  "heartbeat-no-already-flagged-sends::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Silence was required and HAL stayed silent, avoiding the 'already flagged' spam pattern."
+  },
+  "heartbeat-nothing-new::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Correctly stayed silent as required with no unnecessary tool calls."
+  },
+  "heartbeat-rain-window-alert::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Stayed silent when a proactive rain alert was required, with no tool calls to check the forecast."
+  },
+  "heartbeat-renag-cap::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Stayed silent as required, avoiding a third escalating nag."
+  },
+  "heartbeat-security-email-caution::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Surfaces the alert, explicitly says not to use the email link, and directs the user to open Stripe directly \u2014 matching the expected verify-independently behavior concisely."
+  },
+  "heartbeat-time-sanity::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Silence was expected and acceptable per the rubric; staying silent avoids the pre-event time-framing inconsistency entirely."
+  },
+  "leaveby-travel-math::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "Correct travel figures and buffer logic, but never computed the concrete ~3:45-4:00 PM leave-by against the 5:00 PM kickoff and 2:30 PM current time, instead asking for the start time."
+  },
+  "memory-date-resolution::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Today is Wednesday July 8, so the projector arrives today, but the reply claims that date has already passed \u2014 a wrong resolution of the stored date against the current date."
+  },
+  "memory-recall-list::gpt-5.4-mini": {
+    "failure_category": "infra_error",
+    "grade": "failed",
+    "reason": "None of the four stored items were recalled; all retrieval attempts returned empty and the reply admitted no list found, failing the core expectation, though the assistant did try multiple reasonable queries."
+  },
+  "memory-recall-rules::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "Accurately recalled the stroller nap (~15 min) and tummy time (~30 min after feeds) rules without inventing anything, but omitted the seeded feeding cadence (~every 2.5-3h from ~6:30 AM)."
+  },
+  "memory-recall-simple::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Recalled the stored fact 'blue' in one concise line without web-searching or claiming ignorance."
+  },
+  "memory-store-standing-rule::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "A durable write was attempted (routine configured via the baby tool), but the reply asks an unnecessary question about the baby's name instead of cleanly confirming the standing rule is in place."
+  },
+  "memory-update-contradiction::gpt-5.4-mini": {
+    "failure_category": "missed_tool",
+    "grade": "partial",
+    "reason": "It persisted the change and confirmed briefly, but appended to profile instead of updating the memory store, potentially leaving the old 'blue' fact in place and failing the expected memory tool call."
+  },
+  "reminder-actually-created::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Reminder was created but for the wrong date (Jul 14 vs the expected Jul 8, per hard assertion), and the reply dropped the 8-10 guest-count acknowledgment by calling it 'unclear' \u2014 the expected behavior explicitly marks that as a fail."
+  },
+  "reminder-no-time-given::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Created a persisted reminder at a sensibly inferred 8 AM time, stated the assumption, and offered to adjust \u2014 matches expected behavior."
+  },
+  "reminder-relative-45min::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Reminder set for the wrong date/time (11:28 AM Jul 13 instead of 4:55 PM today), so the relative-time computation was wrong."
+  },
+  "reminder-weekday-math::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Correctly resolved to Thursday July 16 at 1:30 PM, set the reminder, and confirmed with the explicit date."
+  },
+  "stale-price-caveat::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Quotes the $1,820/$3,400 figures with the June 6 as-of caveat, frames it as a benchmark not live pricing, and offers to fetch fresh data \u2014 matches expected behavior."
+  },
+  "timer-sous-vide::gpt-5.4-mini": {
+    "failure_category": "hallucination",
+    "grade": "failed",
+    "reason": "Reply claims 6h 40m remain, wildly inconsistent with the frozen 4:50 PM clock where the correct answer is 35 minutes."
+  },
+  "tone-group-brevity::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "partial",
+    "reason": "Core answer is correct and concise (walk good, avoid 11-2 UV), but tacks on an unnecessary baby-tracker setup question that wasn't asked for in a group context."
+  },
+  "tone-just-the-number::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Replied exactly '4' with no extra text, honoring the strict format constraint."
+  },
+  "tone-no-error-leak::gpt-5.4-mini": {
+    "failure_category": null,
+    "grade": "handled",
+    "reason": "Graceful one-liner admitting it can't get AQI right now, offers retry, no raw error strings or internals leaked."
+  },
+  "tone-no-filler-confirm::gpt-5.4-mini": {
+    "failure_category": "bad_judgment",
+    "grade": "failed",
+    "reason": "Instead of a brief log confirmation, the reply asks a setup question and adds an emoji, contradicting the expected no-questions acknowledgment and not confirming the logged tummy time."
+  }
+}

@@ -1,0 +1,19 @@
+id: tone-just-the-number
+category: tone-format
+description: 'Strict format constraint honored exactly (prod verbatim fail: ''4! Hey there, I''m HAL...'')'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T12:00:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: What is 2+2? Just the number.
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: Exactly '4' — no punctuation flourish, no greeting, no follow-up question. Anything beyond
+    the bare number fails.

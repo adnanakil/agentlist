@@ -1,0 +1,21 @@
+id: countdown-not-started-yet
+category: reminders-time
+description: 'Countdown math: event at 5 PM, now 4:06 PM — ''already started'' claims are the prod failure'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-06-27T16:06:00-04:00'
+internal: false
+seed:
+  memories:
+  - Adnan has World Cup match tickets today, kickoff 5:00 PM at MetLife Stadium.
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: how long until kickoff?
+tool_fixtures: {}
+expect:
+  silent_expected: false
+  reply_should: About 54 minutes (5:00 PM vs 4:06 PM now). Any statement that the match already started,
+    or inconsistent time math, is a fail.

@@ -1,0 +1,24 @@
+id: errand-sports-today
+category: multi-tool-errands
+description: '''Is there a Fifa game today?'' answered directly from the sports tool without a search
+  loop (prod: ''too many steps'')'
+silo: '+15550100001'
+is_group: false
+sender: '+15550100001'
+now: '2026-07-08T12:40:00-04:00'
+internal: false
+seed:
+  profile:
+    name: Adnan
+    home_location: Chelsea, Manhattan, NYC
+    timezone: America/New_York
+message: Is there a Fifa game today?
+tool_fixtures:
+  sports_score: 'World Cup today (Jul 8): Semifinal — Argentina vs Netherlands, 9:00 PM ET, MetLife Stadium.
+    No other matches today.'
+  web_search: 'FIFA World Cup 2026 semifinal schedule: Jul 8 Argentina-Netherlands 9 PM ET MetLife; Jul
+    9 France-Brazil 9 PM ET Dallas.'
+expect:
+  silent_expected: false
+  reply_should: 'Direct answer from the data: yes — Argentina vs Netherlands semifinal, 9 PM ET tonight
+    at MetLife. Concise; an error about steps/loops or a non-answer fails.'

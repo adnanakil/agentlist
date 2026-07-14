@@ -1,0 +1,2267 @@
+[
+ {
+  "scenario_id": "baby-log-correction",
+  "category": "baby-logging",
+  "model": "gpt-5.6-luna",
+  "reply": "Corrected to 9:30 AM \u2705\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783973552&sig=62998ea944f47d6b0d0c1377c99dd924&t=1783972652",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "undo",
+     "kind": "wake",
+     "time": "2026-07-13T08:50:00-04:00",
+     "note": "Correcting the wake time reported earlier.",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "wake",
+     "time": "2026-07-13T09:30:00-04:00",
+     "note": "Corrected wake time.",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 14190,
+   "cached": 27745,
+   "output": 697,
+   "reasoning": 410
+  },
+  "usage_other": {},
+  "latency_ms": 10147,
+  "error": null,
+  "description": "Correcting a mislogged wake time updates the record rather than adding a duplicate or arguing",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "silent_expected": false,
+   "reply_should": "Fixes the record to a 9:30 AM wake (undo+relog or a corrected log \u2014 trace must show baby tool activity) and confirms the corrected time. Must not keep both 8:50 and 9:30 as two wakes, must not argue."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-feed-terse",
+  "category": "baby-logging",
+  "model": "gpt-5.6-luna",
+  "reply": "Logged \u2705 Bottle prep reminder set for 5:00 PM.\n\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783973557&sig=aee23b70229aa6f7c75420f5d5d04582&t=1783972657",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T14:15:00-04:00",
+     "note": "4 oz",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 14070,
+   "cached": 13788,
+   "output": 324,
+   "reasoning": 138
+  },
+  "usage_other": {},
+  "latency_ms": 4380,
+  "error": null,
+  "description": "Terse group feed update must be written via the baby tool and briefly confirmed",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "feed"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Short confirmation that a 2:15 PM feed (4oz) was logged \u2014 1-2 lines, may add the next expected nap/feed window. Must not claim 'logged' without the tool call, must not launch into unrelated content."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-multi-event",
+  "category": "baby-logging",
+  "model": "gpt-5.6-luna",
+  "reply": "What\u2019s the baby\u2019s name? I\u2019ll set up the profile and log the 6:10 AM feed + 7:10 AM nap.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T06:10:00-04:00",
+     "note": "",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 13926,
+   "cached": 13791,
+   "output": 903,
+   "reasoning": 772
+  },
+  "usage_other": {},
+  "latency_ms": 9394,
+  "error": null,
+  "description": "Multi-event terse update from the nanny logs every event and acknowledges (prod: silent absorption 07-04)",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Both events logged via the baby tool (6:10 PM feed AND 7:10 PM bedtime \u2014 'slept' in the evening means down for the night) and a brief acknowledgment to Joyce naming both. Silence, or confirming only one event, is a failure."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "countdown-not-started-yet",
+  "category": "reminders-time",
+  "model": "gpt-5.6-luna",
+  "reply": "Which kickoff do you mean? Send me the teams or event, and I\u2019ll calculate it.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "kickoff",
+     "days_back": 30,
+     "since": "",
+     "until": "",
+     "limit": 10,
+     "group": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 13809,
+   "cached": 13693,
+   "output": 372,
+   "reasoning": 281
+  },
+  "usage_other": {},
+  "latency_ms": 5197,
+  "error": null,
+  "description": "Countdown math: event at 5 PM, now 4:06 PM \u2014 'already started' claims are the prod failure",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "About 54 minutes (5:00 PM vs 4:06 PM now). Any statement that the match already started, or inconsistent time math, is a fail."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "leaveby-travel-math",
+  "category": "reminders-time",
+  "model": "gpt-5.6-luna",
+  "reply": "Which MetLife event/date do you mean, and where are you leaving from? I couldn\u2019t find a matching calendar/email entry, so I don\u2019t want to guess. Also tell me drive or transit, and I\u2019ll give you the exact leave time.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "google_calendar",
+    "args": {
+     "action": "search_events",
+     "time_min": "2026-07-08T00:00:00-04:00",
+     "time_max": "2026-07-31T23:59:59-04:00",
+     "query": "MetLife",
+     "max_results": 10,
+     "summary": "",
+     "start": "",
+     "end": "",
+     "description": "",
+     "location": "",
+     "attendees": []
+    }
+   },
+   {
+    "tool": "google_gmail",
+    "args": {
+     "action": "list_emails",
+     "query": "newer_than:30d (MetLife OR event OR tickets)",
+     "max_results": 10,
+     "message_id": ""
+    }
+   },
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "MetLife",
+     "days_back": 30,
+     "since": "",
+     "until": "",
+     "limit": 10,
+     "group": ""
+    }
+   },
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view",
+     "content": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 4,
+   "input": 14037,
+   "cached": 41384,
+   "output": 1248,
+   "reasoning": 958
+  },
+  "usage_other": {},
+  "latency_ms": 14558,
+  "error": null,
+  "description": "Leave-by calculation composes travel_time fixture with the frozen clock",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Uses the 55-min transit / 40-min drive figures to give a leave-by around 3:45-4:00 PM for a 5:00 PM kickoff (with a buffer), consistent with it being 2:30 PM now."
+  },
+  "tool_fixtures": {
+   "travel_time": "Chelsea, Manhattan \u2192 MetLife Stadium: ~55 min by transit (A to Port Authority + NJT bus), ~40 min driving in current traffic."
+  }
+ },
+ {
+  "scenario_id": "reminder-relative-45min",
+  "category": "reminders-time",
+  "model": "gpt-5.6-luna",
+  "reply": "I\u2019ll remind you at 4:43 PM to flip the steak.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Flip the steak",
+     "due_time": "2026-07-08T16:55:00",
+     "recur": "",
+     "cancel_if": "",
+     "reminder_id": ""
+    }
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Flip the steak",
+     "due_time": "2026-07-13T16:43:00",
+     "recur": "",
+     "cancel_if": "",
+     "reminder_id": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 4,
+   "input": 14061,
+   "cached": 41344,
+   "output": 552,
+   "reasoning": 405
+  },
+  "usage_other": {},
+  "latency_ms": 8617,
+  "error": null,
+  "description": "Relative reminder computes the correct absolute due_time from the frozen clock",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-08T16:55"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder created for 4:55 PM today and confirmed in one short line with the concrete time."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "reminder-weekday-math",
+  "category": "reminders-time",
+  "model": "gpt-5.6-luna",
+  "reply": "Reminder set for Thursday, July 16 at 1:30 PM: Dr. Raetz ultrasound.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Dr. Raetz ultrasound",
+     "due_time": "2026-07-16T13:30:00-04:00",
+     "recur": "",
+     "cancel_if": "",
+     "reminder_id": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 13931,
+   "cached": 27459,
+   "output": 331,
+   "reasoning": 229
+  },
+  "usage_other": {},
+  "latency_ms": 6676,
+  "error": null,
+  "description": "'Thursday at 1:30' from a Monday resolves to the correct date",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-16T13:30"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder for Thursday July 16, 1:30 PM confirmed with the explicit date. Off-by-a-week or wrong-day resolution fails."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "timer-sous-vide",
+  "category": "reminders-time",
+  "model": "gpt-5.6-luna",
+  "reply": "The target is 5:25 PM. My clock says 4:50 PM, so 35 minutes left. (Your message is timestamped Monday, July 13, which conflicts with my current clock.)",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 13795,
+   "cached": 13734,
+   "output": 1021,
+   "reasoning": 956
+  },
+  "usage_other": {},
+  "latency_ms": 9122,
+  "error": null,
+  "description": "Cooking-timer arithmetic against the frozen clock (prod: 'Dude, you said 5:25, it's not 5:25 yet')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "35 minutes (5:25 PM minus 4:50 PM now). Telling the user to pull it now, or any claim inconsistent with 4:50 PM, fails."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-correction",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "Fixed to 9:30 AM \u2705\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783973621&sig=9e4d3b9430ecefbd16274e1b08056c9f&t=1783972721",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "recent"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "wake",
+     "time": "2026-07-13T09:30:00-04:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 6,
+   "cached": 47901,
+   "cache_write": 24522,
+   "output": 634
+  },
+  "usage_other": {},
+  "latency_ms": 10662,
+  "error": null,
+  "description": "Correcting a mislogged wake time updates the record rather than adding a duplicate or arguing",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "silent_expected": false,
+   "reply_should": "Fixes the record to a 9:30 AM wake (undo+relog or a corrected log \u2014 trace must show baby tool activity) and confirms the corrected time. Must not keep both 8:50 and 9:30 as two wakes, must not argue."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-feed-terse",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "Logged \u2705 bottle prep reminder set for 5:00 PM\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783973629&sig=0b23e1e61f87596d8f6227a7cd2e6aff&t=1783972729",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T14:15:00-04:00",
+     "note": "4oz"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23756,
+   "cache_write": 24387,
+   "output": 495
+  },
+  "usage_other": {},
+  "latency_ms": 8097,
+  "error": null,
+  "description": "Terse group feed update must be written via the baby tool and briefly confirmed",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "feed"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Short confirmation that a 2:15 PM feed (4oz) was logged \u2014 1-2 lines, may add the next expected nap/feed window. Must not claim 'logged' without the tool call, must not launch into unrelated content."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-multi-event",
+  "category": "baby-logging",
+  "model": "claude-sonnet-5",
+  "reply": "No baby profile set up yet for this group \u2014 what's the baby's name? Once I have that I'll get today's feed (6:10am) and nap (7:10am) logged.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T06:10:00-04:00"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "nap_start",
+     "time": "2026-07-13T07:10:00-04:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23762,
+   "cache_write": 24405,
+   "output": 564
+  },
+  "usage_other": {},
+  "latency_ms": 7869,
+  "error": null,
+  "description": "Multi-event terse update from the nanny logs every event and acknowledges (prod: silent absorption 07-04)",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Both events logged via the baby tool (6:10 PM feed AND 7:10 PM bedtime \u2014 'slept' in the evening means down for the night) and a brief acknowledgment to Joyce naming both. Silence, or confirming only one event, is a failure."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "countdown-not-started-yet",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "Which game are you asking about? Don't want to guess wrong \u2014 let me know the teams/league (or if it's the World Cup final) and I'll get you the exact countdown.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "sports_score",
+    "args": {
+     "league": "worldcup"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23624,
+   "cache_write": 23906,
+   "output": 483
+  },
+  "usage_other": {},
+  "latency_ms": 8423,
+  "error": null,
+  "description": "Countdown math: event at 5 PM, now 4:06 PM \u2014 'already started' claims are the prod failure",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "About 54 minutes (5:00 PM vs 4:06 PM now). Any statement that the match already started, or inconsistent time math, is a fail."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "leaveby-travel-math",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "I don't have anything on your calendar for MetLife, and I don't have your home address saved yet. Two things I need:\n\n1. What's happening there (game/concert) and what time does it start?\n2. Where are you leaving from?\n\nOnce I know those I can give you a real departure time with live traffic.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "google_calendar",
+    "args": {
+     "action": "search_events",
+     "query": "MetLife"
+    }
+   },
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23628,
+   "cache_write": 23878,
+   "output": 289
+  },
+  "usage_other": {},
+  "latency_ms": 4814,
+  "error": null,
+  "description": "Leave-by calculation composes travel_time fixture with the frozen clock",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Uses the 55-min transit / 40-min drive figures to give a leave-by around 3:45-4:00 PM for a 5:00 PM kickoff (with a buffer), consistent with it being 2:30 PM now."
+  },
+  "tool_fixtures": {
+   "travel_time": "Chelsea, Manhattan \u2192 MetLife Stadium: ~55 min by transit (A to Port Authority + NJT bus), ~40 min driving in current traffic."
+  }
+ },
+ {
+  "scenario_id": "reminder-relative-45min",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "Got it \u2014 I'll remind you to flip the steak at 4:44 PM \ud83e\udd69",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Flip the steak!",
+     "due_time": "2026-07-08T16:55:00-04:00"
+    }
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Flip the steak!",
+     "due_time": "2026-07-13T16:44:00-04:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 4,
+   "input": 8,
+   "cached": 71528,
+   "cache_write": 24410,
+   "output": 539
+  },
+  "usage_other": {},
+  "latency_ms": 10564,
+  "error": null,
+  "description": "Relative reminder computes the correct absolute due_time from the frozen clock",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-08T16:55"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder created for 4:55 PM today and confirmed in one short line with the concrete time."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "reminder-weekday-math",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "Got it \u2014 I'll remind you Thursday, July 16 at 1:30 PM about the Dr. Raetz ultrasound.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Dr. Raetz ultrasound",
+     "due_time": "2026-07-16T13:30:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 4,
+   "cached": 23639,
+   "cache_write": 23911,
+   "output": 187
+  },
+  "usage_other": {},
+  "latency_ms": 5172,
+  "error": null,
+  "description": "'Thursday at 1:30' from a Monday resolves to the correct date",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-16T13:30"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder for Thursday July 16, 1:30 PM confirmed with the explicit date. Off-by-a-week or wrong-day resolution fails."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "timer-sous-vide",
+  "category": "reminders-time",
+  "model": "claude-sonnet-5",
+  "reply": "That sous vide steak was from last Wednesday (7/8), set to finish at 5:25pm that day \u2014 so that batch is long done, not this one. If you've got a new steak going now, tell me when it started/when it's due and I'll track it.",
+  "silent": false,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 2,
+   "cached": 0,
+   "cache_write": 23667,
+   "output": 161
+  },
+  "usage_other": {},
+  "latency_ms": 3175,
+  "error": null,
+  "description": "Cooking-timer arithmetic against the frozen clock (prod: 'Dude, you said 5:25, it's not 5:25 yet')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "35 minutes (5:25 PM minus 4:50 PM now). Telling the user to pull it now, or any claim inconsistent with 4:50 PM, fails."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-correction",
+  "category": "baby-logging",
+  "model": "gpt-5.4",
+  "reply": "Got it \u2014 corrected \u2705\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783973687&sig=c740c609142a8e35555b42eb806683c5&t=1783972787",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "recent",
+     "kind": "",
+     "time": "",
+     "note": "",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "wake",
+     "time": "2026-07-13T09:30:00-04:00",
+     "note": "Correction: woke at 9:30am",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 14743,
+   "cached": 27136,
+   "output": 2128,
+   "reasoning": 1869
+  },
+  "usage_other": {},
+  "latency_ms": 19303,
+  "error": null,
+  "description": "Correcting a mislogged wake time updates the record rather than adding a duplicate or arguing",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "silent_expected": false,
+   "reply_should": "Fixes the record to a 9:30 AM wake (undo+relog or a corrected log \u2014 trace must show baby tool activity) and confirms the corrected time. Must not keep both 8:50 and 9:30 as two wakes, must not argue."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-feed-terse",
+  "category": "baby-logging",
+  "model": "gpt-5.4",
+  "reply": "Logged \u2705 bottle-prep reminder set for 5:00.\n\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783973696&sig=94777797c47d4504b2243e6e6529c728&t=1783972796",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T14:15:00-04:00",
+     "note": "4oz at 2:15 PM in group chat log.",
+     "period": "today",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 8413,
+   "cached": 19456,
+   "output": 799,
+   "reasoning": 601
+  },
+  "usage_other": {},
+  "latency_ms": 7792,
+  "error": null,
+  "description": "Terse group feed update must be written via the baby tool and briefly confirmed",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "feed"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Short confirmation that a 2:15 PM feed (4oz) was logged \u2014 1-2 lines, may add the next expected nap/feed window. Must not claim 'logged' without the tool call, must not launch into unrelated content."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-multi-event",
+  "category": "baby-logging",
+  "model": "gpt-5.4",
+  "reply": "Adnan, assuming 6:10am feed and 7:10am nap \u2014 I just need baby\u2019s name once to set up the tracker. Reply with it and I\u2019ll backfill both and send the next feed/nap forecast. If those were PM instead, say so.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T06:10:00-04:00",
+     "note": "",
+     "period": "today",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 8263,
+   "cached": 19456,
+   "output": 2688,
+   "reasoning": 2525
+  },
+  "usage_other": {},
+  "latency_ms": 24990,
+  "error": null,
+  "description": "Multi-event terse update from the nanny logs every event and acknowledges (prod: silent absorption 07-04)",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Both events logged via the baby tool (6:10 PM feed AND 7:10 PM bedtime \u2014 'slept' in the evening means down for the night) and a brief acknowledgment to Joyce naming both. Silence, or confirming only one event, is a failure."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "countdown-not-started-yet",
+  "category": "reminders-time",
+  "model": "gpt-5.4",
+  "reply": "Which game do you mean? I don\u2019t have a match in this thread to anchor to. Send the teams or the ticket/schedule link and I\u2019ll tell you exactly how long till kickoff.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "kickoff game match today tonight score leave time",
+     "days_back": 30,
+     "since": "",
+     "until": "",
+     "limit": 10,
+     "group": ""
+    }
+   },
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view",
+     "content": ""
+    }
+   },
+   {
+    "tool": "google_auth",
+    "args": {
+     "action": "status"
+    }
+   },
+   {
+    "tool": "sports_score",
+    "args": {
+     "league": "worldcup",
+     "team": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 5,
+   "input": 22597,
+   "cached": 46592,
+   "output": 4915,
+   "reasoning": 4726
+  },
+  "usage_other": {},
+  "latency_ms": 50170,
+  "error": null,
+  "description": "Countdown math: event at 5 PM, now 4:06 PM \u2014 'already started' claims are the prod failure",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "About 54 minutes (5:00 PM vs 4:06 PM now). Any statement that the match already started, or inconsistent time math, is a fail."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "leaveby-travel-math",
+  "category": "reminders-time",
+  "model": "gpt-5.4",
+  "reply": "Assuming it\u2019s for tonight and you\u2019re leaving from Chelsea: MetLife is about 40 min by car or 55 min by transit. I\u2019d leave 1 hr 45 min before start if driving, or 2 hrs before if taking transit. So for a 7pm start: 5:15 drive / 5:00 transit. Big game or concert? Add another 20\u201330 min for parking/security.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view",
+     "content": ""
+    }
+   },
+   {
+    "tool": "google_calendar",
+    "args": {
+     "action": "search_events",
+     "time_min": "2026-07-13T00:00:00-04:00",
+     "time_max": "2026-07-20T23:59:59-04:00",
+     "query": "MetLife",
+     "max_results": 10,
+     "summary": "",
+     "start": "",
+     "end": "",
+     "description": "",
+     "location": "",
+     "attendees": []
+    }
+   },
+   {
+    "tool": "google_gmail",
+    "args": {
+     "action": "list_emails",
+     "query": "(MetLife OR \"MetLife Stadium\" OR Ticketmaster OR StubHub) newer_than:30d",
+     "max_results": 10,
+     "message_id": ""
+    }
+   },
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "MetLife",
+     "days_back": 60,
+     "since": "",
+     "until": "",
+     "limit": 10,
+     "group": ""
+    }
+   },
+   {
+    "tool": "contacts",
+    "args": {
+     "action": "get",
+     "contact_name": "",
+     "contact_phone": "",
+     "name": "",
+     "timezone": "",
+     "home_location": "",
+     "work_location": "",
+     "onboarded": false,
+     "google_connected": false,
+     "google_offered": false,
+     "email": "",
+     "notes": ""
+    }
+   },
+   {
+    "tool": "web_search",
+    "args": {
+     "query": "MetLife Stadium events July 13 2026"
+    }
+   },
+   {
+    "tool": "travel_time",
+    "args": {
+     "origin": "Chelsea, Manhattan, NYC",
+     "destination": "MetLife Stadium, East Rutherford, NJ",
+     "mode": "drive",
+     "departure_time": "",
+     "arrival_time": ""
+    }
+   },
+   {
+    "tool": "travel_time",
+    "args": {
+     "origin": "Chelsea, Manhattan, NYC",
+     "destination": "MetLife Stadium, East Rutherford, NJ",
+     "mode": "transit",
+     "departure_time": "",
+     "arrival_time": ""
+    }
+   },
+   {
+    "tool": "google_auth",
+    "args": {
+     "action": "status"
+    }
+   },
+   {
+    "tool": "browser",
+    "args": {
+     "url": "https://www.metlifestadium.com/events/",
+     "action": "extract",
+     "selector": "",
+     "text": "",
+     "javascript": ""
+    }
+   },
+   {
+    "tool": "web_fetch",
+    "args": {
+     "url": "https://www.metlifestadium.com/events/"
+    }
+   },
+   {
+    "tool": "places",
+    "args": {
+     "query": "MetLife Stadium East Rutherford NJ",
+     "open_now": false,
+     "max_results": 1,
+     "photos": 0
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 9,
+   "input": 10892,
+   "cached": 118272,
+   "output": 10937,
+   "reasoning": 10310
+  },
+  "usage_other": {},
+  "latency_ms": 106316,
+  "error": null,
+  "description": "Leave-by calculation composes travel_time fixture with the frozen clock",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Uses the 55-min transit / 40-min drive figures to give a leave-by around 3:45-4:00 PM for a 5:00 PM kickoff (with a buffer), consistent with it being 2:30 PM now."
+  },
+  "tool_fixtures": {
+   "travel_time": "Chelsea, Manhattan \u2192 MetLife Stadium: ~55 min by transit (A to Port Authority + NJT bus), ~40 min driving in current traffic."
+  }
+ },
+ {
+  "scenario_id": "reminder-relative-45min",
+  "category": "reminders-time",
+  "model": "gpt-5.4",
+  "reply": "Got you \u2014 I\u2019ll remind you at 4:48 PM to flip the steak \ud83e\udd69",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Flip the steak",
+     "due_time": "2026-07-08T16:55:00-04:00",
+     "recur": "",
+     "cancel_if": "",
+     "reminder_id": ""
+    }
+   },
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Flip the steak",
+     "due_time": "2026-07-13T16:48:00-04:00",
+     "recur": "",
+     "cancel_if": "",
+     "reminder_id": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 5,
+   "input": 9013,
+   "cached": 60416,
+   "output": 1889,
+   "reasoning": 1711
+  },
+  "usage_other": {},
+  "latency_ms": 19415,
+  "error": null,
+  "description": "Relative reminder computes the correct absolute due_time from the frozen clock",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-08T16:55"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder created for 4:55 PM today and confirmed in one short line with the concrete time."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "reminder-weekday-math",
+  "category": "reminders-time",
+  "model": "gpt-5.4",
+  "reply": "Done \u2014 I\u2019ll remind you Thursday at 1:30 PM about the Dr. Raetz ultrasound.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Dr. Raetz ultrasound",
+     "due_time": "2026-07-16T13:30:00",
+     "recur": "",
+     "cancel_if": "",
+     "reminder_id": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 8615,
+   "cached": 32768,
+   "output": 965,
+   "reasoning": 865
+  },
+  "usage_other": {},
+  "latency_ms": 10919,
+  "error": null,
+  "description": "'Thursday at 1:30' from a Monday resolves to the correct date",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-16T13:30"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder for Thursday July 16, 1:30 PM confirmed with the explicit date. Off-by-a-week or wrong-day resolution fails."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "timer-sous-vide",
+  "category": "reminders-time",
+  "model": "gpt-5.4",
+  "reply": "If you\u2019re still aiming for 5:25, you\u2019ve got 35 min left. Home stretch \ud83d\ude0e",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 8073,
+   "cached": 19456,
+   "output": 4607,
+   "reasoning": 4562
+  },
+  "usage_other": {},
+  "latency_ms": 37506,
+  "error": null,
+  "description": "Cooking-timer arithmetic against the frozen clock (prod: 'Dude, you said 5:25, it's not 5:25 yet')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "35 minutes (5:25 PM minus 4:50 PM now). Telling the user to pull it now, or any claim inconsistent with 4:50 PM, fails."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-correction",
+  "category": "baby-logging",
+  "model": "gpt-5.4-mini",
+  "reply": "Fixed it \u2705\n\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783973981&sig=3f795ad43bdd21c953fafaa3f4777c97&t=1783973081",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "undo",
+     "kind": "note",
+     "time": "",
+     "note": "",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "wake",
+     "time": "2026-07-13T09:30:00-04:00",
+     "note": "",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 4,
+   "input": 15408,
+   "cached": 40448,
+   "output": 6294,
+   "reasoning": 6028
+  },
+  "usage_other": {},
+  "latency_ms": 42453,
+  "error": null,
+  "description": "Correcting a mislogged wake time updates the record rather than adding a duplicate or arguing",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "silent_expected": false,
+   "reply_should": "Fixes the record to a 9:30 AM wake (undo+relog or a corrected log \u2014 trace must show baby tool activity) and confirms the corrected time. Must not keep both 8:50 and 9:30 as two wakes, must not argue."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-feed-terse",
+  "category": "baby-logging",
+  "model": "gpt-5.4-mini",
+  "reply": "Logged \u2705 bottle prep reminder set.\n\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMTIyMjMzMzQ0NA&e=1783974005&sig=0c7255719f0fb19c5117ac2f4429e1f8&t=1783973105",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T14:15:00-04:00",
+     "note": "4oz at 2:15 PM.",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": false,
+     "auto_wind_down": false,
+     "auto_feed_prep": false,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 1754,
+   "cached": 26112,
+   "output": 2635,
+   "reasoning": 2444
+  },
+  "usage_other": {},
+  "latency_ms": 18388,
+  "error": null,
+  "description": "Terse group feed update must be written via the baby tool and briefly confirmed",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "feed"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Short confirmation that a 2:15 PM feed (4oz) was logged \u2014 1-2 lines, may add the next expected nap/feed window. Must not claim 'logged' without the tool call, must not launch into unrelated content."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-multi-event",
+  "category": "baby-logging",
+  "model": "gpt-5.4-mini",
+  "reply": "Assuming 6:10am feed and 7:10am nap \u2014 what\u2019s the baby\u2019s name? I\u2019ll set them up and log both.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T06:10:00-04:00",
+     "note": "ate at 610 AM reported in chat at 4:05 PM local time on Mon Jul 13, 2026.",
+     "period": "",
+     "baby_name": "",
+     "baby_birthdate": "",
+     "nap_cap_minutes": 0,
+     "auto_reminders": true,
+     "auto_wind_down": true,
+     "auto_feed_prep": true,
+     "add_routine": {
+      "after": "",
+      "offset_min": 0,
+      "text": ""
+     }
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 15535,
+   "cached": 26112,
+   "output": 15798,
+   "reasoning": 15622
+  },
+  "usage_other": {},
+  "latency_ms": 105023,
+  "error": null,
+  "description": "Multi-event terse update from the nanny logs every event and acknowledges (prod: silent absorption 07-04)",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Both events logged via the baby tool (6:10 PM feed AND 7:10 PM bedtime \u2014 'slept' in the evening means down for the night) and a brief acknowledgment to Joyce naming both. Silence, or confirming only one event, is a failure."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "countdown-not-started-yet",
+  "category": "reminders-time",
+  "model": "gpt-5.4-mini",
+  "reply": "Which game? I need the matchup to tell you how long until kickoff.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "kickoff",
+     "days_back": 30,
+     "since": "",
+     "until": "",
+     "limit": 10,
+     "group": ""
+    }
+   },
+   {
+    "tool": "google_auth",
+    "args": {
+     "action": "status"
+    }
+   },
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view",
+     "content": ""
+    }
+   },
+   {
+    "tool": "sports_score",
+    "args": {
+     "league": "worldcup",
+     "team": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 6,
+   "input": 3048,
+   "cached": 79872,
+   "output": 7537,
+   "reasoning": 7385
+  },
+  "usage_other": {},
+  "latency_ms": 60380,
+  "error": null,
+  "description": "Countdown math: event at 5 PM, now 4:06 PM \u2014 'already started' claims are the prod failure",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "About 54 minutes (5:00 PM vs 4:06 PM now). Any statement that the match already started, or inconsistent time math, is a fail."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "leaveby-travel-math",
+  "category": "reminders-time",
+  "model": "gpt-5.4-mini",
+  "reply": "From Chelsea, MetLife Stadium is about 40 min by car right now or ~55 min by transit. If you\u2019ve got a kickoff/start time, send it and I\u2019ll give you the exact leave-by.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "profile",
+    "args": {
+     "action": "view",
+     "content": ""
+    }
+   },
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "google_auth",
+    "args": {
+     "action": "status"
+    }
+   },
+   {
+    "tool": "recall_history",
+    "args": {
+     "query": "MetLife",
+     "days_back": 30,
+     "since": "",
+     "until": "",
+     "limit": 10,
+     "group": ""
+    }
+   },
+   {
+    "tool": "contacts",
+    "args": {
+     "action": "get",
+     "contact_name": "",
+     "contact_phone": "",
+     "name": "",
+     "timezone": "",
+     "home_location": "",
+     "work_location": "",
+     "onboarded": false,
+     "google_connected": false,
+     "google_offered": false,
+     "email": "",
+     "notes": ""
+    }
+   },
+   {
+    "tool": "travel_time",
+    "args": {
+     "origin": "Chelsea, Manhattan, NYC",
+     "destination": "MetLife Stadium, East Rutherford, NJ",
+     "mode": "drive",
+     "departure_time": "",
+     "arrival_time": ""
+    }
+   },
+   {
+    "tool": "travel_time",
+    "args": {
+     "origin": "Chelsea, Manhattan, NYC",
+     "destination": "MetLife Stadium, East Rutherford, NJ",
+     "mode": "transit",
+     "departure_time": "",
+     "arrival_time": ""
+    }
+   },
+   {
+    "tool": "places",
+    "args": {
+     "query": "MetLife Stadium East Rutherford NJ",
+     "open_now": false,
+     "max_results": 1,
+     "photos": 0
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 7,
+   "input": 3199,
+   "cached": 94720,
+   "output": 15205,
+   "reasoning": 14837
+  },
+  "usage_other": {},
+  "latency_ms": 99232,
+  "error": null,
+  "description": "Leave-by calculation composes travel_time fixture with the frozen clock",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Uses the 55-min transit / 40-min drive figures to give a leave-by around 3:45-4:00 PM for a 5:00 PM kickoff (with a buffer), consistent with it being 2:30 PM now."
+  },
+  "tool_fixtures": {
+   "travel_time": "Chelsea, Manhattan \u2192 MetLife Stadium: ~55 min by transit (A to Port Authority + NJT bus), ~40 min driving in current traffic."
+  }
+ },
+ {
+  "scenario_id": "reminder-relative-45min",
+  "category": "reminders-time",
+  "model": "gpt-5.4-mini",
+  "reply": "Done \u2014 I set it for Mon Jul 13 at 4:55 PM.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "flip the steak",
+     "due_time": "2026-07-08T16:55:00-04:00",
+     "recur": "",
+     "cancel_if": "",
+     "reminder_id": ""
+    }
+   },
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "flip the steak",
+     "due_time": "2026-07-13T16:55:00-04:00",
+     "recur": "",
+     "cancel_if": "",
+     "reminder_id": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 5,
+   "input": 2357,
+   "cached": 67072,
+   "output": 3428,
+   "reasoning": 3255
+  },
+  "usage_other": {},
+  "latency_ms": 26251,
+  "error": null,
+  "description": "Relative reminder computes the correct absolute due_time from the frozen clock",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-08T16:55"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder created for 4:55 PM today and confirmed in one short line with the concrete time."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "reminder-weekday-math",
+  "category": "reminders-time",
+  "model": "gpt-5.4-mini",
+  "reply": "Done \u2014 I\u2019ll remind you Thu 7/16 at 1:30 PM.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Dr. Raetz ultrasound",
+     "due_time": "2026-07-16T13:30:00-04:00",
+     "recur": "",
+     "cancel_if": "",
+     "reminder_id": ""
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 1963,
+   "cached": 39424,
+   "output": 1349,
+   "reasoning": 1250
+  },
+  "usage_other": {},
+  "latency_ms": 12479,
+  "error": null,
+  "description": "'Thursday at 1:30' from a Monday resolves to the correct date",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-16T13:30"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder for Thursday July 16, 1:30 PM confirmed with the explicit date. Off-by-a-week or wrong-day resolution fails."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "timer-sous-vide",
+  "category": "reminders-time",
+  "model": "gpt-5.4-mini",
+  "reply": "About 35 min left \u2014 pull it at 5:25.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 1417,
+   "cached": 26112,
+   "output": 1604,
+   "reasoning": 1568
+  },
+  "usage_other": {},
+  "latency_ms": 11526,
+  "error": null,
+  "description": "Cooking-timer arithmetic against the frozen clock (prod: 'Dude, you said 5:25, it's not 5:25 yet')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "35 minutes (5:25 PM minus 4:50 PM now). Telling the user to pull it now, or any claim inconsistent with 4:50 PM, fails."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-correction",
+  "category": "baby-logging",
+  "model": "claude-haiku-4-5",
+  "reply": "Got it \u2014 corrected to 9:30 AM \u2705\n\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMjIyMzMzMzQ0NA&e=1783974327&sig=a0b298d7bbd3189e6bbfd5f47ceefffa&t=1783973427",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "undo"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "wake",
+     "time": "2026-07-13T09:30:00-04:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 10,
+   "cached": 18299,
+   "cache_write": 18667,
+   "output": 239
+  },
+  "usage_other": {},
+  "latency_ms": 3407,
+  "error": null,
+  "description": "Correcting a mislogged wake time updates the record rather than adding a duplicate or arguing",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "silent_expected": false,
+   "reply_should": "Fixes the record to a 9:30 AM wake (undo+relog or a corrected log \u2014 trace must show baby tool activity) and confirms the corrected time. Must not keep both 8:50 and 9:30 as two wakes, must not argue."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-feed-terse",
+  "category": "baby-logging",
+  "model": "claude-haiku-4-5",
+  "reply": "Got it \u2705\n\nhttps://hal-orchestrator-production.up.railway.app/card.png?s=Y2hhdDU1NTAwMDExMjIyMjMzMzQ0NA&e=1783974330&sig=0d50d0e1d00ef370470f82837cb4fa25&t=1783973430\n\nBottle prep reminder set for 5:00 PM.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T14:15:00-04:00",
+     "note": "4oz"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 8,
+   "cached": 18276,
+   "cache_write": 18603,
+   "output": 225
+  },
+  "usage_other": {},
+  "latency_ms": 3587,
+  "error": null,
+  "description": "Terse group feed update must be written via the baby tool and briefly confirmed",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log",
+     "kind": "feed"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Short confirmation that a 2:15 PM feed (4oz) was logged \u2014 1-2 lines, may add the next expected nap/feed window. Must not claim 'logged' without the tool call, must not launch into unrelated content."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "baby-log-multi-event",
+  "category": "baby-logging",
+  "model": "claude-haiku-4-5",
+  "reply": "What's your baby's name? Once I have that, I can start tracking his feeds and naps.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "feed",
+     "time": "2026-07-13T18:10:00-04:00"
+    }
+   },
+   {
+    "tool": "baby",
+    "args": {
+     "action": "log",
+     "kind": "nap_start",
+     "time": "2026-07-13T19:10:00-04:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 10,
+   "cached": 18281,
+   "cache_write": 18579,
+   "output": 212
+  },
+  "usage_other": {},
+  "latency_ms": 3181,
+  "error": null,
+  "description": "Multi-event terse update from the nanny logs every event and acknowledges (prod: silent absorption 07-04)",
+  "expect": {
+   "tools_called": [
+    "baby"
+   ],
+   "args_match": {
+    "baby": {
+     "action": "log"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Both events logged via the baby tool (6:10 PM feed AND 7:10 PM bedtime \u2014 'slept' in the evening means down for the night) and a brief acknowledgment to Joyce naming both. Silence, or confirming only one event, is a failure."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "countdown-not-started-yet",
+  "category": "reminders-time",
+  "model": "claude-haiku-4-5",
+  "reply": "I need to know which game you're asking about. What sport/league and team?",
+  "silent": false,
+  "tool_trace": [],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 1,
+   "input": 3,
+   "cached": 0,
+   "cache_write": 18179,
+   "output": 21
+  },
+  "usage_other": {},
+  "latency_ms": 1381,
+  "error": null,
+  "description": "Countdown math: event at 5 PM, now 4:06 PM \u2014 'already started' claims are the prod failure",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "About 54 minutes (5:00 PM vs 4:06 PM now). Any statement that the match already started, or inconsistent time math, is a fail."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "leaveby-travel-math",
+  "category": "reminders-time",
+  "model": "claude-haiku-4-5",
+  "reply": "I don't have access to your calendar right now. Can you tell me:\n- What day/time is your event at MetLife?\n- Is it a game, concert, or something else?\n\nOnce I have the event time, I can check traffic and tell you when to leave from your location.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "google_calendar",
+    "args": {
+     "action": "list_events"
+    }
+   },
+   {
+    "tool": "current_time",
+    "args": {}
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 3,
+   "input": 14,
+   "cached": 36463,
+   "cache_write": 18382,
+   "output": 197
+  },
+  "usage_other": {},
+  "latency_ms": 4914,
+  "error": null,
+  "description": "Leave-by calculation composes travel_time fixture with the frozen clock",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "Uses the 55-min transit / 40-min drive figures to give a leave-by around 3:45-4:00 PM for a 5:00 PM kickoff (with a buffer), consistent with it being 2:30 PM now."
+  },
+  "tool_fixtures": {
+   "travel_time": "Chelsea, Manhattan \u2192 MetLife Stadium: ~55 min by transit (A to Port Authority + NJT bus), ~40 min driving in current traffic."
+  }
+ },
+ {
+  "scenario_id": "reminder-relative-45min",
+  "category": "reminders-time",
+  "model": "claude-haiku-4-5",
+  "reply": "Got it \u2014 reminder set for 4:55 PM. \ud83d\udd25",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Flip the steak",
+     "due_time": "2026-07-08T16:55:00"
+    }
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Flip the steak",
+     "due_time": "2026-07-13T16:55:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 4,
+   "input": 18,
+   "cached": 54954,
+   "cache_write": 18745,
+   "output": 331
+  },
+  "usage_other": {},
+  "latency_ms": 5696,
+  "error": null,
+  "description": "Relative reminder computes the correct absolute due_time from the frozen clock",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-08T16:55"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder created for 4:55 PM today and confirmed in one short line with the concrete time."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "reminder-weekday-math",
+  "category": "reminders-time",
+  "model": "claude-haiku-4-5",
+  "reply": "Done \u2014 you'll get a reminder Thursday at 1:30 PM about the Dr. Raetz ultrasound.",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   },
+   {
+    "tool": "set_reminder",
+    "args": {
+     "action": "create",
+     "text": "Dr. Raetz ultrasound",
+     "due_time": "2026-07-17T13:30:00-04:00"
+    }
+   }
+  ],
+  "assertions": {
+   "passed": false,
+   "failures": [
+    "args_match: no 'set_reminder' call matched {'action': 'create', 'due_time': '2026-07-16T13:30'} (calls: [{'action': 'create', 'text': 'Dr. Raetz ultrasound', 'due_time': '2026-07-17T13:30:00-04:00'}])"
+   ]
+  },
+  "usage": {
+   "calls": 3,
+   "input": 13,
+   "cached": 36464,
+   "cache_write": 18517,
+   "output": 196
+  },
+  "usage_other": {},
+  "latency_ms": 4044,
+  "error": null,
+  "description": "'Thursday at 1:30' from a Monday resolves to the correct date",
+  "expect": {
+   "tools_called": [
+    "set_reminder"
+   ],
+   "args_match": {
+    "set_reminder": {
+     "action": "create",
+     "due_time": "2026-07-16T13:30"
+    }
+   },
+   "silent_expected": false,
+   "reply_should": "Reminder for Thursday July 16, 1:30 PM confirmed with the explicit date. Off-by-a-week or wrong-day resolution fails."
+  },
+  "tool_fixtures": {}
+ },
+ {
+  "scenario_id": "timer-sous-vide",
+  "category": "reminders-time",
+  "model": "claude-haiku-4-5",
+  "reply": "Wait \u2014 you said the steak comes out at 5:25, but it's only 4:10 PM. That's 1 hour 15 minutes still to go.\n\n(Also heads up: today's actually Wednesday Jul 8, not Monday Jul 13 \u2014 did you mean to check on a steak you're planning for next week? Or is it today at 5:25?)",
+  "silent": false,
+  "tool_trace": [
+   {
+    "tool": "current_time",
+    "args": {}
+   }
+  ],
+  "assertions": {
+   "passed": true,
+   "failures": []
+  },
+  "usage": {
+   "calls": 2,
+   "input": 8,
+   "cached": 18220,
+   "cache_write": 18300,
+   "output": 129
+  },
+  "usage_other": {},
+  "latency_ms": 3052,
+  "error": null,
+  "description": "Cooking-timer arithmetic against the frozen clock (prod: 'Dude, you said 5:25, it's not 5:25 yet')",
+  "expect": {
+   "silent_expected": false,
+   "reply_should": "35 minutes (5:25 PM minus 4:50 PM now). Telling the user to pull it now, or any claim inconsistent with 4:50 PM, fails."
+  },
+  "tool_fixtures": {}
+ }
+]
