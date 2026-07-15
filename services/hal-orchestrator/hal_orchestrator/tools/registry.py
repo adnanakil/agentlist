@@ -38,6 +38,9 @@ class ToolContext:
     side_messages: list[dict] = field(default_factory=list)
     images: list[dict] = field(default_factory=list)  # [{mime_type, data}]
     result_images: list[dict] = field(default_factory=list)  # [{mime_type, data, ext}]
+    # Ephemeral, bridge-supplied Find My location for the current speaker. It is
+    # available only during this turn and is redacted before history persists.
+    current_location: dict | None = None
     user_text: str = ""  # actual inbound text; never tool/web content
     message_id: str | None = None
     internal: bool = False

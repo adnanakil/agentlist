@@ -12,9 +12,16 @@ GOOGLE_MAPS_API_KEY with the Places API (New) enabled.
 from __future__ import annotations
 
 import base64
+import re
 
 import structlog
 
+from hal_orchestrator.services.live_location import (
+    LIVE_LOCATION_PHRASE_RE as _LIVE_LOCATION_PHRASE_RE,
+)
+from hal_orchestrator.services.live_location import (
+    LIVE_LOCATION_REQUEST_RE as _LIVE_LOCATION_REQUEST_RE,
+)
 from hal_orchestrator.tools.registry import ToolContext
 
 log = structlog.get_logger()
@@ -121,10 +128,41 @@ def format_place(place: dict, index: int) -> str:
     return "\n".join(lines)
 
 
-def format_places(places: list[dict], query: str) -> str:
+def format_places(places: list[dict], query: str, *, hide_query: bool = False) -> str:
     if not places:
+        if hide_query:
+            return "No matching places found near your shared location."
         return f"No places found for {query!r}."
     return "\n".join(format_place(p, i) for i, p in enumerate(places, 1))
+
+
+def _live_location_search(ctx: ToolContext) -> tuple[bool, str | None]:
+    """Return whether this turn requires live location and its safe label."""
+    if not _LIVE_LOCATION_REQUEST_RE.search(ctx.user_text or ""):
+        return False, None
+    location = ctx.current_location or {}
+    label = str(location.get("label") or "").strip()
+    return True, label or None
+
+
+def _query_near_live_location(user_text: str, fallback: str, label: str) -> str:
+    """Build a query from the user's words, overriding any model-guessed area.
+
+    Only the clause that asked for the nearby search is used — building from
+    the whole message would garble the Places query on multi-sentence turns
+    ("I'm hungry. What's near me? Meeting Sarah at 8" must not search for
+    Sarah).
+    """
+    clauses = re.split(r"[.?!;\n]+", user_text or "")
+    clause = next(
+        (c for c in clauses if _LIVE_LOCATION_REQUEST_RE.search(c)),
+        user_text or "",
+    )
+    intent = _LIVE_LOCATION_PHRASE_RE.sub(" ", clause)
+    intent = " ".join(intent.split()).strip(" ?!.,:;-")
+    if not intent:
+        intent = fallback
+    return f"{intent} near {label}"
 
 
 async def tool_places(args: dict, ctx: ToolContext) -> str:
@@ -135,6 +173,16 @@ async def tool_places(args: dict, ctx: ToolContext) -> str:
     query = (args.get("query") or "").strip()
     if not query:
         return "Error: query is required (e.g. 'coffee shops near Fort Greene Brooklyn')."
+
+    uses_live_location, live_label = _live_location_search(ctx)
+    if uses_live_location and not live_label:
+        return (
+            "Nearby search was not run because live location is unavailable for this "
+            "turn. Do not guess or use a saved neighborhood; ask the user for their "
+            "current location or starting point."
+        )
+    if live_label:
+        query = _query_near_live_location(ctx.user_text, query, live_label)
 
     try:
         max_results = int(args.get("max_results") or 5)
@@ -175,7 +223,9 @@ async def tool_places(args: dict, ctx: ToolContext) -> str:
             log.warning("places.api_error", status=resp.status_code, error=msg)
             return f"Places search failed (HTTP {resp.status_code}): {msg}"
         places = data.get("places") or []
-        result = format_places(places[:max_results], query)
+        result = format_places(
+            places[:max_results], query, hide_query=uses_live_location
+        )
         if photos and places:
             attached: list[str] = []
             for place in places[:photos]:
@@ -191,5 +241,6 @@ async def tool_places(args: dict, ctx: ToolContext) -> str:
                 )
         return result
     except Exception as exc:
-        log.exception("places.error", query=query)
+        # Queries can contain ephemeral Find My labels, so never write them to logs.
+        log.exception("places.error", used_live_location=uses_live_location)
         return f"Places search failed: {exc}"

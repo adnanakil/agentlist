@@ -36,12 +36,28 @@ from hal_orchestrator.services.conversation import (
 )
 from hal_orchestrator.services.gemini import call_gemini
 from hal_orchestrator.services.identity import is_group_id, normalize_handle
+from hal_orchestrator.services.live_location import (
+    requires_live_location as _requires_live_location,
+)
 from hal_orchestrator.services.profiles import get_profile, update_profile
 from hal_orchestrator.state import get_http_client, get_settings
 from hal_orchestrator.tools.registry import ToolContext, execute_tool
 from hal_orchestrator.tools.specs import all_tool_specs, model_tools
 
 log = structlog.get_logger()
+
+
+def _live_location_guard_applies(
+    *, internal: bool, is_group: bool, text: str, has_location: bool
+) -> bool:
+    """Pre-model hard stop: a location-anchored search with no validated live
+    location must be answered with a question, never a guess. In groups it
+    only applies when HAL is explicitly addressed — otherwise members chatting
+    about "anything nearby?" among themselves would summon an uninvited canned
+    reply that bypasses the group mute and tact gates further down."""
+    if internal or has_location or not _requires_live_location(text):
+        return False
+    return not is_group or bool(_HAL_MENTION_RX.search(text or ""))
 
 
 def _is_quiet_sentinel(text: str) -> bool:
@@ -811,6 +827,16 @@ class ImageData(BaseModel):
     data: str = Field(min_length=1, max_length=8_000_000)  # base64
 
 
+class CurrentLocationData(BaseModel):
+    """Ephemeral location asserted by the authenticated Mac bridge."""
+
+    label: str = Field(min_length=1, max_length=300)
+    updated: str | None = Field(default=None, max_length=80)
+    observed_at: datetime
+    source: str = Field(default="find_my", pattern=r"^find_my$")
+    approximate: bool | None = None
+
+
 class MessageRequest(BaseModel):
     message_id: str | None = Field(default=None, min_length=1, max_length=255)
     phone: str = Field(min_length=1, max_length=255)
@@ -820,6 +846,7 @@ class MessageRequest(BaseModel):
     group_name: str | None = Field(default=None, max_length=200)
     chat_id: str | None = Field(default=None, max_length=255)
     images: list[ImageData] = Field(default_factory=list, max_length=4)
+    current_location: CurrentLocationData | None = None
     # Internal turn (heartbeat/daemon): the user did not send this. A silent
     # outcome persists NOTHING (no history, no archive, no turn capture); an
     # alert persists a compact stub instead of the synthetic prompt.
@@ -853,6 +880,71 @@ class MessageResponse(BaseModel):
 class OutboxAckRequest(BaseModel):
     message_ids: list[str] = Field(min_length=1, max_length=200)
     delivered: bool = True
+
+
+def _stable_message_payload(body: MessageRequest) -> dict:
+    """Exclude an ephemeral location refresh from inbound idempotency."""
+    return body.model_dump(mode="json", exclude={"current_location"})
+
+
+def _sanitize_persisted_history(
+    history: list[dict], live_location_label: str | None = None
+) -> list[dict]:
+    """Remove binary payloads, provider internals, and raw live locations."""
+    # The model often copies the Find My label into its own tool args (e.g. a
+    # places query). Those functionCall parts persist verbatim, so the label
+    # itself must be scrubbed from them — redacting only the current_location
+    # functionResponse below would leave the address in history via the args.
+    # Visible text turns are governed by the prompt rule ("don't repeat the
+    # precise address unless asked") and stay untouched.
+    label_re = (
+        re.compile(re.escape(live_location_label), re.IGNORECASE)
+        if live_location_label and len(live_location_label) >= 4
+        else None
+    )
+
+    def scrub_call(part: dict) -> dict:
+        if label_re is None or "functionCall" not in part:
+            return part
+
+        def scrub(node):
+            if isinstance(node, str):
+                return label_re.sub("[live location expired]", node)
+            if isinstance(node, list):
+                return [scrub(item) for item in node]
+            if isinstance(node, dict):
+                return {key: scrub(value) for key, value in node.items()}
+            return node
+
+        return scrub(part)
+
+    clean_history = []
+    for entry in history:
+        new_parts = []
+        for part in entry.get("parts", []):
+            response = part.get("functionResponse") or {}
+            if response.get("name") == "current_location":
+                new_parts.append(
+                    {
+                        "functionResponse": {
+                            "name": "current_location",
+                            "response": {
+                                "content": "[live location used for this turn; expired]"
+                            },
+                        }
+                    }
+                )
+            elif "inlineData" in part:
+                new_parts.append({"text": "[image]"})
+            elif "_claude_block" in part:
+                stripped = {key: value for key, value in part.items() if key != "_claude_block"}
+                if stripped:
+                    new_parts.append(scrub_call(stripped))
+            else:
+                new_parts.append(scrub_call(part))
+        if new_parts:
+            clean_history.append({"role": entry["role"], "parts": new_parts})
+    return clean_history
 
 
 # --------------------------------------------------------------------------- #
@@ -964,7 +1056,7 @@ def build_message_router() -> APIRouter:
             session,
             message_id=body.message_id,
             silo=silo,
-            payload=body.model_dump(mode="json"),
+            payload=_stable_message_payload(body),
         )
         if duplicate is not None:
             return MessageResponse.model_validate(duplicate)
@@ -976,6 +1068,25 @@ def build_message_router() -> APIRouter:
                 session, body.message_id, response.model_dump(mode="json")
             )
             return response
+
+        # A live-location request must never fall through to profile/history or
+        # model guesses. The Mac bridge attaches a validated Find My label when
+        # it has one; otherwise ask for an origin before running any search.
+        if _live_location_guard_applies(
+            internal=body.internal,
+            is_group=is_group,
+            text=user_text,
+            has_location=body.current_location is not None,
+        ):
+            log.info("message.live_location_required", silo=silo)
+            return await finish(
+                MessageResponse(
+                    reply=(
+                        "I can’t get a usable live location from Find My right now. "
+                        "What neighborhood, address, or landmark should I search around?"
+                    )
+                )
+            )
 
         # Group-context catalog: record that this member spoke in this group —
         # the only provable membership signal we have (rosters can't be
@@ -1361,6 +1472,11 @@ def build_message_router() -> APIRouter:
             sender_phone=sender_phone,
             is_group=is_group,
             images=[{"mime_type": img.mime_type, "data": img.data} for img in body.images],
+            current_location=(
+                body.current_location.model_dump(mode="python")
+                if body.current_location
+                else None
+            ),
             user_text=user_text,
             message_id=body.message_id,
             internal=body.internal,
@@ -1756,20 +1872,12 @@ def build_message_router() -> APIRouter:
         # bloat the DB and carry thinking signatures that must not be replayed in
         # a later request's context. A pure-thinking part becomes empty and is
         # dropped; a functionCall part keeps its functionCall (re-loaded text-only).
-        clean_history = []
-        for entry in history:
-            new_parts = []
-            for p in entry.get("parts", []):
-                if "inlineData" in p:
-                    new_parts.append({"text": "[image]"})
-                elif "_claude_block" in p:
-                    stripped = {k: v for k, v in p.items() if k != "_claude_block"}
-                    if stripped:
-                        new_parts.append(stripped)
-                else:
-                    new_parts.append(p)
-            if new_parts:
-                clean_history.append({"role": entry["role"], "parts": new_parts})
+        clean_history = _sanitize_persisted_history(
+            history,
+            live_location_label=(
+                body.current_location.label if body.current_location else None
+            ),
+        )
 
         # Collapse the "stay quiet" sentinel to an empty reply so the bridge
         # sends nothing — HAL opting out of an off-topic message in a watched

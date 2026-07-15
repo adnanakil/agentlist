@@ -254,6 +254,116 @@ heart of the system):
    the turn is archived + graded, and the exact reply is stored on the inbound
    receipt before it is returned.
 
+## Location
+
+HAL has an on-demand, consent-based Find My integration. There is no supported
+Find My API or AppleScript dictionary, so the Mac side uses the user's local Find
+My sharing roster plus a narrowly scoped Accessibility helper.
+
+### Intended flow
+
+1. Each user explicitly shares their location with HAL's Apple account in Find
+   My. HAL never enrolls or starts sharing for them.
+2. The bridge sees the sender's iMessage phone/email and
+   `scripts/hal_findmy_location.py` maps it to a Find My display name using
+   `~/Library/Caches/com.apple.findmy.fmfcore/FriendCacheData.data`. Exceptional
+   mappings can be added to `~/.hal/findmy_location_map.json`; the checked-in
+   shape is `scripts/findmy_location_map.example.json`.
+3. Only an explicitly location-dependent turn (`near me`, `around me`, `nearby`,
+   `from here`, etc.) invokes the lookup. The signed
+   `~/.hal/HalFindMyHelper.app` selects that person in Find My through macOS
+   Accessibility and returns a visible location label to the bridge.
+4. The bridge adds a one-turn `current_location` object to `POST /api/message`.
+   `routes/message.py` validates it and puts it on `ToolContext`; the
+   `tools/plugins/current_location.py` tool exposes it to the model.
+5. The prompt requires `current_location` before local discovery or travel.
+   `tools/places.py` also enforces this structurally: on a `near me` turn it
+   discards any neighborhood invented by the model and rebuilds the Places query
+   from the user's wording plus the bridge-supplied Find My label.
+
+### No-guess safety boundary
+
+Location failure must never fall back to a profile home address, conversation
+memory, or a model-guessed neighborhood. This is enforced in three places:
+
+- The Mac lookup rejects Accessibility artifacts such as
+  `Heading: 0 degrees, North` instead of treating map controls as addresses.
+- `tools/places.py` refuses to perform a nearby search if the turn has no usable
+  `current_location`.
+- `routes/message.py` has an early server guard: a live-location request without
+  a validated location returns
+  `What neighborhood, address, or landmark should I search around?` before the
+  model or any search tool runs.
+
+The guard and the places enforcement share one canonical pattern
+(`services/live_location.py`) so they cannot drift: it covers speaker-anchored
+phrasings including non-adjacent `closest … to me`, and deliberately excludes
+requests with an explicit anchor (`closest subway to Times Square`), where
+forcing the live label would override an origin the user gave. In group chats
+the early guard applies only when HAL is explicitly addressed — members
+chatting about "anything nearby?" among themselves must not summon a canned
+reply that would bypass the group mute and tact gates.
+
+The last guard was verified against production with an authenticated request:
+it returned the location question with `tool_calls=0`. The relevant Railway
+deployment was `d4a745dc-fc67-4b19-8146-f1aa9ac0c026` on 2026-07-15.
+
+### Privacy and lifetime
+
+- Lookup is request-driven; there is no background location polling.
+- A successful result is cached in Mac bridge memory for 90 seconds only;
+  expired entries are pruned so the cache stays bounded.
+- Helper runs are serialized and write into a private (`0700`) scratch
+  directory that is removed whole afterwards; on timeout the orphaned helper
+  instance is killed (`open -W` dying does not kill it), and the deleted
+  directory means a late write has no surviving path to recreate.
+- The bridge logs lookup status only, never the person, handle, or location.
+- Raw location is excluded from inbound idempotency hashing. Before
+  conversation history is saved, `current_location` tool results are redacted
+  and the Find My label is scrubbed from persisted tool-call arguments (the
+  model often copies it into a places query). The value exists only for the
+  active turn.
+
+### Current operational status
+
+Automatic extraction works. Inspection of Find My's accessible fields showed
+the selected person's location renders as a map-pin callout of the form
+`"Northvale, NJ • 1 minute ago"` — one string carrying both the place and its
+freshness — and that it renders asynchronously after selecting the person.
+The original reader took a single snapshot after a fixed 2-second sleep, which
+is why lookups flaked (an early snapshot leaves only map controls like the
+compass heading to score). The helper now polls the detail pane for up to ~6s,
+parses the callout (label and freshness split on the `•`), prefers the callout
+nearest the selected person's own name node when several pins are visible, and
+falls back to the scored heuristic only at the deadline. There is deliberately
+no whole-window last resort: a sidebar scan could attach a neighboring row's
+location to the wrong person. Verified on 2026-07-15: five consecutive
+cache-cleared lookups through the bridge module returned clean labels in
+~2.7s each.
+
+The diagnostic build at `~/.hal/HalFindMyInspector.app` is approved for
+Accessibility and stays available for future UI archaeology (`inspect` mode
+dumps the detail-pane strings; the rebuilt production helper carries the same
+mode). Helper binaries are ad-hoc signed on the Big Sur Mac, so rebuilding an
+already-authorized app changes its code identity and invalidates its
+Accessibility grant — expect a manual uncheck/re-check in System Preferences →
+Security & Privacy → Accessibility after every rebuild of
+`~/.hal/HalFindMyHelper.app`.
+
+### Files and checks
+
+- Mac lookup: `scripts/hal_findmy_location.py`
+- Accessibility source/build: `scripts/hal_findmy_helper.swift`,
+  `scripts/build_hal_findmy_helper.sh`, `scripts/HalFindMyHelper-Info.plist`
+- Cloud tool: `hal_orchestrator/tools/plugins/current_location.py`
+- Canonical request phrasing: `hal_orchestrator/services/live_location.py`
+- Request boundary and hard guard: `hal_orchestrator/routes/message.py`
+- Places enforcement: `hal_orchestrator/tools/places.py`
+- Tests: `tests/test_findmy_location_bridge.py` and
+  `tests/test_current_location.py`
+
+The location and reliability test set last passed with 26 tests on 2026-07-15.
+
 ## Reliability semantics
 - **Inbound:** `hal_inbound_events.id` is the bridge GUID/composite ID. The first
   request owns the turn; a completed duplicate gets the exact stored JSON. A
