@@ -847,6 +847,11 @@ class MessageRequest(BaseModel):
     chat_id: str | None = Field(default=None, max_length=255)
     images: list[ImageData] = Field(default_factory=list, max_length=4)
     current_location: CurrentLocationData | None = None
+    # Bridge-reported reason a location could NOT be attached (status code
+    # only, e.g. "person_not_mapped"). Lets the reply distinguish "invite this
+    # user to share their location with HAL" from "lookup failed, ask for an
+    # area" without ever carrying location data.
+    current_location_status: str | None = Field(default=None, max_length=80)
     # Internal turn (heartbeat/daemon): the user did not send this. A silent
     # outcome persists NOTHING (no history, no archive, no turn capture); an
     # alert persists a compact stub instead of the synthetic prompt.
@@ -884,7 +889,29 @@ class OutboxAckRequest(BaseModel):
 
 def _stable_message_payload(body: MessageRequest) -> dict:
     """Exclude an ephemeral location refresh from inbound idempotency."""
-    return body.model_dump(mode="json", exclude={"current_location"})
+    return body.model_dump(
+        mode="json", exclude={"current_location", "current_location_status"}
+    )
+
+
+def _live_location_guard_reply(status: str | None, share_handle: str) -> str:
+    """Deterministic pre-model reply for an unlocated live-location request.
+
+    person_not_mapped = this sender has never shared their location with HAL's
+    Apple account, so the useful answer is the one-time setup invitation — not
+    a dead-end request for a neighborhood."""
+    if status == "person_not_mapped":
+        return (
+            "I can't see your live location yet — that works once you share it "
+            "with HAL: on your iPhone, open Find My → People → Share My "
+            f"Location → {share_handle} (takes a minute, one time). "
+            "Or just tell me a neighborhood, address, or landmark to search "
+            "around."
+        )
+    return (
+        "I can’t get a usable live location from Find My right now. "
+        "What neighborhood, address, or landmark should I search around?"
+    )
 
 
 def _sanitize_persisted_history(
@@ -1078,12 +1105,15 @@ def build_message_router() -> APIRouter:
             text=user_text,
             has_location=body.current_location is not None,
         ):
-            log.info("message.live_location_required", silo=silo)
+            log.info(
+                "message.live_location_required",
+                silo=silo,
+                status=body.current_location_status,
+            )
             return await finish(
                 MessageResponse(
-                    reply=(
-                        "I can’t get a usable live location from Find My right now. "
-                        "What neighborhood, address, or landmark should I search around?"
+                    reply=_live_location_guard_reply(
+                        body.current_location_status, settings.findmy_share_handle
                     )
                 )
             )
@@ -1477,6 +1507,7 @@ def build_message_router() -> APIRouter:
                 if body.current_location
                 else None
             ),
+            current_location_status=body.current_location_status,
             user_text=user_text,
             message_id=body.message_id,
             internal=body.internal,

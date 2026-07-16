@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from hal_orchestrator.routes.message import (
     MessageRequest,
     _live_location_guard_applies,
+    _live_location_guard_reply,
     _requires_live_location,
     _sanitize_persisted_history,
     _stable_message_payload,
@@ -35,6 +36,31 @@ async def test_current_location_tool_never_substitutes_home() -> None:
     assert "Do not assume the user is at home" in result
 
 
+async def test_unshared_user_gets_find_my_invitation_from_tool() -> None:
+    ctx = SimpleNamespace(
+        current_location=None,
+        current_location_status="person_not_mapped",
+        settings=SimpleNamespace(findmy_share_handle="hal_msg@icloud.com"),
+    )
+    result = await tool_current_location({}, ctx)
+    assert "never shared" in result
+    assert "hal_msg@icloud.com" in result
+    assert "Share My Location" in result
+    assert "Never assume a saved address" in result
+
+
+def test_guard_reply_invites_share_only_for_unmapped_person() -> None:
+    invite = _live_location_guard_reply("person_not_mapped", "hal_msg@icloud.com")
+    assert "hal_msg@icloud.com" in invite
+    assert "Share My Location" in invite
+    # A transient lookup failure for an already-shared user should NOT tell
+    # them to set up sharing again — just ask for an area.
+    for status in (None, "helper_timeout", "location_label_unavailable"):
+        reply = _live_location_guard_reply(status, "hal_msg@icloud.com")
+        assert "hal_msg@icloud.com" not in reply
+        assert "neighborhood" in reply
+
+
 def test_live_location_does_not_change_idempotency_payload() -> None:
     base = {
         "message_id": "message-1",
@@ -56,6 +82,10 @@ def test_live_location_does_not_change_idempotency_payload() -> None:
         },
     )
     assert _stable_message_payload(first) == _stable_message_payload(second)
+    # The failure-status field is equally ephemeral.
+    third = MessageRequest(**base, current_location_status="person_not_mapped")
+    fourth = MessageRequest(**base, current_location_status="helper_timeout")
+    assert _stable_message_payload(third) == _stable_message_payload(fourth)
 
 
 def test_live_location_is_scrubbed_from_persisted_tool_call_args() -> None:

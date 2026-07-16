@@ -41,6 +41,10 @@ class ToolContext:
     # Ephemeral, bridge-supplied Find My location for the current speaker. It is
     # available only during this turn and is redacted before history persists.
     current_location: dict | None = None
+    # Why the bridge could not attach a location (e.g. "person_not_mapped" =
+    # this sender has never shared their location with HAL's Apple account).
+    # Status codes only — never location data.
+    current_location_status: str | None = None
     user_text: str = ""  # actual inbound text; never tool/web content
     message_id: str | None = None
     internal: bool = False

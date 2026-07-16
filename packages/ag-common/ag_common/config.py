@@ -157,6 +157,10 @@ class HalOrchestratorConfig(BaseConfig):
     # Google Routes API key (travel_time tool: live-traffic drive times,
     # walking, transit with real schedules).
     google_maps_api_key: str = ""
+    # Apple ID that HAL users share their location with in Find My. Surfaced in
+    # the one-time "share your location with HAL" invitation when a live-location
+    # turn arrives from someone the Mac bridge couldn't find in its roster.
+    findmy_share_handle: str = "hal_msg@icloud.com"
     # Heartbeat: per-silo anticipation checks ("is anything coming up, and did
     # the world change under it?"). Runs a silent internal agent turn per
     # recently-active silo every interval; texts only when genuinely useful.

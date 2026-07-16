@@ -262,8 +262,12 @@ My sharing roster plus a narrowly scoped Accessibility helper.
 
 ### Intended flow
 
-1. Each user explicitly shares their location with HAL's Apple account in Find
-   My. HAL never enrolls or starts sharing for them.
+1. Each user explicitly shares their location with HAL's Apple account
+   (`hal_msg@icloud.com`, configurable as `FINDMY_SHARE_HANDLE`) in Find My.
+   HAL never enrolls or starts sharing for them. The Mac's system iCloud
+   account MUST be the HAL Apple ID — when it was accidentally the owner's
+   personal account (fixed 2026-07-15), the roster was the owner's own shares
+   and lookups faithfully returned the wrong person's location.
 2. The bridge sees the sender's iMessage phone/email and
    `scripts/hal_findmy_location.py` maps it to a Find My display name using
    `~/Library/Caches/com.apple.findmy.fmfcore/FriendCacheData.data`. Exceptional
@@ -275,7 +279,12 @@ My sharing roster plus a narrowly scoped Accessibility helper.
    Accessibility and returns a visible location label to the bridge.
 4. The bridge adds a one-turn `current_location` object to `POST /api/message`.
    `routes/message.py` validates it and puts it on `ToolContext`; the
-   `tools/plugins/current_location.py` tool exposes it to the model.
+   `tools/plugins/current_location.py` tool exposes it to the model. On failure
+   the bridge instead sends `current_location_status` (status code only, never
+   location data): `person_not_mapped` — the sender has never shared with
+   HAL's account — turns the guard/tool reply into a one-time "share your
+   location with HAL in Find My" invitation, while transient lookup failures
+   keep asking for a neighborhood.
 5. The prompt requires `current_location` before local discovery or travel.
    `tools/places.py` also enforces this structurally: on a `near me` turn it
    discards any neighborhood invented by the model and rebuilds the Places query
