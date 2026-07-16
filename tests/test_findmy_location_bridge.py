@@ -51,6 +51,29 @@ def test_roster_maps_phone_without_exposing_other_relationships(tmp_path) -> Non
         assert findmy.find_display_name("unknown@example.com", str(path)) is None
 
 
+def test_roster_maps_the_accepting_handle_of_a_multi_line_user(tmp_path) -> None:
+    # Real shape seen in production: the share was created from the user's
+    # primary number but ACCEPTED from the number they text HAL with.
+    roster = {
+        "following": [
+            {
+                "id": "MTEzMDA5MzExMw~~",
+                "invitationFromHandles": ["+16465550000"],
+                "invitationAcceptedHandles": ["+12015551111"],
+                "invitationFromHandle": None,
+                "invitationSentToHandle": None,
+            }
+        ],
+        "contacts": {"MTEzMDA5MzExMw~~": {"displayName": "Adnan"}},
+    }
+    path = tmp_path / "FriendCacheData.data"
+    path.write_text(json.dumps(roster))
+
+    with patch.object(findmy, "OVERRIDE_MAP", str(tmp_path / "missing.json")):
+        assert findmy.find_display_name("+12015551111", str(path)) == "Adnan"
+        assert findmy.find_display_name("+16465550000", str(path)) == "Adnan"
+
+
 def test_lookup_returns_only_selected_location_fields() -> None:
     findmy._cache.clear()
     helper_result = {
@@ -84,6 +107,26 @@ def test_lookup_rejects_map_compass_control_as_location() -> None:
         ),
     ):
         result = findmy.lookup_location("+15551234567")
+
+    assert result == {
+        "status": "location_label_unavailable",
+        "source": "find_my",
+    }
+
+
+def test_lookup_rejects_find_my_button_label_as_location() -> None:
+    # A person with no location fix yet leaves only chrome in the pane; the
+    # weak fallback must not emit a button ("show in 3d") as an address.
+    findmy._cache.clear()
+    with (
+        patch.object(findmy, "find_display_name", return_value="Adnan Akil"),
+        patch.object(
+            findmy,
+            "_run_helper",
+            return_value={"status": "ok", "label": "Show in 3D"},
+        ),
+    ):
+        result = findmy.lookup_location("+12017570419")
 
     assert result == {
         "status": "location_label_unavailable",

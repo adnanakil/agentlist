@@ -192,6 +192,14 @@ private func locationScore(_ text: String, selectedName: String) -> Int {
         options: [.regularExpression, .caseInsensitive]
     ) != nil { return -100 }
 
+    // Find My chrome that leaks into the detail pane and would otherwise score
+    // on an incidental digit ("show in 3d") or comma. These are never a
+    // location; reject them outright so the fallback can't emit a button label.
+    if text.range(
+        of: #"^(?:show (?:in )?3d|show map|show 2d|satellite|hybrid|play sound|mark as lost|remove this device|erase this device|notify when found|directions|add label|edit label|zoom (?:in|out))$"#,
+        options: [.regularExpression, .caseInsensitive]
+    ) != nil { return -100 }
+
     var score = 0
     if text.rangeOfCharacter(from: .decimalDigits) != nil { score += 2 }
     if text.contains(",") { score += 3 }

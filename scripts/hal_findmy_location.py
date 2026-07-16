@@ -46,6 +46,14 @@ _LOCATION_UI_ARTIFACT_RE = re.compile(
     r"(?:^|\b)(?:heading|bearing|compass|map scale)\s*:.*\bdegrees?\b",
     re.IGNORECASE,
 )
+# Find My chrome that can slip through as a "label" (belt-and-suspenders with
+# the helper's own scorer): a button is never a location.
+_LOCATION_UI_CONTROL_RE = re.compile(
+    r"^(?:show (?:in )?3d|show map|show 2d|satellite|hybrid|play sound"
+    r"|mark as lost|remove this device|erase this device|notify when found"
+    r"|directions|add label|edit label|zoom (?:in|out))$",
+    re.IGNORECASE,
+)
 _cache = {}
 _cache_lock = threading.Lock()
 # Lookups run one at a time: `open -n` spawns a fresh helper instance per
@@ -121,6 +129,11 @@ def find_display_name(handle, roster_path=FRIEND_CACHE):
         candidates = []
         for field in (
             "invitationFromHandles",
+            # The handle that ACCEPTED the share often differs from the one the
+            # invite came from (multi-line users): a share created from the
+            # user's primary number can be accepted by the number they text
+            # HAL from. Both must map to the same person.
+            "invitationAcceptedHandles",
             "invitationFromHandle",
             "invitationSentToHandle",
             "id",
@@ -146,7 +159,9 @@ def _clean_text(value, limit):
 def _clean_location_label(value):
     """Reject map controls that Accessibility can expose as address-like text."""
     label = _clean_text(value, 300)
-    if not label or _LOCATION_UI_ARTIFACT_RE.search(label):
+    if not label:
+        return None
+    if _LOCATION_UI_ARTIFACT_RE.search(label) or _LOCATION_UI_CONTROL_RE.match(label):
         return None
     return label
 
