@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import unicodedata
 from contextlib import suppress
 from datetime import datetime, timezone
 
@@ -152,6 +153,9 @@ def find_display_name(handle, roster_path=FRIEND_CACHE):
 def _clean_text(value, limit):
     if not isinstance(value, str):
         return None
+    # Find My address labels carry invisible directionality marks (U+200E)
+    # that survive str.split(); drop all Unicode format chars (category Cf).
+    value = "".join(ch for ch in value if unicodedata.category(ch) != "Cf")
     cleaned = " ".join(value.split()).strip()
     return cleaned[:limit] if cleaned else None
 

@@ -345,10 +345,24 @@ compass heading to score). The helper now polls the detail pane for up to ~6s,
 parses the callout (label and freshness split on the `•`), prefers the callout
 nearest the selected person's own name node when several pins are visible, and
 falls back to the scored heuristic only at the deadline. There is deliberately
-no whole-window last resort: a sidebar scan could attach a neighboring row's
-location to the wrong person. Verified on 2026-07-15: five consecutive
-cache-cleared lookups through the bridge module returned clean labels in
-~2.7s each.
+no whole-window last resort for city-level strings: a sidebar scan could
+attach a neighboring row's location to the wrong person. Verified on
+2026-07-15: five consecutive cache-cleared lookups through the bridge module
+returned clean labels in ~2.7s each.
+
+The callout only ever carries city granularity ("New York, NY • Now") even
+when the underlying fix is street-precise; the full address lives behind the
+callout's More Info button. After reading the callout, the helper presses
+More Info and scans the whole window for a street-level string (digit +
+street suffix, `locationScore >= 6`), which cannot misattribute: other
+people's list rows never show more than "City, ST", so only the open card can
+produce a street address, and name-node proximity breaks any tie. Street
+results are reported `approximate: false`, callout-only results
+`approximate: true`. Street addresses arrive with an invisible U+200E
+direction mark, which the bridge module strips (all Unicode Cf chars).
+Verified end-to-end on 2026-07-16: three consecutive lookups returned the
+street address in 8–9s each, and a real pipeline run answered "closest bakery
+to me" with a spot a 3-minute walk from the pin.
 
 The diagnostic build at `~/.hal/HalFindMyInspector.app` is approved for
 Accessibility and stays available for future UI archaeology (`inspect` mode

@@ -345,7 +345,7 @@ if mode == "probe" {
     exit(0)
 }
 
-guard (mode == "lookup" || mode == "inspect"), arguments.count >= 2 else {
+guard (mode == "lookup" || mode == "inspect" || mode == "inspectall"), arguments.count >= 2 else {
     fail("invalid_request", output: output, exitCode: 64)
 }
 let selectedName = arguments[1]
@@ -368,12 +368,12 @@ func uniqueStrings(_ nodes: [Node]) -> [String] {
         }
 }
 
-func succeed(label: String, updated: String?) -> Never {
+func succeed(label: String, updated: String?, approximate: Bool? = nil) -> Never {
     let result = LookupResult(
         status: "ok",
         label: label,
         updated: updated,
-        approximate: nil,
+        approximate: approximate,
         source: "find_my"
     )
     try? writeJSON(result, to: output)
@@ -408,13 +408,19 @@ guard activate(match.element) else {
 }
 Thread.sleep(forTimeInterval: 0.8)
 
-if mode == "inspect" {
+if mode == "inspect" || mode == "inspectall" {
     Thread.sleep(forTimeInterval: 1.2)
+    // inspect: detail pane only (the lookup path's view of the world).
+    // inspectall: every node in the window, sidebar included — for UI
+    // archaeology when the extraction misses something visible on screen.
+    let nodes = mode == "inspect"
+        ? detailNodesSnapshot()
+        : windowsOf(appElement).flatMap { walk($0) }
     try writeJSON(
         InspectResult(
             status: "ok",
             selectedName: selectedName,
-            detailStrings: uniqueStrings(detailNodesSnapshot())
+            detailStrings: uniqueStrings(nodes)
         ),
         to: output
     )
@@ -426,12 +432,14 @@ if mode == "inspect" {
 // only address-like string in the early snapshot). Poll until the callout
 // appears; keep the best heuristic string as a deadline fallback.
 let deadline = Date().addingTimeInterval(6.0)
+var callout: (label: String, updated: String)?
 var bestFallback: (text: String, score: Int)?
 var sawNoLocation = false
 while true {
     let nodes = detailNodesSnapshot()
-    if let callout = bestCallout(in: nodes, selectedName: selectedName) {
-        succeed(label: callout.label, updated: callout.updated)
+    if let found = bestCallout(in: nodes, selectedName: selectedName) {
+        callout = found
+        break
     }
     let strings = uniqueStrings(nodes)
     if strings.contains(where: { normalize($0) == "no location found" }) {
@@ -451,9 +459,72 @@ while true {
     Thread.sleep(forTimeInterval: 0.6)
 }
 
-// No whole-window last resort here on purpose: a sidebar scan could attach a
-// NEIGHBORING row's "<place> • <freshness>" to the wrong person when the
-// selected share has no location. Asking the user beats that every time.
+// The pin callout only carries city granularity ("New York, NY • Now") even
+// when the underlying fix is street-precise; the full address lives one press
+// deeper, in the person's More Info card. A street-level string (digit +
+// street suffix, score >= 6) can only belong to the selected person — list
+// rows for OTHER people never show more than "City, ST", so the neighboring-
+// row misattribution that rules out a generic whole-window fallback cannot
+// produce a false street address here. Name-node proximity breaks any tie.
+let streetScoreFloor = 6
+func scanForStreetAddress(baseScore: Int) -> (label: String, updated: String?)? {
+    let all = windowsOf(appElement).flatMap { walk($0) }
+    var nameIndices: [Int] = []
+    var candidates: [(index: Int, text: String, score: Int)] = []
+    for (index, node) in all.enumerated() {
+        for string in node.strings {
+            if normalize(string) == normalizedSelectedName { nameIndices.append(index) }
+            let text = parsePinCallout(string)?.label ?? string
+            let score = locationScore(text, selectedName: selectedName)
+            if score >= streetScoreFloor, score > baseScore,
+               !candidates.contains(where: { $0.text == text }) {
+                candidates.append((index: index, text: text, score: score))
+            }
+        }
+    }
+    guard let chosen = candidates.min(by: { lhs, rhs in
+        let lhsDistance = nameIndices.map { abs($0 - lhs.index) }.min() ?? Int.max
+        let rhsDistance = nameIndices.map { abs($0 - rhs.index) }.min() ?? Int.max
+        if lhsDistance != rhsDistance { return lhsDistance < rhsDistance }
+        return lhs.score > rhs.score
+    }) else { return nil }
+    return (chosen.text, callout?.updated ?? freshness(all.flatMap { $0.strings }))
+}
+
+func refineToStreetAddress() -> (label: String, updated: String?)? {
+    let baseScore = callout.map { locationScore($0.label, selectedName: selectedName) } ?? 0
+    guard baseScore < streetScoreFloor else { return nil }  // already street-level
+    // The card can still be open from a previous lookup — read before pressing.
+    if let found = scanForStreetAddress(baseScore: baseScore) { return found }
+    guard
+        let button = detailNodesSnapshot().first(where: { node in
+            node.role == "AXButton" && node.strings.contains { normalize($0) == "more info" }
+        }),
+        AXUIElementPerformAction(button.element, kAXPressAction as CFString) == .success
+    else { return nil }
+    let refineDeadline = Date().addingTimeInterval(3.0)
+    while Date() < refineDeadline {
+        Thread.sleep(forTimeInterval: 0.5)
+        if let found = scanForStreetAddress(baseScore: baseScore) { return found }
+    }
+    return nil
+}
+
+if let refined = refineToStreetAddress() {
+    succeed(label: refined.label, updated: refined.updated, approximate: false)
+}
+if let callout = callout {
+    succeed(
+        label: callout.label,
+        updated: callout.updated,
+        approximate: locationScore(callout.label, selectedName: selectedName) < streetScoreFloor
+    )
+}
+
+// No whole-window last resort for the CITY-level fallback on purpose: a
+// sidebar scan could attach a NEIGHBORING row's "<place> • <freshness>" to
+// the wrong person when the selected share has no location. Asking the user
+// beats that every time.
 if let fallback = bestFallback {
     succeed(label: fallback.text, updated: freshness(uniqueStrings(detailNodesSnapshot())))
 }

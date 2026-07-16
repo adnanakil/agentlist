@@ -96,6 +96,26 @@ def test_lookup_returns_only_selected_location_fields() -> None:
     assert "unrelated_debug_data" not in result
 
 
+def test_lookup_strips_invisible_direction_marks_from_address() -> None:
+    # The More Info card's street address arrives with a leading U+200E
+    # left-to-right mark, which str.split() does not treat as whitespace.
+    findmy._cache.clear()
+    helper_result = {
+        "status": "ok",
+        "label": "‎456 W 22nd St, New York NY, United States",
+        "updated": "Now",
+        "approximate": False,
+    }
+    with (
+        patch.object(findmy, "find_display_name", return_value="Adnan Akil"),
+        patch.object(findmy, "_run_helper", return_value=helper_result),
+    ):
+        result = findmy.lookup_location("+12015551111")
+
+    assert result["label"] == "456 W 22nd St, New York NY, United States"
+    assert result["approximate"] is False
+
+
 def test_lookup_rejects_map_compass_control_as_location() -> None:
     findmy._cache.clear()
     with (
