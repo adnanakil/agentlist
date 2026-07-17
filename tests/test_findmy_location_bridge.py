@@ -134,6 +134,19 @@ def test_lookup_rejects_map_compass_control_as_location() -> None:
     }
 
 
+def test_lookup_rejects_more_info_card_buttons_with_stray_punctuation() -> None:
+    # The More Info card exposes button titles like "Directions," whose
+    # trailing comma defeats an exact-match control filter.
+    for junk in ("Directions,", "Contact,", "Add Adnan to Favorites", "Remove Adnan", "More Info"):
+        findmy._cache.clear()
+        with (
+            patch.object(findmy, "find_display_name", return_value="Adnan Akil"),
+            patch.object(findmy, "_run_helper", return_value={"status": "ok", "label": junk}),
+        ):
+            result = findmy.lookup_location("+12017570419")
+        assert result["status"] == "location_label_unavailable", junk
+
+
 def test_lookup_rejects_find_my_button_label_as_location() -> None:
     # A person with no location fix yet leaves only chrome in the pane; the
     # weak fallback must not emit a button ("show in 3d") as an address.
@@ -152,6 +165,73 @@ def test_lookup_rejects_find_my_button_label_as_location() -> None:
         "status": "location_label_unavailable",
         "source": "find_my",
     }
+
+
+def test_pending_share_answers_once_mapped_and_located(tmp_path) -> None:
+    pending = str(tmp_path / "pending.json")
+    with patch.object(findmy, "PENDING_PATH", pending):
+        findmy.note_pending_share("+1 (201) 555-1111", "Any good pie places around me")
+
+        # Not in the roster yet: no actions, question stays parked.
+        with patch.object(findmy, "find_display_name", return_value=None):
+            assert findmy.poll_pending_shares() == []
+        entries = findmy._load_pending()
+        assert len(entries) == 1
+
+        # Share landed and Find My has a fix: answer action, entry consumed.
+        findmy._cache.clear()
+        with (
+            patch.object(findmy, "find_display_name", return_value="Pie Fan"),
+            patch.object(
+                findmy,
+                "_run_helper",
+                return_value={"status": "ok", "label": "5 Main St, Example City"},
+            ),
+            patch.object(findmy.time, "time", return_value=findmy.time.time() + 60),
+        ):
+            actions = findmy.poll_pending_shares()
+        assert actions == [
+            {
+                "kind": "answer",
+                "handle": "+1 (201) 555-1111",
+                "text": "Any good pie places around me",
+            }
+        ]
+        assert findmy._load_pending() == {}
+
+
+def test_pending_share_acks_exactly_once_while_awaiting_first_fix(tmp_path) -> None:
+    pending = str(tmp_path / "pending.json")
+    findmy._cache.clear()
+    with patch.object(findmy, "PENDING_PATH", pending):
+        findmy.note_pending_share("+12015551111", "coffee near me?")
+        with (
+            patch.object(findmy, "find_display_name", return_value="Pie Fan"),
+            patch.object(findmy, "_run_helper", return_value={"status": "no_location_found"}),
+        ):
+            first = findmy.poll_pending_shares()
+            # Second poll inside the backoff window: no lookup, no repeat ack.
+            second = findmy.poll_pending_shares()
+        assert first == [{"kind": "ack", "handle": "+12015551111"}]
+        assert second == []
+        entry = next(iter(findmy._load_pending().values()))
+        assert entry["acked"] is True
+
+
+def test_pending_share_expires_and_clears(tmp_path) -> None:
+    pending = str(tmp_path / "pending.json")
+    with patch.object(findmy, "PENDING_PATH", pending):
+        findmy.note_pending_share("+12015551111", "coffee near me?")
+        # A newer inbound message supersedes the parked question.
+        findmy.clear_pending_share("+1 201 555 1111")
+        assert findmy._load_pending() == {}
+
+        findmy.note_pending_share("+12015551111", "coffee near me?")
+        with patch.object(
+            findmy.time, "time", return_value=findmy.time.time() + findmy.PENDING_TTL_SECONDS + 5
+        ):
+            assert findmy.poll_pending_shares() == []
+        assert findmy._load_pending() == {}
 
 
 def test_helper_timeout_kills_orphan_and_removes_scratch_dir(tmp_path) -> None:

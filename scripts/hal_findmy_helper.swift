@@ -172,10 +172,14 @@ private let ignoredLabels = Set(
     [
         "people", "devices", "items", "me", "directions", "contact", "notifications",
         "add", "remove", "stop sharing my location", "share my location", "info",
+        "more info", "back", "legal", "my location", "no location found",
     ].map(normalize)
 )
 
 private func locationScore(_ text: String, selectedName: String) -> Int {
+    // More Info card buttons expose titles with stray punctuation
+    // ("Directions,") that defeats exact matching — strip it before checks.
+    let text = text.trimmingCharacters(in: CharacterSet(charactersIn: " ,.•·"))
     let normalized = normalize(text)
     guard
         normalized != normalize(selectedName),
@@ -196,7 +200,7 @@ private func locationScore(_ text: String, selectedName: String) -> Int {
     // on an incidental digit ("show in 3d") or comma. These are never a
     // location; reject them outright so the fallback can't emit a button label.
     if text.range(
-        of: #"^(?:show (?:in )?3d|show map|show 2d|satellite|hybrid|play sound|mark as lost|remove this device|erase this device|notify when found|directions|add label|edit label|zoom (?:in|out))$"#,
+        of: #"^(?:show (?:in )?3d|show map|show 2d|satellite|hybrid|play sound|mark as lost|remove this device|erase this device|notify when found|directions|add label|edit label|zoom (?:in|out)|add(?: .+)? to favorites|remove .+|notify .+)$"#,
         options: [.regularExpression, .caseInsensitive]
     ) != nil { return -100 }
 
@@ -523,9 +527,10 @@ if let callout = callout {
 
 // No whole-window last resort for the CITY-level fallback on purpose: a
 // sidebar scan could attach a NEIGHBORING row's "<place> • <freshness>" to
-// the wrong person when the selected share has no location. Asking the user
-// beats that every time.
-if let fallback = bestFallback {
+// the wrong person when the selected share has no location. And when the pane
+// says "No location found", any address-ish leftover is chrome by definition
+// — never promote the weak fallback over that signal.
+if !sawNoLocation, let fallback = bestFallback {
     succeed(label: fallback.text, updated: freshness(uniqueStrings(detailNodesSnapshot())))
 }
 fail(

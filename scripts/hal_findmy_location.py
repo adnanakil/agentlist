@@ -26,6 +26,13 @@ FRIEND_CACHE = os.path.expanduser(
 )
 HELPER_APP = os.path.expanduser("~/.hal/HalFindMyHelper.app")
 OVERRIDE_MAP = os.path.expanduser("~/.hal/findmy_location_map.json")
+PENDING_PATH = os.path.expanduser("~/.hal/findmy_pending.json")
+# A Find My share arrives over Apple's FMF channel, never as an iMessage —
+# nothing lands in chat.db to react to. So when HAL invites someone to share,
+# their question is parked here and a bridge watcher polls the roster until
+# the share (and its first location fix) shows up, then answers proactively.
+PENDING_TTL_SECONDS = 2 * 60 * 60
+_PENDING_LOOKUP_BACKOFF = (30, 60, 120, 300)
 # The helper polls the Find My detail pane for up to ~6s after selecting the
 # person (the pin callout renders asynchronously), on top of app activation
 # and person-match retries — a failing lookup can legitimately take ~13s.
@@ -48,15 +55,21 @@ _LOCATION_UI_ARTIFACT_RE = re.compile(
     re.IGNORECASE,
 )
 # Find My chrome that can slip through as a "label" (belt-and-suspenders with
-# the helper's own scorer): a button is never a location.
+# the helper's own scorer): a button is never a location. Matched against the
+# label with surrounding punctuation stripped — the More Info card exposes
+# button titles like "Directions," whose stray comma defeats an exact match.
 _LOCATION_UI_CONTROL_RE = re.compile(
     r"^(?:show (?:in )?3d|show map|show 2d|satellite|hybrid|play sound"
     r"|mark as lost|remove this device|erase this device|notify when found"
-    r"|directions|add label|edit label|zoom (?:in|out))$",
+    r"|directions|add label|edit label|zoom (?:in|out)"
+    r"|contact|more info|back|notifications?|legal|my location"
+    r"|share my location|add(?: .+)? to favorites|add|remove .+"
+    r"|no location found)$",
     re.IGNORECASE,
 )
 _cache = {}
 _cache_lock = threading.Lock()
+_pending_lock = threading.Lock()
 # Lookups run one at a time: `open -n` spawns a fresh helper instance per
 # call, and concurrent instances would fight over the same Find My window.
 # Serializing also makes the timeout kill below safe — the only helper alive
@@ -165,7 +178,8 @@ def _clean_location_label(value):
     label = _clean_text(value, 300)
     if not label:
         return None
-    if _LOCATION_UI_ARTIFACT_RE.search(label) or _LOCATION_UI_CONTROL_RE.match(label):
+    probe = label.strip(" ,.•·").strip()
+    if _LOCATION_UI_ARTIFACT_RE.search(label) or _LOCATION_UI_CONTROL_RE.match(probe):
         return None
     return label
 
@@ -220,6 +234,117 @@ def _run_helper(display_name):
             return result or {"status": "helper_no_response"}
     finally:
         shutil.rmtree(output_dir, ignore_errors=True)
+
+
+def _pending_key(handle):
+    """Formatting-stable key: the same number written differently must map to
+    one pending entry, so prefer the shortest all-digit form (last 10)."""
+    keys = _handle_keys(handle)
+    digit_keys = sorted((key for key in keys if key.isdigit()), key=len)
+    if digit_keys:
+        return digit_keys[0]
+    return next(iter(sorted(keys)), "")
+
+
+def _load_pending():
+    data = _safe_json(PENDING_PATH, max_bytes=100_000)
+    entries = data.get("pending")
+    return entries if isinstance(entries, dict) else {}
+
+
+def _save_pending(entries):
+    tmp = PENDING_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump({"pending": entries}, fh)
+    os.replace(tmp, PENDING_PATH)
+    with suppress(OSError):
+        os.chmod(PENDING_PATH, 0o600)
+
+
+def note_pending_share(handle, text, is_group=False):
+    """Park an invited (unshared) user's question until their share lands."""
+    if is_group:
+        return
+    key = _pending_key(handle)
+    if not key:
+        return
+    now = time.time()
+    with _pending_lock:
+        entries = _load_pending()
+        entries[key] = {
+            "handle": str(handle)[:80],
+            "text": str(text or "")[:1000],
+            "invited_at": now,
+            "acked": False,
+            "attempts": 0,
+            "next_attempt": now,
+        }
+        _save_pending(entries)
+
+
+def clear_pending_share(handle):
+    """A newer inbound message supersedes the parked question."""
+    key = _pending_key(handle)
+    with _pending_lock:
+        entries = _load_pending()
+        if key in entries:
+            del entries[key]
+            _save_pending(entries)
+
+
+def poll_pending_shares():
+    """Advance each parked question; return send-actions for the bridge.
+
+    Returns dicts: {"kind": "answer", "handle", "text"} once the share landed
+    AND a location lookup succeeded (the bridge replays the original question,
+    which now picks up the cached location), or {"kind": "ack", "handle"} —
+    at most once per invite — when the share is visible in the roster but
+    Find My has not delivered the first location fix yet."""
+    now = time.time()
+    actions = []
+    with _pending_lock:
+        entries = _load_pending()
+        changed = False
+        for key in list(entries):
+            entry = entries[key]
+            if not isinstance(entry, dict):
+                del entries[key]
+                changed = True
+                continue
+            if now - entry.get("invited_at", 0) > PENDING_TTL_SECONDS:
+                # They never shared; expire silently rather than nag.
+                del entries[key]
+                changed = True
+                continue
+            if now < entry.get("next_attempt", 0):
+                continue
+            handle = entry.get("handle") or key
+            if not find_display_name(handle):
+                # Roster read is cheap; re-check every watcher cycle.
+                entry["next_attempt"] = now + 20
+                changed = True
+                continue
+            result = lookup_location(handle)
+            if result.get("status") == "ok":
+                actions.append(
+                    {"kind": "answer", "handle": handle, "text": entry.get("text") or ""}
+                )
+                del entries[key]
+                changed = True
+                continue
+            # Mapped but no fix yet — the helper lookup is expensive, back off.
+            attempts = int(entry.get("attempts", 0))
+            entry["attempts"] = attempts + 1
+            entry["next_attempt"] = now + _PENDING_LOOKUP_BACKOFF[
+                min(attempts, len(_PENDING_LOOKUP_BACKOFF) - 1)
+            ]
+            if not entry.get("acked"):
+                entry["acked"] = True
+                actions.append({"kind": "ack", "handle": handle})
+            changed = True
+        if changed:
+            _save_pending(entries)
+    return actions
 
 
 def lookup_location(handle):
