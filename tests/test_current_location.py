@@ -44,20 +44,21 @@ async def test_unshared_user_gets_find_my_invitation_from_tool() -> None:
     )
     result = await tool_current_location({}, ctx)
     assert "never shared" in result
+    # The primary ask is the phrase iMessage converts into a one-tap Share My
+    # Location suggestion; the manual Find My path stays as a fallback only.
+    assert "Can you share your location with me and I'll take a look" in result
     assert "hal_msg@icloud.com" in result
-    assert "Share My Location" in result
     assert "Never assume a saved address" in result
 
 
 def test_guard_reply_invites_share_only_for_unmapped_person() -> None:
     invite = _live_location_guard_reply("person_not_mapped", "hal_msg@icloud.com")
-    assert "hal_msg@icloud.com" in invite
-    assert "Share My Location" in invite
+    assert invite == "Can you share your location with me and I'll take a look"
     # A transient lookup failure for an already-shared user should NOT tell
     # them to set up sharing again — just ask for an area.
     for status in (None, "helper_timeout", "location_label_unavailable"):
         reply = _live_location_guard_reply(status, "hal_msg@icloud.com")
-        assert "hal_msg@icloud.com" not in reply
+        assert "share your location" not in reply
         assert "neighborhood" in reply
 
 

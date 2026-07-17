@@ -898,16 +898,10 @@ def _live_location_guard_reply(status: str | None, share_handle: str) -> str:
     """Deterministic pre-model reply for an unlocated live-location request.
 
     person_not_mapped = this sender has never shared their location with HAL's
-    Apple account, so the useful answer is the one-time setup invitation — not
-    a dead-end request for a neighborhood."""
+    Apple account. The ask is phrased so iMessage renders a one-tap Share My
+    Location suggestion on the sender's iPhone — no manual Find My steps."""
     if status == "person_not_mapped":
-        return (
-            "I can't see your live location yet — that works once you share it "
-            "with HAL: on your iPhone, open Find My → People → Share My "
-            f"Location → {share_handle} (takes a minute, one time). "
-            "Or just tell me a neighborhood, address, or landmark to search "
-            "around."
-        )
+        return "Can you share your location with me and I'll take a look"
     return (
         "I can’t get a usable live location from Find My right now. "
         "What neighborhood, address, or landmark should I search around?"

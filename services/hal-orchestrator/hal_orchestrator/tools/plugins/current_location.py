@@ -33,11 +33,13 @@ async def tool_current_location(_args: dict, ctx: ToolContext) -> str:
             )
             return (
                 "Live location is unavailable: this user has never shared their "
-                "location with HAL. Relay the one-time setup: on their iPhone, "
-                "Find My → People → Share My Location → share with "
-                f"{share_handle}. After that, 'near me' works automatically. "
-                "For right now, ask for their current neighborhood or starting "
-                "point. Never assume a saved address."
+                "location with HAL. Ask them exactly: \"Can you share your "
+                "location with me and I'll take a look\" — iMessage turns that "
+                "ask into a one-tap Share My Location suggestion on their "
+                "iPhone (one time; afterwards 'near me' works automatically). "
+                "Only if they say no suggestion appeared, give the manual path: "
+                f"Find My → People → Share My Location → {share_handle}. "
+                "Never assume a saved address."
             )
         return (
             "Live location is unavailable for this turn. Do not assume the user is "
