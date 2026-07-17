@@ -333,11 +333,18 @@ def poll_pending_shares():
                 changed = True
                 continue
             # Mapped but no fix yet — the helper lookup is expensive, back off.
+            # Exception: each lookup drives Find My's own fetch (the app path
+            # works even when the background daemon path is wedged), so while
+            # the invite is fresh keep the pressure at one lookup per minute —
+            # that cadence is what delivered the first fix in practice.
             attempts = int(entry.get("attempts", 0))
             entry["attempts"] = attempts + 1
-            entry["next_attempt"] = now + _PENDING_LOOKUP_BACKOFF[
+            delay = _PENDING_LOOKUP_BACKOFF[
                 min(attempts, len(_PENDING_LOOKUP_BACKOFF) - 1)
             ]
+            if now - entry.get("invited_at", 0) < 15 * 60:
+                delay = min(delay, 60)
+            entry["next_attempt"] = now + delay
             if not entry.get("acked"):
                 entry["acked"] = True
                 actions.append({"kind": "ack", "handle": handle})
