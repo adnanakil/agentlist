@@ -8,6 +8,7 @@ forecast so the model can answer with real, data-grounded predictions.
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -38,6 +39,38 @@ log = structlog.get_logger()
 HISTORY_DAYS = 14  # analytics window loaded per call
 
 CONFIG_BOOL_KEYS = {"auto_reminders", "auto_wind_down", "auto_feed_prep"}
+CARD_KINDS = {"feed", "nap_start", "wake", "bedtime"}
+_CARD_IMAGE_SOURCE = "baby_status_card"
+
+
+async def _attach_status_card(ctx: ToolContext) -> bool:
+    """Render the current card and add it to the bridge's image attachments."""
+    from hal_orchestrator.services.baby_card import render_for_silo
+
+    try:
+        png = await render_for_silo(ctx.session, ctx.phone)
+    except Exception:
+        log.exception("baby.card_render_failed", silo=ctx.phone)
+        return False
+    if not png:
+        return False
+
+    # A turn can log multiple events. Keep only the latest card from this tool
+    # without discarding unrelated attachments added by other tools.
+    ctx.result_images[:] = [
+        image
+        for image in ctx.result_images
+        if image.get("_source") != _CARD_IMAGE_SOURCE
+    ]
+    ctx.result_images.append(
+        {
+            "mime_type": "image/png",
+            "data": base64.b64encode(png).decode("ascii"),
+            "ext": "png",
+            "_source": _CARD_IMAGE_SOURCE,
+        }
+    )
+    return True
 
 
 def _parse_time(value: str | None, now: datetime) -> datetime | None:
@@ -118,30 +151,16 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
 
         # Card-on-log: a feed/nap/wake/bedtime update gets the visual status
         # card automatically (user preference: a card on every nap & eating
-        # update). Delivered as a signed image URL iMessage renders inline —
-        # an event was just logged, so data exists; no need to pre-render.
-        CARD_KINDS = {"feed", "nap_start", "wake", "bedtime"}
-        card_link = None
-        if kind in CARD_KINDS:
-            try:
-                from hal_orchestrator.services.baby_card import card_url
+        # update). Attach the rendered PNG directly so iMessage receives a real
+        # image instead of a URL whose Open Graph metadata creates a link card.
+        card_attached = kind in CARD_KINDS and await _attach_status_card(ctx)
 
-                card_link = card_url(
-                    ctx.settings.public_base_url,
-                    ctx.phone,
-                    ctx.settings.card_signing_key or ctx.settings.hal_bridge_secret,
-                    ctx.settings.card_url_ttl_seconds,
-                )
-            except Exception:
-                log.exception("baby.card_on_log_failed", silo=ctx.phone)
-
-        if card_link:
+        if card_attached:
             lines = [
                 f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
-                "[Put THIS URL on its OWN LINE so the updated status card renders "
-                f"as an image:\n{card_link}\nReply with just ONE short, warm line "
-                "above it (e.g. \"Down he goes 💤\" / \"logged ✅\"); do NOT re-list "
-                "the times, the card has them.]",
+                "[The updated status card is attached as an image. Reply with just "
+                "ONE short, warm line (e.g. \"Down he goes 💤\" / \"logged ✅\"); "
+                "do NOT re-list the times, the card has them.]",
             ]
         else:
             lines = [
@@ -165,30 +184,12 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         return format_forecast(forecast_next(events, tz, now), tz, baby, now)
 
     if action == "card":
-        # The visual baby-monitor card. Delivered as a signed image URL that
-        # iMessage renders inline (the live send path is text-only and can't
-        # attach files). Confirm there's data first so HAL never sends a URL
-        # that 404s.
-        from hal_orchestrator.services.baby_card import card_url, render_for_silo
-
-        try:
-            has_data = await render_for_silo(ctx.session, ctx.phone) is not None
-        except Exception:
-            log.exception("baby.card_render_failed", silo=ctx.phone)
-            has_data = False
-        if not has_data:
+        # The visual baby-monitor card is delivered as a real image attachment.
+        if not await _attach_status_card(ctx):
             return f"No events logged yet for {baby} — nothing to put on a card."
-        url = card_url(
-            ctx.settings.public_base_url,
-            ctx.phone,
-            ctx.settings.card_signing_key or ctx.settings.hal_bridge_secret,
-            ctx.settings.card_url_ttl_seconds,
-        )
         return (
-            f"[{baby}'s status card is ready. Put THIS URL on its OWN LINE in your "
-            f"reply so it renders as an image:\n{url}\nAdd at most ONE short "
-            "friendly line above it; do NOT re-list the feed/nap times — the card "
-            "shows them.]"
+            f"[{baby}'s status card is attached as an image. Add at most ONE short "
+            "friendly line; do NOT re-list the feed/nap times — the card shows them.]"
         )
 
     if action == "stats":

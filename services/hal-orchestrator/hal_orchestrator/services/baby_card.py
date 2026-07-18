@@ -165,11 +165,9 @@ def render_card_png(data: dict) -> bytes:
 
 
 # --------------------------------------------------------------------------- #
-# Hosted-URL delivery. The live iMessage send path is text-only (it drives a
-# phone; it can't attach a file), so the card is also served at a public,
-# HMAC-signed URL that HAL drops into the reply — iMessage renders it inline.
-# The `t` (timestamp) cache-busts so each send fetches a fresh render instead
-# of iMessage reusing a cached preview for the same URL.
+# Legacy hosted-URL delivery. New replies attach the rendered PNG directly via
+# ctx.result_images. Keep signed URLs working for previously sent messages and
+# other callers of the public card route. The `t` timestamp cache-busts renders.
 # --------------------------------------------------------------------------- #
 
 
