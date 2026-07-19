@@ -244,6 +244,13 @@ async def _run_job(
                 # No apology text — a blank brief beats "sorry, something broke".
                 log.warning("cron.slash_blank", job_id=str(job.id), prompt=job.prompt[:40])
 
+        # Tool-attached images (e.g. the baby day card) ride the outbox row so
+        # the bridge can send them as real attachments after the text.
+        images = [
+            {"mime_type": img["mime_type"], "data": img["data"], "ext": img["ext"]}
+            for img in (data.get("result_images") or [])
+            if img.get("mime_type") and img.get("data") and img.get("ext")
+        ]
         if reply:
             if session is not None:
                 from hal_orchestrator.services.delivery import enqueue
@@ -253,9 +260,10 @@ async def _run_job(
                     to=to,
                     text=reply,
                     idempotency_key=f"cron:{job.id}:{occurrence}:reply",
+                    images=images or None,
                 )
             else:
-                await state.outbox.put({"to": to, "text": reply})
+                await state.outbox.put({"to": to, "text": reply, "images": images})
             state.mark_proactive_send(to)
             log.info("cron.delivered", job_id=str(job.id), to=to, chars=len(reply))
         for index, sm in enumerate(data.get("side_messages", [])):

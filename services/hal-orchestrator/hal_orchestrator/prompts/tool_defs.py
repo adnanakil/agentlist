@@ -77,7 +77,12 @@ MAIN_TOOLS: list[dict] = [
                     "current state + last/next feed & nap + bedtime, sent as an "
                     "iMessage picture; use when the user asks to SEE the monitor, "
                     "'how's Bazzy', 'send a card/picture', or wants at-a-glance "
-                    "status), recent (raw recent events), undo (remove "
+                    "status), day_card (render a VISUAL FULL-DAY recap IMAGE — "
+                    "morning wake, every nap with duration, every feed, bedtime — "
+                    "sent as an iMessage picture; use when the user asks how the "
+                    "day went, for a daily summary/recap card, or an end-of-day "
+                    "review; card is the CURRENT-status monitor, day_card is the "
+                    "whole day), recent (raw recent events), undo (remove "
                     "a mislogged event), setup (first-time: create the baby "
                     "profile for this chat), configure (auto-reminder prefs, nap "
                     "cap, routines like 'tummy time 30min after feeds', "
@@ -91,8 +96,8 @@ MAIN_TOOLS: list[dict] = [
                         "action": {
                             "type": "string",
                             "enum": [
-                                "log", "forecast", "stats", "card", "recent",
-                                "undo", "setup", "configure",
+                                "log", "forecast", "stats", "card", "day_card",
+                                "recent", "undo", "setup", "configure",
                             ],
                         },
                         "kind": {

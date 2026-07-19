@@ -41,36 +41,43 @@ HISTORY_DAYS = 14  # analytics window loaded per call
 CONFIG_BOOL_KEYS = {"auto_reminders", "auto_wind_down", "auto_feed_prep"}
 CARD_KINDS = {"feed", "nap_start", "wake", "bedtime"}
 _CARD_IMAGE_SOURCE = "baby_status_card"
+_DAY_CARD_IMAGE_SOURCE = "baby_day_card"
 
 
-async def _attach_status_card(ctx: ToolContext) -> bool:
-    """Render the current card and add it to the bridge's image attachments."""
-    from hal_orchestrator.services.baby_card import render_for_silo
-
+async def _attach_card(ctx: ToolContext, render, source: str) -> bool:
+    """Render a card and add it to the bridge's image attachments. `render` is
+    an async callable returning PNG bytes (or None for no data)."""
     try:
-        png = await render_for_silo(ctx.session, ctx.phone)
+        png = await render()
     except Exception:
-        log.exception("baby.card_render_failed", silo=ctx.phone)
+        log.exception("baby.card_render_failed", silo=ctx.phone, source=source)
         return False
     if not png:
         return False
 
-    # A turn can log multiple events. Keep only the latest card from this tool
-    # without discarding unrelated attachments added by other tools.
+    # A turn can render the same card several times (multiple logged events).
+    # Keep only the latest copy of THIS card without discarding other cards or
+    # unrelated attachments added by other tools.
     ctx.result_images[:] = [
-        image
-        for image in ctx.result_images
-        if image.get("_source") != _CARD_IMAGE_SOURCE
+        image for image in ctx.result_images if image.get("_source") != source
     ]
     ctx.result_images.append(
         {
             "mime_type": "image/png",
             "data": base64.b64encode(png).decode("ascii"),
             "ext": "png",
-            "_source": _CARD_IMAGE_SOURCE,
+            "_source": source,
         }
     )
     return True
+
+
+async def _attach_status_card(ctx: ToolContext) -> bool:
+    from hal_orchestrator.services.baby_card import render_for_silo
+
+    return await _attach_card(
+        ctx, lambda: render_for_silo(ctx.session, ctx.phone), _CARD_IMAGE_SOURCE
+    )
 
 
 def _parse_time(value: str | None, now: datetime) -> datetime | None:
@@ -190,6 +197,36 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         return (
             f"[{baby}'s status card is attached as an image. Add at most ONE short "
             "friendly line; do NOT re-list the feed/nap times — the card shows them.]"
+        )
+
+    if action == "day_card":
+        # Whole-day recap card: wake, naps, feeds, bedtime as one image.
+        events = as_pairs(
+            await load_events(ctx.session, family.id, since=now - timedelta(days=2))
+        )
+        local_today = now.astimezone(tz).date()
+        summary = summarize_day(events, tz, local_today)
+        if not (
+            summary["feeds"] or summary["naps"] or summary["bedtime"]
+            or summary["morning_wake"]
+        ):
+            return f"Nothing logged yet today for {baby} — no day summary to show."
+
+        from hal_orchestrator.services.baby_card import (
+            build_day_summary_data,
+            render_day_summary_png,
+        )
+
+        data = build_day_summary_data(summary, baby, tz, now)
+
+        async def _render_day() -> bytes:
+            return render_day_summary_png(data)
+
+        if not await _attach_card(ctx, _render_day, _DAY_CARD_IMAGE_SOURCE):
+            return f"Nothing logged yet today for {baby} — no day summary to show."
+        return (
+            f"[{baby}'s day summary card is attached as an image. Add at most ONE "
+            "short friendly line; do NOT re-list the times — the card shows them.]"
         )
 
     if action == "stats":
@@ -317,5 +354,5 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
 
     return (
         f"Unknown baby action: {action}. "
-        "Use: log, forecast, stats, recent, undo, setup, configure."
+        "Use: log, forecast, stats, card, day_card, recent, setup, configure, undo."
     )

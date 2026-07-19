@@ -28,8 +28,13 @@ async def enqueue(
     to: str,
     text: str,
     idempotency_key: str | None = None,
+    images: list[dict] | None = None,
 ) -> uuid.UUID | None:
-    """Add one delivery to the caller's transaction."""
+    """Add one delivery to the caller's transaction.
+
+    ``images`` is an optional list of {mime_type, data(base64), ext} the bridge
+    sends as file attachments after the text.
+    """
     if not to or not text:
         return None
     if not isinstance(session, AsyncSession):
@@ -38,7 +43,12 @@ async def enqueue(
         import hal_orchestrator.state as state
 
         await state.outbox.put(
-            {"to": to, "text": text, "idempotency_key": idempotency_key}
+            {
+                "to": to,
+                "text": text,
+                "idempotency_key": idempotency_key,
+                "images": images or [],
+            }
         )
         return None
     message_id = uuid.uuid4()
@@ -48,6 +58,7 @@ async def enqueue(
             id=message_id,
             destination=to,
             text=text,
+            images=images or None,
             idempotency_key=idempotency_key,
             status="pending",
         )
@@ -103,7 +114,14 @@ async def claim(
         else:
             row.status = "leased"
             row.lease_until = now + timedelta(seconds=lease_seconds)
-        result.append({"id": str(row.id), "to": row.destination, "text": row.text})
+        result.append(
+            {
+                "id": str(row.id),
+                "to": row.destination,
+                "text": row.text,
+                "images": row.images or [],
+            }
+        )
     await session.flush()
     return result
 
@@ -147,6 +165,7 @@ class DurableOutbox:
                 to=str(item.get("to") or ""),
                 text=str(item.get("text") or ""),
                 idempotency_key=item.get("idempotency_key"),
+                images=item.get("images") or None,
             )
             await session.commit()
 

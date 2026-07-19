@@ -476,6 +476,7 @@ class HalOutboxMessage(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     destination: Mapped[str] = mapped_column(String(255), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    images: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # [{mime_type, data, ext}]
     idempotency_key: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

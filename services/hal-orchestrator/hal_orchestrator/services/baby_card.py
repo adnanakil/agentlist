@@ -64,12 +64,65 @@ def _parse(s: str | None):
         return None
 
 
+# Shared drawing helpers — both the status card and the day-summary card use
+# the same canvas frame and icon set so they read as one family of cards.
+
+
+def _fnt(path, sz):
+    from PIL import ImageFont
+
+    return ImageFont.truetype(path, sz)
+
+
+def _card_canvas(w: int, h: int):
+    """Gradient background + drop shadow + white rounded card. Returns draw."""
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (w, h), BG_TOP)
+    dr = ImageDraw.Draw(img)
+    for y in range(h):
+        f = y / h
+        dr.line([(0, y), (w, y)], fill=(
+            int(BG_TOP[0] + (250 - BG_TOP[0]) * f),
+            int(BG_TOP[1] + (248 - BG_TOP[1]) * f),
+            int(BG_TOP[2] + (255 - BG_TOP[2]) * f)))
+    m = 36
+    sh = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).rounded_rectangle(
+        [m + 6, m + 14, w - m + 6, h - m + 14], 44, fill=(90, 78, 120, 55)
+    )
+    img = Image.alpha_composite(img.convert("RGBA"), sh).convert("RGB")
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([m, m, w - m, h - m], 44, fill=CARD)
+    return img, d
+
+
+def _bottle(d, cx, cy, c, s=1.15):
+    w = int(15 * s)
+    d.rounded_rectangle([cx - w, cy - 2, cx + w, cy + int(38 * s)], int(9 * s), fill=c)
+    d.rounded_rectangle([cx - int(8 * s), cy - int(14 * s), cx + int(8 * s), cy + 2], int(4 * s), fill=c)
+    d.rounded_rectangle([cx - int(5 * s), cy - int(24 * s), cx + int(5 * s), cy - int(12 * s)], int(3 * s), fill=c)
+    d.line([(cx - w + 3, cy + int(12 * s)), (cx + w - 3, cy + int(12 * s))], fill=CARD, width=3)
+    d.line([(cx - w + 3, cy + int(22 * s)), (cx + w - 3, cy + int(22 * s))], fill=CARD, width=3)
+
+
+def _moon(d, cx, cy, c, r=24):
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c)
+    d.ellipse([cx - r + int(r * 0.55), cy - r - 2, cx + r + int(r * 0.55), cy + r - 2], fill=CARD)
+
+
+def _sun(d, cx, cy, c, r=16):
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c)
+    for a in range(0, 360, 45):
+        dx, dy = math.cos(math.radians(a)), math.sin(math.radians(a))
+        d.line([(cx + dx * (r + 5), cy + dy * (r + 5)), (cx + dx * (r + 12), cy + dy * (r + 12))], fill=c, width=5)
+
+
 def render_card_png(data: dict) -> bytes:
     """Draw the card. Returns PNG bytes."""
-    from PIL import Image, ImageDraw, ImageFont
 
     def fnt(path, sz):
-        return ImageFont.truetype(path, sz)
+        return _fnt(path, sz)
 
     now_dt = _parse(data.get("now"))
 
@@ -77,39 +130,18 @@ def render_card_png(data: dict) -> bytes:
         d = _parse(s)
         return bool(d and now_dt and d < now_dt)
 
-    img = Image.new("RGB", (W, H), BG_TOP)
-    dr = ImageDraw.Draw(img)
-    for y in range(H):
-        f = y / H
-        dr.line([(0, y), (W, y)], fill=(
-            int(BG_TOP[0] + (250 - BG_TOP[0]) * f),
-            int(BG_TOP[1] + (248 - BG_TOP[1]) * f),
-            int(BG_TOP[2] + (255 - BG_TOP[2]) * f)))
+    img, d = _card_canvas(W, H)
     M = 36
-    sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ImageDraw.Draw(sh).rounded_rectangle([M + 6, M + 14, W - M + 6, H - M + 14], 44, fill=(90, 78, 120, 55))
-    img = Image.alpha_composite(img.convert("RGBA"), sh).convert("RGB")
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle([M, M, W - M, H - M], 44, fill=CARD)
     cx0, cx1 = M + 44, W - M - 44
 
     def bottle(cx, cy, c, s=1.15):
-        w = int(15 * s)
-        d.rounded_rectangle([cx - w, cy - 2, cx + w, cy + int(38 * s)], int(9 * s), fill=c)
-        d.rounded_rectangle([cx - int(8 * s), cy - int(14 * s), cx + int(8 * s), cy + 2], int(4 * s), fill=c)
-        d.rounded_rectangle([cx - int(5 * s), cy - int(24 * s), cx + int(5 * s), cy - int(12 * s)], int(3 * s), fill=c)
-        d.line([(cx - w + 3, cy + int(12 * s)), (cx + w - 3, cy + int(12 * s))], fill=CARD, width=3)
-        d.line([(cx - w + 3, cy + int(22 * s)), (cx + w - 3, cy + int(22 * s))], fill=CARD, width=3)
+        _bottle(d, cx, cy, c, s)
 
     def moon(cx, cy, c, r=24):
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c)
-        d.ellipse([cx - r + int(r * 0.55), cy - r - 2, cx + r + int(r * 0.55), cy + r - 2], fill=CARD)
+        _moon(d, cx, cy, c, r)
 
     def sun(cx, cy, c, r=16):
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c)
-        for a in range(0, 360, 45):
-            dx, dy = math.cos(math.radians(a)), math.sin(math.radians(a))
-            d.line([(cx + dx * (r + 5), cy + dy * (r + 5)), (cx + dx * (r + 12), cy + dy * (r + 12))], fill=c, width=5)
+        _sun(d, cx, cy, c, r)
 
     d.text((cx0, M + 42), data["baby"], font=fnt(_BOLD, 58), fill=INK)
     d.text((cx0, M + 116), f"baby monitor · as of {data['now']}", font=fnt(_REG, 25), fill=SUB)
@@ -158,6 +190,124 @@ def render_card_png(data: dict) -> bytes:
     d.line([(cx0, gy), (cx1, gy)], fill=LINE, width=2)
     moon(cx0 + 18, gy + 34, NIGHT, r=15)
     d.text((cx0 + 48, gy + 16), f"Bedtime tonight ~ {data.get('expected_bedtime') or '—'}", font=fnt(_BOLD, 27), fill=NIGHT)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def build_day_summary_data(summary: dict, baby: str, tz, now: datetime) -> dict:
+    """Shape services.baby.summarize_day output into the day card's display
+    fields (time strings in tz). Pure — no Pillow."""
+    from hal_orchestrator.services.baby import fmt_duration, fmt_time
+
+    day = summary.get("date") or now.astimezone(tz).date()
+    naps = [
+        {"start": fmt_time(s.start, tz), "duration": fmt_duration(s.minutes)}
+        for s in summary.get("naps") or []
+    ]
+    feeds = [fmt_time(at, tz) for at in summary.get("feeds") or []]
+    return {
+        "baby": baby,
+        "date_label": day.strftime("%A, %B %-d"),
+        "morning_wake": (
+            fmt_time(summary["morning_wake"], tz) if summary.get("morning_wake") else None
+        ),
+        "night_duration": (
+            fmt_duration(summary["night_minutes"]) if summary.get("night_minutes") else None
+        ),
+        "naps": naps,
+        "total_nap": fmt_duration(summary.get("total_nap_minutes") or 0) if naps else None,
+        "feeds": feeds,
+        "feed_count": len(feeds),
+        "bedtime": fmt_time(summary["bedtime"], tz) if summary.get("bedtime") else None,
+    }
+
+
+def render_day_summary_png(data: dict) -> bytes:
+    """Draw the whole-day recap card. Height grows with the number of naps and
+    feeds logged; same visual language as the status card."""
+    naps = data.get("naps") or []
+    feeds = data.get("feeds") or []
+    # Feed times flow in a 2-column grid to keep long days compact.
+    feed_lines = max(1, (len(feeds) + 1) // 2)
+
+    M = 36
+    gap = 20
+    wake_h = 156
+    naps_h = 88 + max(1, len(naps)) * 46 + 18
+    feeds_h = 88 + feed_lines * 46 + 18
+    footer_h = 96
+    h = M + 178 + wake_h + gap + naps_h + gap + feeds_h + 24 + footer_h + M
+
+    img, d = _card_canvas(W, h)
+    cx0, cx1 = M + 44, W - M - 44
+
+    d.text((cx0, M + 42), data["baby"], font=_fnt(_BOLD, 58), fill=INK)
+    d.text(
+        (cx0, M + 116),
+        f"today's recap · {data['date_label']}",
+        font=_fnt(_REG, 25), fill=SUB,
+    )
+
+    # Morning — wake time + last night's stretch
+    y = M + 178
+    d.rounded_rectangle([cx0, y, cx1, y + wake_h], 28, fill=ROW_BG, outline=LINE, width=2)
+    _sun(d, cx0 + 52, y + 62, FEED, r=17)
+    d.text((cx0 + 104, y + 26), "Morning", font=_fnt(_BOLD, 30), fill=INK)
+    d.text((cx0 + 104, y + 80), "Woke up", font=_fnt(_REG, 20), fill=SUB)
+    d.text((cx0 + 104, y + 106), data.get("morning_wake") or "—", font=_fnt(_BOLD, 29), fill=INK)
+    d.text((cx1 - 22, y + 80), "Overnight", font=_fnt(_REG, 20), fill=NIGHT, anchor="ra")
+    d.text(
+        (cx1 - 22, y + 106), data.get("night_duration") or "—",
+        font=_fnt(_BOLD, 29), fill=NIGHT, anchor="ra",
+    )
+
+    # Naps — one line per nap: start time left, duration right
+    y += wake_h + gap
+    d.rounded_rectangle([cx0, y, cx1, y + naps_h], 28, fill=ROW_BG, outline=LINE, width=2)
+    _moon(d, cx0 + 52, y + 56, SLEEP, r=24)
+    title = f"Naps · {len(naps)}" if naps else "Naps"
+    d.text((cx0 + 104, y + 30), title, font=_fnt(_BOLD, 30), fill=INK)
+    if data.get("total_nap"):
+        d.text(
+            (cx1 - 22, y + 38), f"total {data['total_nap']}",
+            font=_fnt(_REG, 22), fill=SLEEP, anchor="ra",
+        )
+    ly = y + 88
+    if naps:
+        for nap in naps:
+            d.text((cx0 + 104, ly), nap["start"], font=_fnt(_BOLD, 29), fill=INK)
+            d.text((cx1 - 22, ly), nap["duration"], font=_fnt(_BOLD, 29), fill=SLEEP, anchor="ra")
+            ly += 46
+    else:
+        d.text((cx0 + 104, ly), "—", font=_fnt(_BOLD, 29), fill=SUB)
+
+    # Feeds — 2-column grid of times
+    y += naps_h + gap
+    d.rounded_rectangle([cx0, y, cx1, y + feeds_h], 28, fill=ROW_BG, outline=LINE, width=2)
+    _bottle(d, cx0 + 52, y + 44, FEED)
+    title = f"Feeds · {data.get('feed_count') or 0}" if feeds else "Feeds"
+    d.text((cx0 + 104, y + 30), title, font=_fnt(_BOLD, 30), fill=INK)
+    ly = y + 88
+    if feeds:
+        col_x = (cx0 + 104, cx0 + 104 + 210)
+        for i, t in enumerate(feeds):
+            d.text((col_x[i % 2], ly), t, font=_fnt(_BOLD, 29), fill=INK)
+            if i % 2 == 1:
+                ly += 46
+    else:
+        d.text((cx0 + 104, ly), "—", font=_fnt(_BOLD, 29), fill=SUB)
+
+    # Bedtime footer
+    y += feeds_h + 24
+    d.line([(cx0, y), (cx1, y)], fill=LINE, width=2)
+    _moon(d, cx0 + 18, y + 34, NIGHT, r=15)
+    d.text(
+        (cx0 + 48, y + 16),
+        f"Bedtime ~ {data.get('bedtime') or '—'}",
+        font=_fnt(_BOLD, 27), fill=NIGHT,
+    )
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
