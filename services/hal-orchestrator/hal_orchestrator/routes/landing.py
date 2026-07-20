@@ -82,27 +82,58 @@ def render_landing(number: str, code: str | None = None) -> str:
     max-width:46ch; margin-bottom:36px;
   }}
 
-  /* The demo IS the pitch: the family thread, everyone logging. */
-  .chat {{
-    width:100%; max-width:420px; text-align:left; margin:0 auto 40px;
-    background:#123529; border:1px solid #2a5d4b; border-radius:22px;
-    padding:18px 14px 16px; box-shadow:0 10px 34px rgba(0,0,0,.35);
+  /* The demo IS the pitch: three real moments, shown as the phone screens
+     they'd actually be. Everything in the bubbles is real product behavior. */
+  .phones {{
+    display:grid; grid-template-columns:1fr; gap:44px;
+    width:100%; max-width:1180px; margin:0 auto 44px;
   }}
-  .chat-title {{
-    text-align:center; color:#6f9d85; font-size:12px; font-weight:600;
-    letter-spacing:.06em; margin-bottom:12px;
+  @media (min-width:960px) {{ .phones {{ grid-template-columns:1fr 1fr 1fr; gap:28px; }} }}
+  .panel {{ display:flex; flex-direction:column; align-items:center; }}
+  .phone {{
+    background:#0b0b0d; border-radius:46px; padding:11px; width:100%;
+    max-width:380px; box-shadow:0 14px 40px rgba(0,0,0,.45);
   }}
-  .msg {{ display:flex; flex-direction:column; margin-bottom:10px; }}
-  .msg .who {{ font-size:11px; color:#6f9d85; margin:0 10px 3px; }}
-  .bubble {{
-    max-width:82%; padding:8px 13px; border-radius:18px;
-    font-size:15px; line-height:1.4; width:fit-content;
+  .screen {{
+    background:#ffffff; border-radius:36px; padding:14px 12px 22px;
+    text-align:left; overflow:hidden;
   }}
-  .them {{ align-items:flex-start; }}
-  .them .bubble {{ background:#26493c; color:#d9f7e6; border-bottom-left-radius:6px; }}
-  .hal {{ align-items:flex-end; }}
-  .hal .who {{ align-self:flex-end; }}
-  .hal .bubble {{ background:#34c759; color:#03301c; border-bottom-right-radius:6px; }}
+  .statusbar {{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:2px 12px 8px; color:#111; font-size:14px; font-weight:600;
+  }}
+  .statusbar .pills {{ display:flex; gap:4px; align-items:center; }}
+  .statusbar .pill {{ width:17px; height:9px; border:1.5px solid #111;
+    border-radius:3px; position:relative; }}
+  .statusbar .pill::after {{ content:""; position:absolute; inset:1.5px;
+    right:4px; background:#111; border-radius:1px; }}
+  .statusbar .dot {{ width:9px; height:9px; border-radius:50%;
+    border:1.5px solid #111; }}
+  .chathead {{ text-align:center; padding-bottom:10px; border-bottom:1px solid #ececee; }}
+  .avatars {{ display:flex; justify-content:center; margin-bottom:5px; }}
+  .av {{
+    width:26px; height:26px; border-radius:50%; color:#fff; font-size:12px;
+    font-weight:700; display:flex; align-items:center; justify-content:center;
+    margin:0 -3px; border:2px solid #fff;
+  }}
+  .chathead .gname {{ color:#111; font-size:13px; font-weight:600; }}
+  .chathead .gname span {{ color:#b6b6bc; }}
+  .daystamp {{ text-align:center; color:#8e8e93; font-size:12px;
+    font-weight:600; margin:12px 0 8px; }}
+  .m {{ display:flex; flex-direction:column; margin:0 6px 9px; }}
+  .m .lbl {{ font-size:11px; color:#8e8e93; margin:0 12px 3px; }}
+  .bb {{
+    max-width:86%; padding:8px 13px; border-radius:18px; font-size:14.5px;
+    line-height:1.42; width:fit-content; white-space:pre-line;
+  }}
+  .in {{ align-items:flex-start; }}
+  .in .bb {{ background:#e9e9eb; color:#111; border-bottom-left-radius:6px; }}
+  .out {{ align-items:flex-end; }}
+  .out .bb {{ background:#0a84ff; color:#fff; border-bottom-right-radius:6px; }}
+  .receipt {{ font-size:11px; color:#8e8e93; margin:3px 12px 0; align-self:flex-end; }}
+  .caption {{ margin-top:22px; text-align:center; }}
+  .caption h3 {{ color:#B9F8D3; font-size:19px; font-weight:650; margin-bottom:5px; }}
+  .caption p {{ color:#8fd7b0; font-size:14.5px; }}
 
   .number {{
     font-size:clamp(30px, 7.5vw, 56px); font-weight:700; letter-spacing:-.01em;
@@ -142,22 +173,107 @@ def render_landing(number: str, code: str | None = None) -> str:
   grandma — everyone texts feeds and naps the way they'd say them out loud,
   and HAL keeps one record straight. No app.</p>
 
-  <div class="chat" aria-label="Example family thread">
-    <div class="chat-title">Leo HQ — mom, dad, nanny &amp; HAL</div>
-    <div class="msg them"><span class="who">Mom · 3:15 PM</span>
-      <span class="bubble">4oz at 3:15</span></div>
-    <div class="msg hal"><span class="who">HAL</span>
-      <span class="bubble">Logged ✅ That's his 4th feed today.</span></div>
-    <div class="msg them"><span class="who">Nanny · 4:02 PM</span>
-      <span class="bubble">down for a nap 😴</span></div>
-    <div class="msg hal"><span class="who">HAL</span>
-      <span class="bubble">Logged 💤 Next sleepy window after he wakes looks
-      like ~5:20–5:50 — I'll quietly flag it 15 min ahead.</span></div>
-    <div class="msg them"><span class="who">Grandma · 6:30 PM</span>
-      <span class="bubble">how's his day going?</span></div>
-    <div class="msg hal"><span class="who">HAL</span>
-      <span class="bubble">3 naps (2h 40m total), 5 feeds — last at 6:10.
-      Bedtime's usually around 7:15 💛</span></div>
+  <div class="phones" aria-label="Three example moments in the family thread">
+
+    <div class="panel">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span>
+          <span class="pills"><span class="dot"></span><span class="pill"></span></span></div>
+        <div class="chathead">
+          <div class="avatars">
+            <span class="av" style="background:#ec6ba8">M</span>
+            <span class="av" style="background:#5b9cf5">D</span>
+            <span class="av" style="background:#e8a13c">N</span>
+            <span class="av" style="background:#1C644C">H</span>
+          </div>
+          <div class="gname">Leo HQ <span>›</span></div>
+        </div>
+        <div class="daystamp">Today 3:15 PM</div>
+        <div class="m in"><span class="lbl">Mom</span>
+          <span class="bb">4oz at 3:15</span></div>
+        <div class="m in"><span class="lbl">HAL</span>
+          <span class="bb">Logged ✅ That's his 4th feed today.</span></div>
+        <div class="m out"><span class="bb">down for a nap 😴</span></div>
+        <div class="m in"><span class="lbl">HAL</span>
+          <span class="bb">Logged 💤 He'll likely wake around 5:15 — I'll size his next window when he's up.</span></div>
+        <div class="m in"><span class="lbl">Grandma</span>
+          <span class="bb">how's his day going?</span></div>
+        <div class="m in"><span class="lbl">HAL</span>
+          <span class="bb">3 naps (2h 40m total), 5 feeds — last at 6:10. Bedtime's usually around 7:15 💛</span></div>
+      </div></div>
+      <div class="caption">
+        <h3>Everyone logs in one thread</h3>
+        <p>Feeds, naps, and handoffs stay in sync.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>6:42</span>
+          <span class="pills"><span class="dot"></span><span class="pill"></span></span></div>
+        <div class="chathead">
+          <div class="avatars">
+            <span class="av" style="background:#ec6ba8">M</span>
+            <span class="av" style="background:#5b9cf5">D</span>
+            <span class="av" style="background:#e8a13c">N</span>
+            <span class="av" style="background:#1C644C">H</span>
+          </div>
+          <div class="gname">Leo HQ <span>›</span></div>
+        </div>
+        <div class="daystamp">Today 6:42 PM</div>
+        <div class="m in"><span class="lbl">HAL</span>
+          <span class="bb">Leo's day at a glance 💛
+
+5 feeds — last at 6:10 PM
+3 naps · 2h 40m
+Last woke · 4:52 PM
+
+Bedtime's usually ~7:15. He ran a little light on naps today, so a touch earlier may go down easy.</span></div>
+        <div class="m out"><span class="bb">anything we should watch tonight?</span></div>
+        <div class="m in"><span class="lbl">HAL</span>
+          <span class="bb">Nothing unusual in today's log. His last feed was at 6:10, so he'll likely want one more near bedtime.</span></div>
+        <div class="m out"><span class="bb">perfect, thank you</span>
+          <span class="receipt">Delivered</span></div>
+      </div></div>
+      <div class="caption">
+        <h3>Your day, already summarized</h3>
+        <p>A useful recap arrives before bedtime.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>7:02</span>
+          <span class="pills"><span class="dot"></span><span class="pill"></span></span></div>
+        <div class="chathead">
+          <div class="avatars">
+            <span class="av" style="background:#ec6ba8">M</span>
+            <span class="av" style="background:#5b9cf5">D</span>
+            <span class="av" style="background:#e8a13c">N</span>
+            <span class="av" style="background:#1C644C">H</span>
+          </div>
+          <div class="gname">Leo HQ <span>›</span></div>
+        </div>
+        <div class="daystamp">Today 7:02 AM</div>
+        <div class="m in"><span class="lbl">HAL</span>
+          <span class="bb">Good morning ☀️ A few things for today:
+
+💉 Leo's 6-month vaccines are at 9:20 AM with Dr. Patel.
+
+🌧️ Rain is expected from 8–11 AM, around 48°F. Bring the stroller cover.
+
+🚗 The drive is trending about 12 minutes slower than usual. Plan on leaving by 8:35.</span></div>
+        <div class="m out"><span class="bb">remind everyone when it's time to leave</span></div>
+        <div class="m in"><span class="lbl">HAL</span>
+          <span class="bb">You got it — I'll text the group at 8:30 👍</span></div>
+        <div class="m out" style="margin-top:-4px"><span class="receipt">Read 7:03 AM</span></div>
+      </div></div>
+      <div class="caption">
+        <h3>A calmer start to the day</h3>
+        <p>Appointments, weather, and the drive—before you ask.</p>
+      </div>
+    </div>
+
   </div>
 
   {cta}
