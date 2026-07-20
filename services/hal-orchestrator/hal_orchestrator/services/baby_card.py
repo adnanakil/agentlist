@@ -17,9 +17,8 @@ import base64
 import hashlib
 import hmac
 import io
-import math
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -27,12 +26,17 @@ _FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 _BOLD = str(_FONT_DIR / "DejaVuSans-Bold.ttf")
 _REG = str(_FONT_DIR / "DejaVuSans.ttf")
 
-# palette
-BG_TOP = (255, 241, 230); CARD = (255, 255, 255); INK = (44, 42, 56)
-SUB = (150, 147, 163); FEED = (38, 150, 168); SLEEP = (114, 103, 214)
-NIGHT = (72, 76, 120); CHIP = (245, 242, 251); LINE = (236, 233, 243)
-ROW_BG = (252, 251, 254)
-W, H = 680, 880
+# Minimal HAL palette: a white canvas, dark ink, and one brand accent.
+CARD = (255, 255, 255)
+INK = (25, 35, 31)
+SUB = (105, 116, 110)
+ACCENT = (28, 100, 76)
+SOFT = (232, 241, 237)
+LINE = (225, 231, 227)
+EMOJI_YELLOW = (255, 205, 72)
+EMOJI_INK = (91, 65, 35)
+EMOJI_BLUE = (55, 112, 214)
+W, H = 680, 760
 
 
 def build_card_data(forecast: dict, last_feed, last_nap_end, baby: str, tz, now: datetime) -> dict:
@@ -64,8 +68,21 @@ def _parse(s: str | None):
         return None
 
 
-# Shared drawing helpers — both the status card and the day-summary card use
-# the same canvas frame and icon set so they read as one family of cards.
+def _clock_past(now_str: str | None, s: str | None) -> bool:
+    """True when clock time `s` reads as already-passed relative to `now_str`.
+
+    Clock strings carry no date, so they wrap: a reading more than 12h "ago"
+    means the time is actually TOMORROW — a 6:30 AM expected wake rendered at
+    7:40 PM must NOT collapse to "Soon", and a 2:30 AM next feed rendered at
+    11:50 PM must NOT flip to "FEED DUE". PURE."""
+    now_dt, d = _parse(now_str), _parse(s)
+    if not (now_dt and d):
+        return False
+    delta_min = (now_dt - d).total_seconds() / 60
+    return 0 < delta_min <= 12 * 60
+
+
+# Shared drawing helpers — both cards use the same restrained frame and type.
 
 
 def _fnt(path, sz):
@@ -75,121 +92,112 @@ def _fnt(path, sz):
 
 
 def _card_canvas(w: int, h: int):
-    """Gradient background + drop shadow + white rounded card. Returns draw."""
+    """Pure white attachment canvas. Returns image + draw."""
     from PIL import Image, ImageDraw
 
-    img = Image.new("RGB", (w, h), BG_TOP)
-    dr = ImageDraw.Draw(img)
-    for y in range(h):
-        f = y / h
-        dr.line([(0, y), (w, y)], fill=(
-            int(BG_TOP[0] + (250 - BG_TOP[0]) * f),
-            int(BG_TOP[1] + (248 - BG_TOP[1]) * f),
-            int(BG_TOP[2] + (255 - BG_TOP[2]) * f)))
-    m = 36
-    sh = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    ImageDraw.Draw(sh).rounded_rectangle(
-        [m + 6, m + 14, w - m + 6, h - m + 14], 44, fill=(90, 78, 120, 55)
-    )
-    img = Image.alpha_composite(img.convert("RGBA"), sh).convert("RGB")
+    img = Image.new("RGB", (w, h), CARD)
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle([m, m, w - m, h - m], 44, fill=CARD)
     return img, d
 
 
-def _bottle(d, cx, cy, c, s=1.15):
-    w = int(15 * s)
-    d.rounded_rectangle([cx - w, cy - 2, cx + w, cy + int(38 * s)], int(9 * s), fill=c)
-    d.rounded_rectangle([cx - int(8 * s), cy - int(14 * s), cx + int(8 * s), cy + 2], int(4 * s), fill=c)
-    d.rounded_rectangle([cx - int(5 * s), cy - int(24 * s), cx + int(5 * s), cy - int(12 * s)], int(3 * s), fill=c)
-    d.line([(cx - w + 3, cy + int(12 * s)), (cx + w - 3, cy + int(12 * s))], fill=CARD, width=3)
-    d.line([(cx - w + 3, cy + int(22 * s)), (cx + w - 3, cy + int(22 * s))], fill=CARD, width=3)
-
-
-def _moon(d, cx, cy, c, r=24):
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c)
-    d.ellipse([cx - r + int(r * 0.55), cy - r - 2, cx + r + int(r * 0.55), cy + r - 2], fill=CARD)
-
-
-def _sun(d, cx, cy, c, r=16):
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c)
-    for a in range(0, 360, 45):
-        dx, dy = math.cos(math.radians(a)), math.sin(math.radians(a))
-        d.line([(cx + dx * (r + 5), cy + dy * (r + 5)), (cx + dx * (r + 12), cy + dy * (r + 12))], fill=c, width=5)
+def _status_emoji(d, cx: int, cy: int, sleeping: bool) -> None:
+    """Draw a compact emoji that works without a color-emoji system font.
+    Vector-drawn with PIL primitives on purpose: the slim image's
+    Pillow/DejaVu stack can't rasterize color-emoji fonts, and Apple's emoji
+    font isn't redistributable — this needs no assets at all."""
+    r = 18
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=EMOJI_YELLOW)
+    if sleeping:
+        d.line([(cx - 11, cy - 1), (cx - 5, cy - 1)], fill=EMOJI_INK, width=3)
+        d.line([(cx + 4, cy - 1), (cx + 10, cy - 1)], fill=EMOJI_INK, width=3)
+        d.ellipse([cx - 3, cy + 6, cx + 3, cy + 12], fill=EMOJI_INK)
+        d.text(
+            (cx + 10, cy - 29), "Z", font=_fnt(_BOLD, 16), fill=EMOJI_BLUE
+        )
+    else:
+        d.ellipse([cx - 9, cy - 6, cx - 5, cy - 2], fill=EMOJI_INK)
+        d.ellipse([cx + 5, cy - 6, cx + 9, cy - 2], fill=EMOJI_INK)
+        d.arc(
+            [cx - 10, cy - 1, cx + 10, cy + 12],
+            start=12, end=168, fill=EMOJI_INK, width=3,
+        )
 
 
 def render_card_png(data: dict) -> bytes:
-    """Draw the card. Returns PNG bytes."""
+    """Draw a minimal, glanceable current-status card. Returns PNG bytes."""
 
     def fnt(path, sz):
         return _fnt(path, sz)
 
-    now_dt = _parse(data.get("now"))
-
     def is_past(s):
-        d = _parse(s)
-        return bool(d and now_dt and d < now_dt)
+        return _clock_past(data.get("now"), s)
 
     img, d = _card_canvas(W, H)
-    M = 36
-    cx0, cx1 = M + 44, W - M - 44
+    x0, x1 = 66, W - 66
 
-    def bottle(cx, cy, c, s=1.15):
-        _bottle(d, cx, cy, c, s)
+    # Quiet product label, then the baby's name and timestamp.
+    d.text((x0, 58), "HAL · BABY STATUS", font=fnt(_BOLD, 18), fill=ACCENT)
+    d.text((x0, 91), data["baby"], font=fnt(_BOLD, 50), fill=INK)
+    d.text(
+        (x1, 111), f"AS OF {data['now']}",
+        font=fnt(_BOLD, 17), fill=SUB, anchor="ra",
+    )
+    d.line([(x0, 166), (x1, 166)], fill=LINE, width=2)
 
-    def moon(cx, cy, c, r=24):
-        _moon(d, cx, cy, c, r)
+    state = data.get("state", "awake")
+    sleeping = state in ("napping", "night")
+    state_label = {
+        "napping": "Napping",
+        "night": "Down for the night",
+        "awake": "Awake",
+    }.get(state, "Awake")
+    state_detail = (
+        f"Since {data['asleep_since']}" if sleeping and data.get("asleep_since")
+        else "In the wake window"
+    )
+    _status_emoji(d, x0 + 18, 216, sleeping)
+    d.text((x0 + 58, 194), state_label, font=fnt(_BOLD, 39), fill=INK)
+    d.text((x0 + 58, 244), state_detail, font=fnt(_REG, 22), fill=SUB)
 
-    def sun(cx, cy, c, r=16):
-        _sun(d, cx, cy, c, r)
-
-    d.text((cx0, M + 42), data["baby"], font=fnt(_BOLD, 58), fill=INK)
-    d.text((cx0, M + 116), f"baby monitor · as of {data['now']}", font=fnt(_REG, 25), fill=SUB)
-
-    state = data["state"]
-    hy = M + 178
-    col = {"napping": SLEEP, "night": NIGHT, "awake": FEED}.get(state, FEED)
-    d.rounded_rectangle([cx0, hy, cx1, hy + 100], 28, fill=CHIP)
-    if state in ("napping", "night"):
-        moon(cx0 + 52, hy + 50, col, r=26)
+    # Put the most actionable sleep transition in one clear focal block.
+    if sleeping:
+        next_label = "EXPECTED WAKE"
+        next_value = data.get("expected_wake")
+        if not next_value or is_past(next_value):
+            next_value = "Soon"
     else:
-        sun(cx0 + 52, hy + 50, col, r=17)
-    label = {"napping": "Napping", "night": "Down for the night", "awake": "Awake"}.get(state, "Awake")
-    hs = f"since {data['asleep_since']}" if state in ("napping", "night") and data.get("asleep_since") else "in the wake window"
-    d.text((cx0 + 112, hy + 22), label, font=fnt(_BOLD, 34), fill=INK)
-    d.text((cx0 + 112, hy + 66), hs, font=fnt(_REG, 24), fill=SUB)
+        next_label = "NEXT NAP"
+        next_value = data.get("next_nap") or "No estimate yet"
+    fy = 302
+    d.rounded_rectangle([x0, fy, x1, fy + 116], 24, fill=SOFT)
+    d.text((x0 + 26, fy + 21), next_label, font=fnt(_BOLD, 17), fill=ACCENT)
+    d.text((x0 + 26, fy + 51), next_value, font=fnt(_BOLD, 36), fill=INK)
 
-    def row(y, icon, c, title, last_lbl, last_v, next_lbl, next_v, dim=False):
-        d.rounded_rectangle([cx0, y, cx1, y + 156], 28, fill=ROW_BG, outline=LINE, width=2)
-        if icon == "bottle":
-            bottle(cx0 + 52, y + 62, c)
-        else:
-            moon(cx0 + 52, y + 62, c, r=24)
-        d.text((cx0 + 104, y + 26), title, font=fnt(_BOLD, 30), fill=INK)
-        d.text((cx0 + 104, y + 80), last_lbl, font=fnt(_REG, 20), fill=SUB)
-        d.text((cx0 + 104, y + 106), last_v or "—", font=fnt(_BOLD, 29), fill=INK)
-        nc = SUB if dim else c
-        d.text((cx1 - 22, y + 80), next_lbl, font=fnt(_REG, 20), fill=nc, anchor="ra")
-        d.text((cx1 - 22, y + 106), next_v or "—", font=fnt(_BOLD, 29), fill=nc, anchor="ra")
+    # Secondary timing details sit in a simple two-by-two grid.
+    mid = 340
+    grid_y = 470
+    d.line([(mid, grid_y), (mid, grid_y + 168)], fill=LINE, width=2)
+    d.line([(x0, grid_y + 84), (x1, grid_y + 84)], fill=LINE, width=2)
 
-    fy = hy + 124
-    feed_lbl = "Feed due" if is_past(data.get("next_feed")) else "Next feed"
-    row(fy, "bottle", FEED, "Feeds", "Last fed", data["last_feed"], feed_lbl, data["next_feed"])
+    def metric(x, y, label, value, accent=False):
+        d.text((x, y), label, font=fnt(_BOLD, 16), fill=SUB)
+        d.text(
+            (x, y + 28), value or "—", font=fnt(_BOLD, 29),
+            fill=ACCENT if accent else INK,
+        )
 
-    sy = fy + 176
-    if state in ("napping", "night"):
-        wv = data.get("expected_wake")
-        if not wv or is_past(wv):
-            row(sy, "moon", SLEEP, "Sleep", "Down at", data.get("asleep_since"), "Waking", "soon", dim=True)
-        else:
-            row(sy, "moon", SLEEP, "Sleep", "Down at", data.get("asleep_since"), "Wake ~", wv)
-    else:
-        row(sy, "moon", SLEEP, "Sleep", "Last woke", data.get("last_nap_end"), "Next nap", data.get("next_nap"))
+    feed_label = "FEED DUE" if is_past(data.get("next_feed")) else "NEXT FEED"
+    metric(x0, grid_y, "LAST FEED", data.get("last_feed"))
+    metric(mid + 28, grid_y, feed_label, data.get("next_feed"), accent=True)
+    sleep_label = "SLEEP START" if sleeping else "LAST WAKE"
+    sleep_value = data.get("asleep_since") if sleeping else data.get("last_nap_end")
+    metric(x0, grid_y + 102, sleep_label, sleep_value)
+    metric(mid + 28, grid_y + 102, "BEDTIME", data.get("expected_bedtime"))
 
-    gy = sy + 180
-    d.line([(cx0, gy), (cx1, gy)], fill=LINE, width=2)
-    moon(cx0 + 18, gy + 34, NIGHT, r=15)
-    d.text((cx0 + 48, gy + 16), f"Bedtime tonight ~ {data.get('expected_bedtime') or '—'}", font=fnt(_BOLD, 27), fill=NIGHT)
+    d.text(
+        (x0, H - 64), f"Based on {data['baby']}’s recent rhythm",
+        font=fnt(_REG, 18), fill=SUB,
+    )
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -225,88 +233,87 @@ def build_day_summary_data(summary: dict, baby: str, tz, now: datetime) -> dict:
 
 
 def render_day_summary_png(data: dict) -> bytes:
-    """Draw the whole-day recap card. Height grows with the number of naps and
-    feeds logged; same visual language as the status card."""
+    """Draw a minimal whole-day recap with sleep as a simple timeline."""
     naps = data.get("naps") or []
     feeds = data.get("feeds") or []
-    # Feed times flow in a 2-column grid to keep long days compact.
-    feed_lines = max(1, (len(feeds) + 1) // 2)
+    feed_lines = max(1, (len(feeds) + 2) // 3)
 
-    M = 36
-    gap = 20
-    wake_h = 156
-    naps_h = 88 + max(1, len(naps)) * 46 + 18
-    feeds_h = 88 + feed_lines * 46 + 18
-    footer_h = 96
-    h = M + 178 + wake_h + gap + naps_h + gap + feeds_h + 24 + footer_h + M
-
+    # The canvas grows only as the plain-text timelines grow.
+    naps_start = 504
+    naps_rows_h = max(1, len(naps)) * 48
+    feeds_top = naps_start + naps_rows_h + 34
+    feeds_items = feeds_top + 68
+    feeds_rows_h = feed_lines * 46
+    bedtime_top = feeds_items + feeds_rows_h + 24
+    h = bedtime_top + 110
     img, d = _card_canvas(W, h)
-    cx0, cx1 = M + 44, W - M - 44
+    x0, x1 = 66, W - 66
 
-    d.text((cx0, M + 42), data["baby"], font=_fnt(_BOLD, 58), fill=INK)
+    d.text((x0, 58), "HAL · DAILY RECAP", font=_fnt(_BOLD, 18), fill=ACCENT)
+    d.text((x0, 91), f"{data['baby']}’s day", font=_fnt(_BOLD, 50), fill=INK)
     d.text(
-        (cx0, M + 116),
-        f"today's recap · {data['date_label']}",
-        font=_fnt(_REG, 25), fill=SUB,
+        (x0, 151), data["date_label"], font=_fnt(_REG, 22), fill=SUB,
     )
+    d.line([(x0, 194), (x1, 194)], fill=LINE, width=2)
 
-    # Morning — wake time + last night's stretch
-    y = M + 178
-    d.rounded_rectangle([cx0, y, cx1, y + wake_h], 28, fill=ROW_BG, outline=LINE, width=2)
-    _sun(d, cx0 + 52, y + 62, FEED, r=17)
-    d.text((cx0 + 104, y + 26), "Morning", font=_fnt(_BOLD, 30), fill=INK)
-    d.text((cx0 + 104, y + 80), "Woke up", font=_fnt(_REG, 20), fill=SUB)
-    d.text((cx0 + 104, y + 106), data.get("morning_wake") or "—", font=_fnt(_BOLD, 29), fill=INK)
-    d.text((cx1 - 22, y + 80), "Overnight", font=_fnt(_REG, 20), fill=NIGHT, anchor="ra")
+    # Three top-line facts replace the previous stack of summary panels.
+    col_w = (x1 - x0) / 3
+    stats = [
+        ("OVERNIGHT", data.get("night_duration") or "—"),
+        ("NAPS", str(len(naps))),
+        ("FEEDS", str(data.get("feed_count") or 0)),
+    ]
+    for i, (label, value) in enumerate(stats):
+        x = int(x0 + i * col_w)
+        if i:
+            d.line([(x - 18, 225), (x - 18, 298)], fill=LINE, width=2)
+        d.text((x, 225), label, font=_fnt(_BOLD, 16), fill=SUB)
+        d.text((x, 255), value, font=_fnt(_BOLD, 34), fill=INK)
+    d.line([(x0, 320), (x1, 320)], fill=LINE, width=2)
+
+    # Sleep timeline: wake first, then each nap with its duration.
+    d.text((x0, 355), "SLEEP", font=_fnt(_BOLD, 18), fill=ACCENT)
+    d.text((x0, 397), "Morning wake", font=_fnt(_REG, 21), fill=SUB)
     d.text(
-        (cx1 - 22, y + 106), data.get("night_duration") or "—",
-        font=_fnt(_BOLD, 29), fill=NIGHT, anchor="ra",
+        (x1, 393), data.get("morning_wake") or "—",
+        font=_fnt(_BOLD, 29), fill=INK, anchor="ra",
     )
-
-    # Naps — one line per nap: start time left, duration right
-    y += wake_h + gap
-    d.rounded_rectangle([cx0, y, cx1, y + naps_h], 28, fill=ROW_BG, outline=LINE, width=2)
-    _moon(d, cx0 + 52, y + 56, SLEEP, r=24)
-    title = f"Naps · {len(naps)}" if naps else "Naps"
-    d.text((cx0 + 104, y + 30), title, font=_fnt(_BOLD, 30), fill=INK)
+    d.text((x0, 457), "NAPS", font=_fnt(_BOLD, 16), fill=SUB)
     if data.get("total_nap"):
         d.text(
-            (cx1 - 22, y + 38), f"total {data['total_nap']}",
-            font=_fnt(_REG, 22), fill=SLEEP, anchor="ra",
+            (x1, 457), f"{data['total_nap']} TOTAL",
+            font=_fnt(_BOLD, 16), fill=ACCENT, anchor="ra",
         )
-    ly = y + 88
+    ly = naps_start
     if naps:
-        for nap in naps:
-            d.text((cx0 + 104, ly), nap["start"], font=_fnt(_BOLD, 29), fill=INK)
-            d.text((cx1 - 22, ly), nap["duration"], font=_fnt(_BOLD, 29), fill=SLEEP, anchor="ra")
-            ly += 46
+        for i, nap in enumerate(naps, start=1):
+            d.text((x0, ly), f"Nap {i}", font=_fnt(_REG, 20), fill=SUB)
+            d.text((x0 + 112, ly - 3), nap["start"], font=_fnt(_BOLD, 27), fill=INK)
+            d.text((x1, ly - 3), nap["duration"], font=_fnt(_BOLD, 27), fill=ACCENT, anchor="ra")
+            ly += 48
     else:
-        d.text((cx0 + 104, ly), "—", font=_fnt(_BOLD, 29), fill=SUB)
+        d.text((x0, ly), "No naps logged", font=_fnt(_REG, 21), fill=SUB)
 
-    # Feeds — 2-column grid of times
-    y += naps_h + gap
-    d.rounded_rectangle([cx0, y, cx1, y + feeds_h], 28, fill=ROW_BG, outline=LINE, width=2)
-    _bottle(d, cx0 + 52, y + 44, FEED)
-    title = f"Feeds · {data.get('feed_count') or 0}" if feeds else "Feeds"
-    d.text((cx0 + 104, y + 30), title, font=_fnt(_BOLD, 30), fill=INK)
-    ly = y + 88
+    # Feed times are a compact three-column list.
+    d.line([(x0, feeds_top), (x1, feeds_top)], fill=LINE, width=2)
+    d.text((x0, feeds_top + 27), "FEEDS", font=_fnt(_BOLD, 18), fill=ACCENT)
     if feeds:
-        col_x = (cx0 + 104, cx0 + 104 + 210)
+        col_x = (x0, x0 + 184, x0 + 368)
         for i, t in enumerate(feeds):
-            d.text((col_x[i % 2], ly), t, font=_fnt(_BOLD, 29), fill=INK)
-            if i % 2 == 1:
-                ly += 46
+            row = i // 3
+            d.text(
+                (col_x[i % 3], feeds_items + row * 46),
+                t, font=_fnt(_BOLD, 26), fill=INK,
+            )
     else:
-        d.text((cx0 + 104, ly), "—", font=_fnt(_BOLD, 29), fill=SUB)
+        d.text((x0, feeds_items), "No feeds logged", font=_fnt(_REG, 21), fill=SUB)
 
-    # Bedtime footer
-    y += feeds_h + 24
-    d.line([(cx0, y), (cx1, y)], fill=LINE, width=2)
-    _moon(d, cx0 + 18, y + 34, NIGHT, r=15)
+    # One clean closing line for bedtime.
+    d.line([(x0, bedtime_top), (x1, bedtime_top)], fill=LINE, width=2)
+    d.text((x0, bedtime_top + 34), "BEDTIME", font=_fnt(_BOLD, 17), fill=SUB)
     d.text(
-        (cx0 + 48, y + 16),
-        f"Bedtime ~ {data.get('bedtime') or '—'}",
-        font=_fnt(_BOLD, 27), fill=NIGHT,
+        (x1, bedtime_top + 27), data.get("bedtime") or "—",
+        font=_fnt(_BOLD, 31), fill=INK, anchor="ra",
     )
 
     buf = io.BytesIO()
@@ -354,19 +361,21 @@ async def render_for_silo(session, silo: str) -> bytes | None:
     """Compute the forecast for a family silo and render its card. None if the
     silo has no family / no events."""
     from hal_orchestrator.services.baby import (
-        as_pairs, forecast_next, get_family_for_silo, load_events, pair_sleeps,
+        as_pairs,
+        forecast_next,
+        get_family_for_silo,
+        load_events,
+        pair_sleeps,
     )
-    from datetime import timedelta
-
     family = await get_family_for_silo(session, silo)
     if family is None:
         return None
     tz = ZoneInfo(family.timezone)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     events = as_pairs(await load_events(session, family.id, since=now - timedelta(days=2)))
     if not events:
         return None
-    forecast = forecast_next(events, tz, now)
+    forecast = forecast_next(events, tz, now, birthdate=family.baby_birthdate)
     last_feed = next((at for k, at in reversed(events) if k == "feed"), None)
     sleeps = pair_sleeps(events)
     last_nap = next((s for s in reversed(sleeps) if s.end is not None and not s.is_night), None)

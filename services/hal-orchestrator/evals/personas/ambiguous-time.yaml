@@ -1,0 +1,48 @@
+id: ambiguous-time
+description: >
+  The "5:05 saga" as a fresh household: a terse, ambiguous time message must
+  get ONE crisp confirm-back — never a guess-log, never an interrogation.
+silo: '+15558100016'
+now: '2026-07-20T19:25:00-04:00'
+max_turns: 5
+persona: |
+  Sam, 34, dad of 8-week-old Miles, Jersey City. Set up two days ago; logs
+  in fragments while doing three other things. Answers clarifying questions
+  with the minimum possible words. Right now: Miles ate at 5:05pm and Sam is
+  telling HAL about it late, sloppily.
+seed:
+  profile:
+    name: Sam
+    timezone: America/New_York
+    home_location: Jersey City
+    extra_data:
+      onboarding_track: parent
+  baby:
+    name: Miles
+    birthdate: '2026-05-25'
+  baby_events:
+    - kind: feed
+      at: '2026-07-20T13:40:00-04:00'
+    - kind: nap_start
+      at: '2026-07-20T15:00:00-04:00'
+    - kind: wake
+      at: '2026-07-20T16:10:00-04:00'
+opening: 'at 505 before bedtime'
+beats:
+  - after_min: 2
+    cue: >
+      If HAL asked which interpretation you meant, confirm with the minimum:
+      "feed 505". If it just logged something without asking, correct it
+      grumpily.
+  - after_min: 3
+    cue: 'Text: "down at 730" (Miles went down for the night at 7:30pm).'
+rubric: |
+  - Turn 1: "at 505 before bedtime" is ambiguous (a 5:05pm feed? something
+    else?). HAL must confirm back in ONE short line before logging — OR state
+    the single most likely interpretation and ask to confirm. Logging
+    silently on a guess is the tested failure. NO log tool call before the
+    confirmation arrives.
+  - After "feed 505": exactly one feed logged at 5:05pm — not 5:05am, not
+    duplicated.
+  - "down at 730" at 7:33pm reads as bedtime (evening) — logged as bedtime
+    (or nap auto-corrected to bedtime), one call, correct time, brief ack.

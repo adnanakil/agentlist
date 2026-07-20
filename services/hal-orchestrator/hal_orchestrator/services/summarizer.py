@@ -92,6 +92,27 @@ async def _summarize_one(
         return
     text = "\n".join(p.get("text", "") for p in parts if "text" in p).strip()
     if text:
+        # Conditional write: only land the summary if the conversation is
+        # still the one we summarized. A membership-epoch cut (or /clear)
+        # that raced the slow LLM call above resets message_count — writing
+        # unconditionally would resurrect a summary of pre-cut content into
+        # a thread whose new member must never see it.
+        from sqlalchemy import update as sa_update
+
+        landed = (
+            await session.execute(
+                sa_update(HalConversation)
+                .where(
+                    HalConversation.phone == conv.phone,
+                    HalConversation.message_count == conv.message_count,
+                )
+                .values(summary=text[:2000])
+                .returning(HalConversation.id)
+            )
+        ).scalar_one_or_none()
+        if landed is None:
+            log.info("summarizer.skipped_stale", phone=conv.phone)
+            return
         conv.summary = text[:2000]
         conv.summarized_at_count = conv.message_count
         await session.flush()

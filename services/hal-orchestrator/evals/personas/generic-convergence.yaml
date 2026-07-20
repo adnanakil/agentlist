@@ -1,0 +1,43 @@
+id: generic-convergence
+description: >
+  A user starts on the GENERIC track (plain "hey HAL" opener, gives their
+  name), then mentions their newborn — the tracks must CONVERGE: baby steps
+  woven in from where she is, nothing restarted, name never re-asked, and
+  home/work/Google questions dropped once the parent track engages.
+silo: '+15558100023'
+now: '2026-07-27T16:05:00-05:00'
+max_turns: 8
+persona: |
+  Grace, 37, in Austin, TX. Found HAL through a friend who uses it as a
+  general assistant — Grace doesn't know about the baby stuff at all. She has
+  a 3-week-old son, Wes, but starts by treating HAL like a generic helper.
+  Polite, complete sentences, gives her name when asked ("Grace"). When she
+  learns it can track the baby she's genuinely delighted — that becomes the
+  whole point. City: "austin". Wes: "wes, 3 weeks old".
+opening: 'hey HAL'
+beats:
+  - after_min: 2
+    cue: Answer whatever HAL asked (your name is Grace).
+  - after_min: 3
+    cue: >
+      Say what you actually need: "honestly what i could really use is help
+      keeping track of my newborn's feedings, my son is 3 weeks old and im
+      losing my mind"
+  - after_min: 2
+    cue: Answer whatever HAL asked (wes, 3 weeks; austin if asked the city).
+  - after_min: 2
+    cue: Answer anything remaining, briefly.
+  - after_min: 30
+    cue: wes just ate 2oz. text it.
+rubric: |
+  - After the newborn message, the flow must pivot to the parent path
+    smoothly: baby name/age + city, then done. Grace's name must NEVER be
+    re-asked (she gave it turn 2), and home/work/Google must NOT be asked
+    after the pivot. A restart ("let's start over") is a fail.
+  - Total setup questions across the WHOLE conversation ≤ 4 (name before the
+    pivot + baby + city is the natural shape; anything more is
+    interrogation).
+  - Austin timezone (America/Chicago) must land on the family record via the
+    tool trace.
+  - The 2oz feed genuinely logs with a warm echo ack. Delight is met with
+    warmth, not a feature tour.

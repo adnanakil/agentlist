@@ -397,6 +397,28 @@ class EvalHarness:
                 await save_conversation(session, silo, gemini_history)
                 await session.commit()
 
+            # Durable archive rows (recall_history's substrate) — lets
+            # scenarios test recall/membership-boundary behavior over content
+            # that predates the conversation window.
+            archive = seed.get("archive") or []
+            if archive:
+                from ag_db.models import HalMessage
+
+                for row in archive:
+                    session.add(
+                        HalMessage(
+                            phone=row.get("silo") or silo,
+                            role=row.get("role", "user"),
+                            content=row["content"],
+                            **(
+                                {"created_at": datetime.fromisoformat(row["at"])}
+                                if row.get("at")
+                                else {}
+                            ),
+                        )
+                    )
+                await session.commit()
+
     # ------------------------------------------------------------------ #
     # Turn
     # ------------------------------------------------------------------ #
@@ -425,6 +447,12 @@ class EvalHarness:
             payload["chat_id"] = scenario["silo"]
             payload["phone"] = scenario.get("sender") or scenario["silo"]
             payload["group_name"] = scenario.get("group_name") or "eval group"
+        # Bridge-style group lifecycle events (member added/removed) — used by
+        # the persona suite's event beats.
+        if scenario.get("group_event"):
+            payload["group_event"] = scenario["group_event"]
+            if scenario.get("group_event_target"):
+                payload["group_event_target"] = scenario["group_event_target"]
 
         started = time.monotonic()
         try:

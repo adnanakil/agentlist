@@ -55,9 +55,12 @@ async def retrieve_relevant(
     settings,
     k: int = 5,
     min_score: float = 0.55,
+    since=None,
 ) -> list[str]:
     """Return up to k stored memories most semantically relevant to `query`
-    (app-side cosine over embeddings). Memories without an embedding are skipped."""
+    (app-side cosine over embeddings). Memories without an embedding are
+    skipped. `since` floors by created_at — group silos pass their membership
+    epoch so pre-epoch free text can't reach a post-cut room."""
     from hal_orchestrator.services.embeddings import cosine, embed_text
 
     qvec = await embed_text(client, settings, query)
@@ -65,6 +68,8 @@ async def retrieve_relevant(
         return []
 
     stmt = select(HalUserMemory).where(HalUserMemory.phone == phone)
+    if since is not None:
+        stmt = stmt.where(HalUserMemory.created_at >= since)
     rows = (await session.execute(stmt)).scalars().all()
 
     scored: list[tuple[float, str]] = []
@@ -78,13 +83,18 @@ async def retrieve_relevant(
     return [c for _, c in scored[:k]]
 
 
-async def recall(session: AsyncSession, phone: str, query: str) -> str:
-    """Search user's memories for matching content."""
+async def recall(
+    session: AsyncSession, phone: str, query: str, since=None
+) -> str:
+    """Search user's memories for matching content. `since` floors by
+    created_at (group membership epoch)."""
     stmt = (
         select(HalUserMemory)
         .where(HalUserMemory.phone == phone)
         .order_by(HalUserMemory.created_at.desc())
     )
+    if since is not None:
+        stmt = stmt.where(HalUserMemory.created_at >= since)
     result = await session.execute(stmt)
     memories = result.scalars().all()
 
@@ -99,14 +109,19 @@ async def recall(session: AsyncSession, phone: str, query: str) -> str:
     return "Found memories:\n" + "\n".join(f"- {m}" for m in recent)
 
 
-async def list_memories(session: AsyncSession, phone: str) -> str:
-    """List recent memories for a user."""
+async def list_memories(
+    session: AsyncSession, phone: str, since=None
+) -> str:
+    """List recent memories for a user. `since` floors by created_at (group
+    membership epoch)."""
     stmt = (
         select(HalUserMemory)
         .where(HalUserMemory.phone == phone)
         .order_by(HalUserMemory.created_at.desc())
         .limit(10)
     )
+    if since is not None:
+        stmt = stmt.where(HalUserMemory.created_at >= since)
     result = await session.execute(stmt)
     memories = result.scalars().all()
 

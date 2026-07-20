@@ -378,7 +378,7 @@ async def _gate_reminder(
             await load_events(session, family.id, since=now - timedelta(days=14))
         )
         if events:
-            forecast = forecast_next(events, tz, now)
+            forecast = forecast_next(events, tz, now, birthdate=family.baby_birthdate)
             situation_parts.append(format_forecast(forecast, tz, family.baby_name, now))
 
     # Recent conversation in the reminder's silo (best-effort). Newest last so
@@ -386,7 +386,12 @@ async def _gate_reminder(
     try:
         from hal_orchestrator.services.history_search import search_history
 
-        recent = await search_history(session, reminder.phone, query="", limit=8)
+        from hal_orchestrator.services.membership import group_memory_floor
+
+        _floor = await group_memory_floor(session, reminder.phone, None)
+        recent = await search_history(
+            session, reminder.phone, query="", since=_floor, limit=8
+        )
         if recent:
             lines = [
                 f"[{(r.get('at') or '')[:16]}] {r['role']}: {r['content'][:200]}"

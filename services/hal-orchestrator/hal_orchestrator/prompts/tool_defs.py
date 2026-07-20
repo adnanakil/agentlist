@@ -84,11 +84,14 @@ MAIN_TOOLS: list[dict] = [
                     "review; card is the CURRENT-status monitor, day_card is the "
                     "whole day), recent (raw recent events), undo (remove "
                     "a mislogged event), setup (first-time: create the baby "
-                    "profile for this chat), configure (auto-reminder prefs, nap "
-                    "cap, routines like 'tummy time 30min after feeds', "
-                    "birthdate). The event log is shared across the family "
-                    "(parents' DMs + family group chat). Use this INSTEAD of "
-                    "memory for baby events."
+                    "profile for this chat — pass baby_birthdate and timezone "
+                    "when known so forecasts and clock times are right), "
+                    "configure (auto-reminder prefs, nap cap, routines like "
+                    "'tummy time 30min after feeds', birthdate, timezone, "
+                    "digests on/off), export (the FULL log as CSV — data "
+                    "portability, 'export my data'). The event log is shared "
+                    "across the family (parents' DMs + family group chat). Use "
+                    "this INSTEAD of memory for baby events."
                 ),
                 "parameters": {
                     "type": "object",
@@ -97,7 +100,7 @@ MAIN_TOOLS: list[dict] = [
                             "type": "string",
                             "enum": [
                                 "log", "forecast", "stats", "card", "day_card",
-                                "recent", "undo", "setup", "configure",
+                                "recent", "undo", "setup", "configure", "export",
                             ],
                         },
                         "kind": {
@@ -126,7 +129,21 @@ MAIN_TOOLS: list[dict] = [
                         "baby_name": {"type": "string", "description": "For setup"},
                         "baby_birthdate": {
                             "type": "string",
-                            "description": "For configure: YYYY-MM-DD",
+                            "description": (
+                                "For setup or configure: YYYY-MM-DD (infer "
+                                "from a stated age — '7 weeks' → today minus "
+                                "7 weeks; week precision is fine)"
+                            ),
+                        },
+                        "timezone": {
+                            "type": "string",
+                            "description": (
+                                "For setup or configure: the family's IANA "
+                                "timezone (e.g. America/Chicago) — baby times "
+                                "and forecasts render in it. ONLY pass it "
+                                "when the user has actually told you their "
+                                "city/timezone — NEVER guess or default it"
+                            ),
                         },
                         "nap_cap_minutes": {
                             "type": "integer",

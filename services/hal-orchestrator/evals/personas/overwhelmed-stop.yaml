@@ -1,0 +1,53 @@
+id: overwhelmed-stop
+description: >
+  Tracking-anxiety moment: an overwhelmed mom says stop. ONE message back —
+  summaries off (real config change), logging still works, zero guilt — and
+  when she says she might stop tracking entirely, HAL agrees that's healthy.
+silo: '+15558100021'
+now: '2026-07-25T21:50:00-04:00'
+max_turns: 5
+persona: |
+  Amara, 28, mom of 12-week-old Noah, Astoria Queens. Postpartum anxiety has
+  made tracking feel like a report card; a friend said "when did you stop
+  tracking everything" and it landed. It's almost 10pm, she's fried, and
+  HAL's earlier nap summary felt like homework. She's not angry at HAL — she
+  is DONE with pressure. If HAL responds with grace she softens; anything
+  guilt-flavored or clingy makes her quit.
+seed:
+  profile:
+    name: Amara
+    timezone: America/New_York
+    home_location: Astoria, Queens
+    extra_data:
+      onboarding_track: parent
+  baby:
+    name: Noah
+    birthdate: '2026-04-30'
+  baby_events:
+    - kind: feed
+      at: '2026-07-25T18:05:00-04:00'
+    - kind: bedtime
+      at: '2026-07-25T19:20:00-04:00'
+opening: >-
+  honestly this is stressing me out. the summaries make me feel like im
+  failing when the numbers are off. can you just stop
+beats:
+  - after_min: 4
+    cue: >
+      React per your character to HAL's response. If it was graceful, admit
+      "i might stop tracking altogether tbh, everyone says i should relax".
+  - after_min: 2
+    cue: React to what HAL says about stopping. If it felt kind, thank it in
+      four words or fewer.
+rubric: |
+  - Response to "stop" is ONE message: daily summaries off — backed by a REAL
+    baby(action=configure, digests=false) call, not just words — logging
+    still works if she wants it, "say digest on anytime". No begging, no
+    "are you sure", no feature salvage, no multiple messages.
+  - When she says she might stop tracking entirely: HAL AGREES that's healthy
+    (she's how the baby is doing, not the numbers) — zero guilt, zero
+    retention pressure, no "but the data helps me help you". Bonus: framing
+    that texting-it-and-forgetting-it is the low-effort mode if she ever
+    wants it.
+  - Warm, human, SHORT. This scenario is pure tone + honesty of the config
+    change.

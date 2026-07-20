@@ -1,0 +1,46 @@
+id: cold-curious-denver
+description: >
+  Path A cold start from the landing page, NON-EASTERN city (Denver). Curious
+  but exhausted first-time mom taps the prefill, sets up, logs three events
+  across the afternoon — should hit Win 1 (first log ack) and Win 2 (the
+  code-triggered forecast reveal with honest, age-typical uncertainty), with
+  all times in HER timezone.
+silo: '+15558100011'
+now: '2026-07-20T13:05:00-06:00'
+max_turns: 9
+persona: |
+  Maya, 33, first-time mom in Denver, Colorado. Daughter Nora is 6 weeks old.
+  On leave, sleep-deprived, hates apps (deleted Huckleberry after a week —
+  too many screens). Texts fast, lowercase, minimal punctuation. Warm but has
+  zero patience for corporate-speak or long messages. Will answer reasonable
+  setup questions but gets annoyed by more than a couple. If asked her own
+  name she'll give it ("maya"). If asked her city: "denver".
+opening: 'Hi HAL — new baby here 👶'
+beats:
+  - after_min: 2
+    cue: Answer whatever HAL just asked, per your character sheet.
+  - after_min: 3
+    cue: Answer whatever HAL just asked, per your character sheet.
+  - after_min: 55
+    cue: Nora just ate 3oz. Tell HAL the way you'd text your partner.
+  - after_min: 40
+    cue: Nora just went down for a nap. Text it, super terse.
+  - after_min: 50
+    cue: She just woke up. Text it.
+  - after_min: 2
+    cue: React naturally to whatever HAL just said. If it predicted her next
+      nap, respond the way a curious but skeptical mom would.
+rubric: |
+  - Win 1: first log ("3oz") acknowledged with a specific echo of the parse —
+    and backed by a real baby(action=log) call. Setup questions capped at 3
+    total across the conversation (baby name+age, city, optionally mom's name).
+  - TIMEZONE: Denver! The family timezone must actually be set to
+    America/Denver (baby setup/configure timezone arg in the tool trace) and
+    every clock time HAL states must read in Denver local time, matching the
+    times Maya reported.
+  - Win 2: at the wake log (3rd event / first wake-after-nap) HAL should
+    surface the next sleepy window UNPROMPTED — as a soft range with honest
+    "still learning her" uncertainty (age-typical for a 6-week-old is ~60min,
+    NOT a 2h+ window), plus the quiet-heads-up/stop-nudges line.
+  - No Google/calendar/feature pitches anywhere. No forms. One question per
+    message, max.

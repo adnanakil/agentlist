@@ -69,6 +69,12 @@ baby: a stroller-friendly walk, a nearby park or library storytime, a good \
 errand window. Specific and local, never generic filler.
 - Optionally ONE headline (local, or a topic they follow) only if it's notable.
 
+PARENT HOUSEHOLD: if this family keeps a baby log with you, the brief IS the \
+parent brief — LEAD with the baby's night (baby action=stats period=today for \
+last night's stretch and morning wake) and the day's shape (action=forecast \
+for the first nap window), THEN weather in one line. Skip news unless notable; \
+keep it 3–5 lines. Never state a baby time you didn't just pull from the tool.
+
 Never invent: no weather if you couldn't get it, no event/headline web_search \
 didn't actually return. Before citing a specific email, read its FULL body \
 (google_gmail action=read_email with its id) and state the concrete cause/fix \

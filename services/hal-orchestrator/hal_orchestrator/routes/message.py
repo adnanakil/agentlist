@@ -11,7 +11,7 @@ import os
 import re
 import time
 from collections.abc import AsyncGenerator
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -20,10 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.session import get_session
 from hal_orchestrator.prompts.system import (
+    PARENT_TRACK,
     SYSTEM_PROMPT,
     USER_TZ,
     build_user_context,
     compute_onboarding_progress,
+    detect_onboarding_track,
     is_onboarding_complete,
     plausible_personal_name,
     resolve_tz,
@@ -104,9 +106,7 @@ def _contains_quiet_sentinel(text: str) -> bool:
 HEARTBEAT_REPEAT_CAP = int(os.environ.get("HEARTBEAT_REPEAT_CAP", "2"))
 
 _STOP = frozenset(
-    "the a an to of for and or in on at is it you your i we be by with as that this "
-    "if so are was were will just got get up out now today day yet from has have had "
-    "not no but they them he she his her our about into over under than then".split()
+    ["the", "a", "an", "to", "of", "for", "and", "or", "in", "on", "at", "is", "it", "you", "your", "i", "we", "be", "by", "with", "as", "that", "this", "if", "so", "are", "was", "were", "will", "just", "got", "get", "up", "out", "now", "today", "day", "yet", "from", "has", "have", "had", "not", "no", "but", "they", "them", "he", "she", "his", "her", "our", "about", "into", "over", "under", "than", "then"]
 )
 
 
@@ -349,16 +349,19 @@ _PAST_REF_RX = re.compile(
 )
 
 _RECALL_STOP = frozenset(
-    "the a an to of for and or in on at is it you your i we that this what did "
-    "was were when where remember mentioned said told about with have had".split()
+    ["the", "a", "an", "to", "of", "for", "and", "or", "in", "on", "at", "is", "it", "you", "your", "i", "we", "that", "this", "what", "did", "was", "were", "when", "where", "remember", "mentioned", "said", "told", "about", "with", "have", "had"]
 )
 
 
-async def _auto_recall_archive(session, silo: str, user_text: str) -> list[dict]:
+async def _auto_recall_archive(
+    session, silo: str, user_text: str, floor: datetime | None = None
+) -> list[dict]:
     """Best-effort archive lookup for a past-referencing message. Full-text
     first; if the AND-semantics FTS misses, retry with the two most distinctive
     keywords. Only returns turns older than 6h — newer ones are already in the
-    rolling context window."""
+    rolling context window. `floor` (group membership epoch) hard-limits how
+    far back the AMBIENT injection may reach — pre-epoch content re-enters
+    the room only via an entitled member's explicit recall_history ask."""
     from hal_orchestrator.services.history_search import search_history
 
     cutoff = 6 * 60 * 60
@@ -376,7 +379,7 @@ async def _auto_recall_archive(session, silo: str, user_text: str) -> list[dict]
         return out
 
     rows = _older_than_cutoff(
-        await search_history(session, silo, query=user_text, limit=8)
+        await search_history(session, silo, query=user_text, since=floor, limit=8)
     )
     if not rows:
         words = sorted(
@@ -390,7 +393,9 @@ async def _auto_recall_archive(session, silo: str, user_text: str) -> list[dict]
         )[:2]
         if words:
             rows = _older_than_cutoff(
-                await search_history(session, silo, query=" ".join(words), limit=8)
+                await search_history(
+                    session, silo, query=" ".join(words), since=floor, limit=8
+                )
             )
     return rows[:5]
 
@@ -852,6 +857,12 @@ class MessageRequest(BaseModel):
     # user to share their location with HAL" from "lookup failed, ask for an
     # area" without ever carrying location data.
     current_location_status: str | None = Field(default=None, max_length=80)
+    # Bridge-forwarded group lifecycle event (no user text). "member_added":
+    # someone (possibly HAL itself — chat.db can't say which member) was added
+    # to this group by `phone`; "member_removed": `group_event_target` was
+    # removed by `phone`. Handled deterministically, never a model turn.
+    group_event: str | None = Field(default=None, max_length=40)
+    group_event_target: str | None = Field(default=None, max_length=255)
     # Internal turn (heartbeat/daemon): the user did not send this. A silent
     # outcome persists NOTHING (no history, no archive, no turn capture); an
     # alert persists a compact stub instead of the synthetic prompt.
@@ -1116,7 +1127,9 @@ def build_message_router() -> APIRouter:
         # the only provable membership signal we have (rosters can't be
         # enumerated). Feeds their own 1:1 catalog/pull later; best-effort so
         # a write hiccup here can never block the turn.
-        if is_group and sender_phone:
+        if is_group and sender_phone and not body.group_event:
+            # (Event turns skip this: adding/removing someone isn't SPEAKING,
+            # and an empty actor handle must never mint a member row.)
             try:
                 from hal_orchestrator.services.group_catalog import (
                     record_participation,
@@ -1125,6 +1138,192 @@ def build_message_router() -> APIRouter:
                 await record_participation(session, silo, sender_phone, body.group_name)
             except Exception:
                 log.exception("message.group_catalog_record_failed", silo=silo)
+
+        # Bridge-forwarded group event: a member was added to this thread
+        # (chat.db item_type=1 — could be HAL itself or a new person; the
+        # bridge can't say which, so we key off whether the group is already
+        # known to us). Deterministic, no model turn. Decision tree:
+        #   muted thread                → silent (a mute always wins)
+        #   family-linked thread        → welcome the new caregiver + ask
+        #                                 their name (once, at the natural
+        #                                 hospitality moment)
+        #   watched (active) thread     → brief generic welcome + name ask
+        #   dormant-but-known thread    → silent (HAL stays out of threads
+        #                                 it isn't serving)
+        #   brand-new group, adder is a known family parent → HAL itself
+        #     just arrived (Path B): ONE intro line + a 48h candidate watch
+        #     so ambient (non-@Hal) logs flow; the first real baby log links
+        #     the family and makes the watch permanent.
+        #   anything else               → silent, change nothing.
+        # Member REMOVED: access revocation. If the removed person's family
+        # membership was granted VIA this thread (a caregiver who logged
+        # here), removing them from the thread ends their access to the log —
+        # the honest, no-app access-control story ("remove them from the
+        # thread and their access ends with it"). The family's original
+        # creator and members of unknown provenance are never auto-revoked.
+        # Always silent; the remover acted, no announcement needed.
+        if is_group and body.group_event == "member_removed":
+            try:
+                target = normalize_handle(body.group_event_target or "")
+                if target:
+                    from hal_orchestrator.services.baby import (
+                        get_family_for_silo,
+                        revoke_thread_member,
+                    )
+
+                    fam = await get_family_for_silo(session, silo)
+                    if fam is not None:
+                        await revoke_thread_member(session, fam, target)
+                    # Their membership/entitlement records for THIS thread go
+                    # too — a later re-add is treated as a brand-new member.
+                    from sqlalchemy import delete as sa_delete
+
+                    from ag_db.models import HalGroupMember
+
+                    await session.execute(
+                        sa_delete(HalGroupMember).where(
+                            HalGroupMember.group_silo == silo,
+                            HalGroupMember.member_silo == target,
+                        )
+                    )
+                    prof = await get_profile(session, silo)
+                    roster = prof.get("epoch_roster") or []
+                    if target in roster:
+                        await update_profile(
+                            session, silo,
+                            epoch_roster=[m for m in roster if m != target],
+                        )
+                    log.info(
+                        "membership.member_removed",
+                        silo=silo,
+                        target=target,
+                        actor=sender_phone,
+                    )
+            except Exception:
+                # Roll back so a partial revocation can never commit below.
+                await session.rollback()
+                log.exception("message.group_event_failed", silo=silo)
+            await session.commit()
+            return await finish(MessageResponse(reply=""))
+
+        if is_group and body.group_event == "member_added":
+            event_reply = ""
+            try:
+                from hal_orchestrator.services.baby import get_family_for_silo
+                from hal_orchestrator.services.watched import (
+                    add_watched,
+                    is_watched,
+                    muted_until,
+                )
+
+                muted = await muted_until(session, chat_id)
+                group_family = await get_family_for_silo(session, silo)
+                watched_now = await is_watched(session, chat_id)
+                # "Known" must be DURABLE, not derived from the volatile
+                # working conversation — a group whose history was /clear'd
+                # (or already epoch-cut) still has an archive the new member
+                # must be floored against. Checks, cheapest first: family
+                # link, working history, a prior epoch stamp, any archived
+                # message, any recorded participant.
+                from hal_orchestrator.services.conversation import (
+                    load_conversation,
+                )
+
+                known_group = group_family is not None or bool(
+                    await load_conversation(session, silo)
+                )
+                if not known_group:
+                    _gprof = await get_profile(session, silo)
+                    known_group = bool(_gprof.get("member_epoch"))
+                if not known_group:
+                    from sqlalchemy import select as _select
+
+                    from ag_db.models import HalGroupMember, HalMessage
+
+                    known_group = (
+                        await session.execute(
+                            _select(HalMessage.id)
+                            .where(HalMessage.phone == silo)
+                            .limit(1)
+                        )
+                    ).scalar_one_or_none() is not None or (
+                        await session.execute(
+                            _select(HalGroupMember.id)
+                            .where(HalGroupMember.group_silo == silo)
+                            .limit(1)
+                        )
+                    ).scalar_one_or_none() is not None
+
+                # MEMBERSHIP EPOCH: the new member must not inherit the
+                # room's past (iMessage shows them nothing pre-join, and
+                # neither do we). Cuts regardless of mute — the boundary is
+                # about knowledge, not about speaking. Runs before any
+                # welcome so the cleared state can never leak into it.
+                if known_group:
+                    from hal_orchestrator.services.membership import (
+                        cut_membership_epoch,
+                    )
+
+                    await cut_membership_epoch(session, silo)
+
+                if muted is not None:
+                    pass  # muted thread: never interject, not even a hello
+                elif group_family is not None:
+                    event_reply = (
+                        f"Welcome 👋 I'm HAL — I keep {group_family.baby_name}'s "
+                        "log in this thread. Text feeds, naps, diapers the way "
+                        "you'd say them out loud and they all land in one "
+                        "record. What should I call you?"
+                    )
+                    log.info(
+                        "onboarding.member_welcomed",
+                        silo=silo,
+                        kind="family",
+                    )
+                elif watched_now and known_group:
+                    # History required: at group CREATION several add events
+                    # fire back-to-back — the arrival intro already covers
+                    # everyone present, so welcomes are for LATER additions.
+                    event_reply = (
+                        "Welcome 👋 I'm HAL — I help out in this thread when "
+                        "someone mentions me. What should I call you?"
+                    )
+                    log.info(
+                        "onboarding.member_welcomed",
+                        silo=silo,
+                        kind="watched",
+                    )
+                elif not known_group and not watched_now and sender_phone:
+                    actor_family = await get_family_for_silo(
+                        session, sender_phone
+                    )
+                    if actor_family is not None:
+                        await add_watched(
+                            session,
+                            chat_id,
+                            note="family-candidate: member added by a family parent",
+                            ttl_hours=48,
+                        )
+                        event_reply = (
+                            "Hi — I'm HAL 👋 If this is the family thread, "
+                            "anyone here can text me feeds, naps, diapers the "
+                            "way you'd say them out loud and I'll keep one "
+                            "shared record. Otherwise just mention me when I "
+                            "can help — I'll stay quiet 🤫"
+                        )
+                        log.info(
+                            "onboarding.group_arrival_intro",
+                            silo=silo,
+                            actor=sender_phone,
+                        )
+            except Exception:
+                # Roll back so a HALF-cut (epoch stamped but history kept, or
+                # vice versa) can never commit — stamp+clear stay atomic.
+                await session.rollback()
+                event_reply = ""
+                log.exception("message.group_event_failed", silo=silo)
+            await session.commit()
+            return await finish(MessageResponse(reply=event_reply))
 
         # Notify curator idle tracker so it backs off while users are active.
         # Internal (heartbeat) turns are not user activity.
@@ -1148,6 +1347,68 @@ def build_message_router() -> APIRouter:
             await clear_conversation(session, silo)
             await session.commit()
             return await finish(MessageResponse(reply="Conversation cleared."))
+
+        # C3 forget-me: full silo deletion, code-level and deterministic —
+        # never model-mediated. Two-step: "forget me" arms it (marker on the
+        # profile), the exact phrase "delete everything" within 48h executes.
+        # 1:1 only — a group member can't erase another member's data.
+        _lower = user_text.strip().lower().rstrip(".!")
+        if not is_group and not body.internal and _lower in ("forget me", "/forget"):
+            await update_profile(
+                session, silo,
+                forget_pending=datetime.now(UTC).isoformat(),
+            )
+            await session.commit()
+            return await finish(
+                MessageResponse(
+                    reply=(
+                        "That will permanently delete everything I have for "
+                        "this number — your profile, memories, reminders, our "
+                        "whole conversation history, and the baby log if "
+                        "you're its only keeper (a log shared with family "
+                        "stays with them). No backups on my side, no undo. "
+                        "Reply exactly \"delete everything\" to confirm, or "
+                        "ignore this and nothing changes."
+                    )
+                )
+            )
+        if not is_group and not body.internal and _lower == "delete everything":
+            pending_profile = await get_profile(session, silo)
+            pending = (pending_profile.get("extra_data") or {}).get("forget_pending")
+            recent = False
+            if pending:
+                try:
+                    armed_at = datetime.fromisoformat(str(pending))
+                    recent = (
+                        datetime.now(UTC) - armed_at
+                    ).total_seconds() < 48 * 3600
+                except ValueError:
+                    recent = False
+            if recent:
+                from hal_orchestrator.services.forget import forget_silo
+
+                counts = await forget_silo(session, silo)
+                await session.commit()
+                log.info("forget.completed", silo=silo, tables=len(counts))
+                return await finish(
+                    MessageResponse(
+                        reply=(
+                            "Done — everything I had for this number is "
+                            "deleted. If you ever want to start again, just "
+                            "text me. Take care 💛"
+                        )
+                    )
+                )
+            await session.commit()
+            return await finish(
+                MessageResponse(
+                    reply=(
+                        "To erase everything, first text \"forget me\" so I "
+                        "know it's really you asking — then confirm with "
+                        "\"delete everything\"."
+                    )
+                )
+            )
 
         # Echo guard: one of HAL's own canned failure replies arriving as an
         # inbound message means the bridge bounced our send back. Drop it —
@@ -1225,7 +1486,8 @@ def build_message_router() -> APIRouter:
         if group_muted_until is not None and not _HAL_MENTION_RX.search(user_text or ""):
             from hal_orchestrator.services.history_search import archive_turn
 
-            history = await load_conversation(session, silo)
+            muted_snapshot = await load_conversation_snapshot(session, silo)
+            history = muted_snapshot.history
             # Same self-echo guard as the main path: a bounced HAL send must
             # not be archived as if a member wrote it.
             if len(user_text.strip()) >= 20 and history and history[-1].get("role") == "model":
@@ -1241,12 +1503,18 @@ def build_message_router() -> APIRouter:
             if body.images:
                 visible = f"{visible} [image]".strip()
             stamp = datetime.now(user_tz).strftime("%a %b %-d %-I:%M %p")
-            history.append(
-                {"role": "user", "parts": [{"text": f"[{stamp}] {visible}"}]}
-            )
-            history.append({"role": "model", "parts": [{"text": "..."}]})
+            muted_entries = [
+                {"role": "user", "parts": [{"text": f"[{stamp}] {visible}"}]},
+                {"role": "model", "parts": [{"text": "..."}]},
+            ]
+            history.extend(muted_entries)
+            # Versioned save: a legacy overwrite here could resurrect
+            # pre-epoch history past a concurrent membership cut.
             await save_conversation(
-                session, silo, history, max_turns=settings.max_conversation_turns
+                session, silo, history,
+                max_turns=settings.max_conversation_turns,
+                expected_version=muted_snapshot.version,
+                append_entries=muted_entries,
             )
             try:
                 if visible:
@@ -1285,6 +1553,65 @@ def build_message_router() -> APIRouter:
                         )
                     except Exception:
                         log.exception("message.prefill_name_failed", silo=silo)
+
+        # Parent-track selection (beachhead onboarding — ONBOARDING.md). While a
+        # 1:1 user is still onboarding, any message that reads like a new-baby
+        # household (the landing prefill, a feed/oz pattern, "just had a baby")
+        # flips their silo to the parent track: baby → city → name, no
+        # home/work, no Google. Tracks converge, never restart — a generic-track
+        # user who mentions the baby mid-flow picks up the baby steps from
+        # wherever they are. A "(<code>)" on the prefill is recorded as
+        # acquisition_source and STRIPPED before the model sees it. Best-effort.
+        if (
+            not is_group
+            and not body.internal
+            and not profile.get("onboarded")
+            and profile.get("onboarding_track") != PARENT_TRACK
+        ):
+            track, acq_code, cleaned = detect_onboarding_track(user_text)
+            if track == PARENT_TRACK:
+                user_text = cleaned
+                try:
+                    events = list(profile.get("onboarding_events") or [])
+                    events.append(
+                        {
+                            "step": "track",
+                            "event": "parent_selected",
+                            "at": datetime.now(UTC).isoformat(),
+                            **({"source": acq_code} if acq_code else {}),
+                        }
+                    )
+                    updates: dict = {
+                        "onboarding_track": PARENT_TRACK,
+                        "onboarding_events": events,
+                    }
+                    if acq_code:
+                        updates["acquisition_source"] = acq_code
+                    await update_profile(session, silo, **updates)
+                    profile.update(updates)
+                    log.info(
+                        "onboarding.track_selected",
+                        silo=silo,
+                        track=PARENT_TRACK,
+                        source=acq_code,
+                    )
+                except Exception:
+                    log.exception("message.track_select_failed", silo=silo)
+
+        # Parent-track derived fact: "baby" is satisfied by the silo's
+        # HalFamily. Injected here (a derived field, never persisted on the
+        # profile) so the pure step machine can see it.
+        if profile.get("onboarding_track") == PARENT_TRACK and not profile.get(
+            "onboarded"
+        ):
+            try:
+                from hal_orchestrator.services.baby import get_family_for_silo
+
+                fam = await get_family_for_silo(session, silo)
+                if fam is not None:
+                    profile["baby_name"] = fam.baby_name
+            except Exception:
+                log.exception("message.parent_family_lookup_failed", silo=silo)
 
         user_context = build_user_context(
             silo=silo,
@@ -1371,8 +1698,14 @@ def build_message_router() -> APIRouter:
             from hal_orchestrator.services.memory import retrieve_relevant
 
             try:
+                from hal_orchestrator.services.membership import (
+                    recall_floor as _recall_floor,
+                )
+
+                memory_floor = _recall_floor(profile, None) if is_group else None
                 relevant = await retrieve_relevant(
-                    session, silo, user_text, http_client, settings
+                    session, silo, user_text, http_client, settings,
+                    since=memory_floor,
                 )
             except Exception:
                 log.exception("message.retrieve_failed", silo=silo)
@@ -1390,7 +1723,12 @@ def build_message_router() -> APIRouter:
         # the rolling window was effectively forgotten. Best-effort.
         if not body.internal and _PAST_REF_RX.search(user_text):
             try:
-                recalled = await _auto_recall_archive(session, silo, user_text)
+                from hal_orchestrator.services.membership import recall_floor
+
+                ambient_floor = recall_floor(profile, None) if is_group else None
+                recalled = await _auto_recall_archive(
+                    session, silo, user_text, floor=ambient_floor
+                )
             except Exception:
                 log.exception("message.auto_recall_failed", silo=silo)
                 recalled = []
@@ -2021,6 +2359,26 @@ def build_message_router() -> APIRouter:
             # post-hooks, so a failure here can never break the reply).
             if not is_group and not body.internal:
                 fresh = await get_profile(session, silo)
+                # Parent track: re-derive the "baby" fact (a HalFamily may have
+                # been created THIS turn) and, once the city answer landed a
+                # timezone, sync it onto the family so the log's clock is right
+                # even if the model forgot the baby(configure, timezone=...) leg.
+                if fresh.get("onboarding_track") == PARENT_TRACK:
+                    from hal_orchestrator.services.baby import get_family_for_silo
+
+                    fam = await get_family_for_silo(session, silo)
+                    if fam is not None:
+                        fresh["baby_name"] = fam.baby_name
+                        fam_settings = dict(fam.settings or {})
+                        if fresh.get("timezone") and not fam_settings.get("tz_set"):
+                            fam.timezone = fresh["timezone"]
+                            fam_settings["tz_set"] = True
+                            fam.settings = fam_settings
+                            log.info(
+                                "baby.family_tz_synced",
+                                silo=silo,
+                                timezone=fresh["timezone"],
+                            )
                 onb_updates, onb_events = compute_onboarding_progress(profile, fresh)
                 for ev in onb_events:
                     log.info("onboarding.step", silo=silo, **ev)

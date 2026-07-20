@@ -154,7 +154,13 @@ async def get_summary(session: AsyncSession, phone: str) -> str:
 
 
 async def clear_conversation(session: AsyncSession, phone: str) -> None:
-    """Clear conversation history for a phone number."""
+    """Clear conversation history for a phone number.
+
+    Bumps the optimistic version so an IN-FLIGHT turn that loaded pre-clear
+    history fails its versioned save and falls into the merge path — which
+    appends only that turn's new entries onto the cleared history. Without
+    the bump, a racing save could resurrect the entire pre-clear transcript
+    (fatal for membership-epoch cuts)."""
     stmt = select(HalConversation).where(HalConversation.phone == phone)
     result = await session.execute(stmt)
     conv = result.scalar_one_or_none()
@@ -163,6 +169,7 @@ async def clear_conversation(session: AsyncSession, phone: str) -> None:
         conv.message_count = 0
         conv.summary = ""
         conv.summarized_at_count = 0
+        conv.version = (conv.version or 0) + 1
         await session.flush()
 
 

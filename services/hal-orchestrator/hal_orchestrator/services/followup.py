@@ -177,8 +177,18 @@ async def load_recent_archive(
     session: AsyncSession, silo: str, limit: int = SCAN_MESSAGES
 ) -> list[dict]:
     """Newest-last [{at, role, text}] from the durable archive (real
-    timestamps, unlike the rolling history window)."""
+    timestamps, unlike the rolling history window). Group silos are clamped
+    to their membership epoch — a proactive send drafted from pre-epoch
+    content would leak it to members who never saw it."""
     since = datetime.now(timezone.utc) - timedelta(days=SCAN_LOOKBACK_DAYS)
+    try:
+        from hal_orchestrator.services.membership import group_memory_floor
+
+        floor = await group_memory_floor(session, silo, None)
+        if floor is not None and floor > since:
+            since = floor
+    except Exception:
+        pass
     rows = (
         await session.execute(
             select(HalMessage)

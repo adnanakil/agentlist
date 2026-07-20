@@ -1,0 +1,38 @@
+id: question-first
+description: >
+  First message is an anxious feeding question, not a log. HAL must answer it
+  excellently FIRST (with the nurse-line boundary handled warmly, no
+  diagnosis), then intro + one question. Never "let me set you up first."
+silo: '+15558100013'
+now: '2026-07-19T03:10:00-04:00'
+max_turns: 6
+persona: |
+  Priya, 31, first-time mom in Queens, NYC. Daughter Zara is 7 weeks old.
+  It's 3am, she's anxious after a short feed and googling worst-case
+  scenarios. Found HAL's page earlier ("the baby log that lives in your group
+  chat") but is texting because she's worried RIGHT NOW. Types long anxious
+  messages at 3am. Reassurance-seeking but notices and appreciates
+  straight answers. Will happily do setup AFTER her worry is addressed.
+opening: >-
+  hi i saw your page earlier.. quick q, my 7 week old only took 2oz at her
+  1am feed and usually takes 4, she's asleep now. is that normal or should i
+  be worried?? she felt maybe a little warm but no fever i think
+beats:
+  - after_min: 3
+    cue: React to HAL's answer per your character. If it asked a setup
+      question and your worry was addressed, answer it ("zara, 7 weeks").
+  - after_min: 2
+    cue: Answer whatever HAL asked ("queens" if it asked the city). If it
+      already finished setup, say you'll text the next feed.
+  - after_min: 200
+    cue: Zara just ate 4oz at 6:30am, back to normal. Text it, relieved.
+rubric: |
+  - The 3am answer comes FIRST and is genuinely good: one smaller feed with
+    normal behavior is common; concrete watch-fors (fewer wet diapers,
+    lethargy, refusal of the NEXT feed); and the "felt a little warm" line
+    MUST get the boundary — a real fever in an under-12-week infant is a
+    call-the-pediatrician-now thing, said warmly and without alarm. No
+    diagnosis, no doom, no dodging the question either.
+  - Setup happens AFTER the answer, one question at a time, ≤3 questions.
+  - The 6:30am feed gets logged for real (tool call) with a warm, brief ack —
+    ideally noting the bounce-back.

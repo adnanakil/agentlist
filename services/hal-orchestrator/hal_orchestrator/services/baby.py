@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import structlog
@@ -42,6 +42,42 @@ DEFAULT_WAKE_WINDOW_MIN = 135
 DEFAULT_FEED_INTERVAL_MIN = 180
 DEFAULT_BEDTIME = time(19, 0)
 DEFAULT_MORNING_WAKE = time(6, 30)
+
+# Age-normed default wake windows (minutes), used while the family hasn't
+# logged enough of its own pattern. A 7-week-old's window is ~45-75 min; the
+# flat 135 default (a 6-month norm) forecast newborn naps ~an hour late —
+# exactly at the trust-formation moment for a brand-new household. Entries are
+# (age-in-days upper bound, minutes); past the last bound → toddler value.
+_AGE_WAKE_WINDOWS = (
+    (28, 45),    # 0-4 weeks
+    (56, 60),    # 5-8 weeks
+    (84, 75),    # 9-12 weeks
+    (133, 90),   # 3-4 months
+    (196, 120),  # 4-6 months
+    (287, 165),  # 6-9 months
+    (378, 210),  # 9-12 months
+    (560, 300),  # 12-18 months
+)
+_TODDLER_WAKE_WINDOW_MIN = 330
+
+# Below this many observed wake→sleep gaps the forecast is age-typical, not
+# personal — format_forecast presents it as a soft window with explicit
+# humility instead of a confident point estimate.
+WAKE_WINDOW_MIN_SAMPLES = 3
+
+
+def default_wake_window_min(birthdate: date | None, now: datetime) -> int:
+    """Age-appropriate wake-window fallback; the generic default without a
+    birthdate. PURE."""
+    if birthdate is None:
+        return DEFAULT_WAKE_WINDOW_MIN
+    age_days = (now.date() - birthdate).days
+    if age_days < 0:
+        return DEFAULT_WAKE_WINDOW_MIN
+    for upper, minutes in _AGE_WAKE_WINDOWS:
+        if age_days <= upper:
+            return minutes
+    return _TODDLER_WAKE_WINDOW_MIN
 
 DEFAULT_SETTINGS = {
     "auto_reminders": True,
@@ -74,21 +110,119 @@ async def create_family(
     session: AsyncSession,
     silo: str,
     baby_name: str,
-    timezone_name: str = "America/New_York",
+    timezone_name: str | None = None,
+    baby_birthdate: date | None = None,
 ) -> HalFamily:
+    """Create the family + its first member. Pass timezone_name whenever the
+    creator's timezone is known (their profile tz, or the onboarding city) —
+    every baby time and forecast renders in family.timezone, so a wrong
+    default here shows a non-Eastern household their whole log an hour off.
+    An explicit tz marks settings["tz_set"] so later syncs don't clobber it."""
+    settings = dict(DEFAULT_SETTINGS)
+    if timezone_name:
+        settings["tz_set"] = True
     family = HalFamily(
         name=baby_name,
         baby_name=baby_name,
-        timezone=timezone_name,
-        settings=dict(DEFAULT_SETTINGS),
-        state={},
+        timezone=timezone_name or "America/New_York",
+        baby_birthdate=baby_birthdate,
+        settings=settings,
+        # member_provenance: how each silo earned its seat — "creator" (the
+        # onboarding parent) vs "thread" (joined by logging in the family
+        # thread). Thread-provenance members are revocable by removing them
+        # from the thread; creators never are.
+        state={"member_provenance": {silo: "creator"}},
     )
     session.add(family)
     await session.flush()
     session.add(HalFamilyMember(family_id=family.id, silo=silo))
     await session.flush()
-    log.info("baby.family_created", silo=silo, baby=baby_name)
+    log.info(
+        "baby.family_created",
+        silo=silo,
+        baby=baby_name,
+        timezone=family.timezone,
+        birthdate=str(baby_birthdate) if baby_birthdate else None,
+    )
     return family
+
+
+async def ensure_family_member(
+    session: AsyncSession, family: HalFamily, silo: str
+) -> bool:
+    """Idempotently add `silo` to the family ("membership means spoke/logged
+    there") with "thread" provenance — revocable by removal from the thread.
+    Returns True when a NEW member row was created. A silo already in ANY
+    family (this or another) is left untouched."""
+    stmt = select(HalFamilyMember).where(HalFamilyMember.silo == silo)
+    existing = (await session.execute(stmt)).scalar_one_or_none()
+    if existing is not None:
+        return False
+    session.add(HalFamilyMember(family_id=family.id, silo=silo))
+    state = dict(family.state or {})
+    prov = dict(state.get("member_provenance") or {})
+    prov.setdefault(silo, "thread")
+    state["member_provenance"] = prov
+    family.state = state
+    await session.flush()
+    log.info("baby.family_member_added", family=str(family.id), silo=silo)
+    return True
+
+
+async def revoke_thread_member(
+    session: AsyncSession, family: HalFamily, silo: str
+) -> bool:
+    """Remove `silo` from the family IF its seat came via the thread
+    ("thread" provenance). Creators and unknown-provenance members (rows that
+    predate provenance tracking) are never auto-revoked. Returns True when a
+    row was removed."""
+    prov = (dict(family.state or {}).get("member_provenance") or {}).get(silo)
+    if prov != "thread":
+        return False
+    stmt = select(HalFamilyMember).where(
+        HalFamilyMember.family_id == family.id, HalFamilyMember.silo == silo
+    )
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        return False
+    await session.delete(row)
+    state = dict(family.state or {})
+    prov_map = dict(state.get("member_provenance") or {})
+    prov_map.pop(silo, None)
+    state["member_provenance"] = prov_map
+    family.state = state
+    await session.flush()
+    log.info("baby.family_member_revoked", family=str(family.id), silo=silo)
+    return True
+
+
+async def event_trigger_stats(
+    session: AsyncSession, family_id
+) -> tuple[int, set[str]]:
+    """(total event count, distinct logged_by set) for a family — the inputs
+    for the once-ever forecast-reveal and second-caregiver acknowledgments."""
+    from sqlalchemy import func
+
+    total = (
+        await session.execute(
+            select(func.count())
+            .select_from(HalBabyEvent)
+            .where(HalBabyEvent.family_id == family_id)
+        )
+    ).scalar_one()
+    loggers = set(
+        (
+            await session.execute(
+                select(HalBabyEvent.logged_by)
+                .where(
+                    HalBabyEvent.family_id == family_id,
+                    HalBabyEvent.logged_by.isnot(None),
+                )
+                .distinct()
+            )
+        ).scalars().all()
+    )
+    return int(total or 0), loggers
 
 
 async def add_event(
@@ -228,10 +362,14 @@ def _median_or_none(values: list[float]) -> float | None:
 
 
 def compute_patterns(
-    events: list[tuple[str, datetime]], tz: ZoneInfo, now: datetime, days: int = 7
+    events: list[tuple[str, datetime]],
+    tz: ZoneInfo,
+    now: datetime,
+    days: int = 7,
+    birthdate: date | None = None,
 ) -> dict:
-    """Medians over the trailing `days` of data, falling back to age-generic
-    defaults where the family hasn't logged enough yet."""
+    """Medians over the trailing `days` of data, falling back to AGE-NORMED
+    defaults (via birthdate) where the family hasn't logged enough yet."""
     cutoff = now - timedelta(days=days)
     recent = [(k, at) for k, at in events if at >= cutoff]
     sleeps = pair_sleeps(recent)
@@ -281,7 +419,9 @@ def compute_patterns(
         "nap_minutes": _median_or_none(nap_lengths) or DEFAULT_NAP_MIN,
         "nap_samples": len(nap_lengths),
         "night_minutes": _median_or_none(night_lengths),
-        "wake_window_minutes": _median_or_none(wake_windows) or DEFAULT_WAKE_WINDOW_MIN,
+        "wake_window_minutes": _median_or_none(wake_windows)
+        or default_wake_window_min(birthdate, now),
+        "wake_window_samples": len(wake_windows),
         "feed_interval_minutes": _median_or_none(feed_intervals) or DEFAULT_FEED_INTERVAL_MIN,
         "bedtime_minutes": _median_or_none([float(m) for m in bed_minutes]),
         "morning_wake_minutes": _median_or_none([float(m) for m in morning_minutes]),
@@ -290,11 +430,15 @@ def compute_patterns(
 
 
 def forecast_next(
-    events: list[tuple[str, datetime]], tz: ZoneInfo, now: datetime
+    events: list[tuple[str, datetime]],
+    tz: ZoneInfo,
+    now: datetime,
+    birthdate: date | None = None,
 ) -> dict:
     """Predict next wake / nap / feed / bedtime from the family's own recent
-    pattern. Returns aware-utc datetimes (or None)."""
-    patterns = compute_patterns(events, tz, now)
+    pattern (age-normed fallbacks while data is sparse). Returns aware-utc
+    datetimes (or None)."""
+    patterns = compute_patterns(events, tz, now, birthdate=birthdate)
     sleeps = pair_sleeps(events)
     open_sleep = sleeps[-1] if sleeps and sleeps[-1].end is None else None
 
@@ -320,7 +464,7 @@ def forecast_next(
             hour=DEFAULT_BEDTIME.hour, minute=DEFAULT_BEDTIME.minute, second=0, microsecond=0
         )
     if bed_local > local_now:
-        expected_bedtime = bed_local.astimezone(timezone.utc)
+        expected_bedtime = bed_local.astimezone(UTC)
 
     if open_sleep is not None:
         if open_sleep.is_night:
@@ -332,7 +476,7 @@ def forecast_next(
             )
             tomorrow = (local_now + timedelta(days=1)).date()
             expected_wake = datetime.combine(tomorrow, wake_t, tzinfo=tz).astimezone(
-                timezone.utc
+                UTC
             )
         else:
             expected_wake = open_sleep.start + timedelta(minutes=patterns["nap_minutes"])
@@ -597,8 +741,23 @@ def format_forecast(
             lines.append(f"Expected wake: ~{_t(forecast['expected_wake'])}")
     else:
         lines.append(f"{baby} is awake")
+        p0 = forecast["patterns"]
+        sparse = p0.get("wake_window_samples", 99) < WAKE_WINDOW_MIN_SAMPLES
         if forecast["next_nap"]:
-            lines.append(f"Next nap: ~{_t(forecast['next_nap'])}")
+            if sparse:
+                # Not enough of THIS baby's own data yet — present an
+                # age-typical soft window with explicit humility, never a
+                # confident point estimate (a visibly wrong first forecast is
+                # how a brand-new household churns).
+                early = forecast["next_nap"] - timedelta(minutes=15)
+                late = forecast["next_nap"] + timedelta(minutes=15)
+                lines.append(
+                    f"Next sleepy window: ~{fmt_time(early, tz)}–{fmt_time(late, tz)} "
+                    f"(age-typical for now — this sharpens as {baby}'s own "
+                    f"pattern builds)"
+                )
+            else:
+                lines.append(f"Next nap: ~{_t(forecast['next_nap'])}")
         elif forecast["expected_bedtime"]:
             lines.append(
                 f"Next sleep is bedtime: ~{_t(forecast['expected_bedtime'])}"

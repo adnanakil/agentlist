@@ -1,0 +1,64 @@
+id: family-thread-win3
+description: >
+  Path B + Win 3 — the activation moment. Mom sets up in her DM, moves the
+  log into the family group thread, then DAD logs for the first time. The
+  thread must link to the SAME family log (never a second one), the in-group
+  intro stays to one line, the second-caregiver ack fires EXACTLY once, and
+  dad's next log gets a normal ack.
+silo: '+15558100031'
+now: '2026-07-28T08:20:00-04:00'
+max_turns: 9
+persona: |
+  Lauren, 31, mom of 7-week-old Ollie, Fort Greene Brooklyn. Tapped the
+  landing page this morning. Efficient, friendly, wants her husband Dave IN
+  from day one — the shared log is why she's here. Ollie: "ollie, 7 weeks".
+  City: "brooklyn". When setup is done she'll add HAL to the existing family
+  group herself.
+opening: 'Hi HAL — new baby here 👶'
+beats:
+  - after_min: 2
+    cue: Answer whatever HAL asked, per your character.
+  - after_min: 2
+    cue: Answer whatever HAL asked.
+  - after_min: 10
+    cue: ollie ate 4oz at 8:30. text it.
+  - after_min: 80
+    cue: >
+      You just added HAL to your existing family group ("Ollie HQ") with
+      Dave. Say hi there and hand it the log: something like "added you here —
+      this is where we track ollie now. he went down for a nap at 9:20".
+    context:
+      silo: 'chat810003100000000001'
+      sender: '+15558100031'
+      is_group: true
+      group_name: 'Ollie HQ'
+    speaker: 'LAUREN (mom)'
+  - after_min: 55
+    cue: >
+      You are now DAVE. Ollie just woke up from that nap — text it to the
+      group the way a dad juggling a baby would ("he's up" or similar).
+    persona: |
+      Dave, 33, Ollie's dad. First time texting anything to HAL — he's seen
+      it in the group just now. Types 2-5 words at a time, no punctuation.
+      Practical, mildly skeptical of "the bot", warms up fast if it just
+      works.
+    context:
+      sender: '+15558100032'
+    speaker: 'DAVE (dad)'
+  - after_min: 40
+    cue: 'Still Dave: ollie ate 3oz. text it to the group, terse.'
+rubric: |
+  - ONE family log: the group turns must write to the SAME family as
+    Lauren's DM (the tool trace must show baby logs succeeding in the group
+    WITHOUT any second baby(action=setup) — a "what's your baby's name?"
+    re-onboarding in the group is an automatic fail).
+  - The in-group arrival: HAL's first group reply is brief (roughly one line
+    of intro at most, e.g. it keeps Ollie's log and anyone can text events),
+    then business. No group feature tour, no onboarding questions in the
+    group.
+  - WIN 3: Dave's FIRST log (the wake) gets the once-ever second-caregiver
+    acknowledgment (two of you on Ollie's log now / entries kept straight —
+    wording may vary, warmth required). His SECOND log (3oz feed) must get a
+    NORMAL short ack — repeating the two-of-you line is a fail.
+  - Dave is never asked to onboard, never DM'd, never asked his name in the
+    group. The wake closes the 9:20 nap; the feed logs cleanly.

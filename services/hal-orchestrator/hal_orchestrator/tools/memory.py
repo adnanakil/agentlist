@@ -52,10 +52,20 @@ async def tool_memory(args: dict, ctx: ToolContext) -> str:
     elif action == "recall":
         if not content:
             return "Error: content is required to search memories"
-        return await recall(ctx.session, ctx.phone, content)
+        since = None
+        if ctx.is_group:
+            from hal_orchestrator.services.membership import group_memory_floor
+
+            since = await group_memory_floor(ctx.session, ctx.phone, ctx.sender_phone)
+        return await recall(ctx.session, ctx.phone, content, since=since)
 
     elif action == "list":
-        return await list_memories(ctx.session, ctx.phone)
+        since = None
+        if ctx.is_group:
+            from hal_orchestrator.services.membership import group_memory_floor
+
+            since = await group_memory_floor(ctx.session, ctx.phone, ctx.sender_phone)
+        return await list_memories(ctx.session, ctx.phone, since=since)
 
     else:
         return f"Unknown memory action: {action}. Use: remember, recall, or list"

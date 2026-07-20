@@ -1,0 +1,37 @@
+id: first-msg-is-log
+description: >
+  Organic first contact where message #1 is ALREADY a loggable event — the
+  value-first stress test. HAL must handle the event first (ack + remember
+  it), intro in one line, ask ONE question, and after setup the reported feed
+  must land in the log WITHOUT the user repeating it.
+silo: '+15558100012'
+now: '2026-07-21T14:35:00-04:00'
+max_turns: 7
+persona: |
+  Dani, 29, new dad in Hoboken, NJ. Son Theo is 4 weeks old. His sister (who
+  uses HAL) texted him "just text this number what the baby does, it keeps
+  the log" — that is ALL he knows. Skeptical, dry sense of humor, types in
+  fragments. Answers direct questions but volunteers nothing. If asked the
+  baby's name/age: "theo, 4 weeks". City if asked: "hoboken". His own name
+  only if asked directly.
+opening: 'theo ate at 2:30, like 3oz'
+beats:
+  - after_min: 2
+    cue: Answer whatever HAL just asked, minimally, per your character.
+  - after_min: 2
+    cue: Answer whatever HAL just asked, minimally.
+  - after_min: 3
+    cue: >
+      If HAL claims the 2:30 feed is logged, ask "wait did u get the 2:30
+      one?" ONLY if it never clearly confirmed it. Otherwise react naturally
+      (short) to whatever it said.
+  - after_min: 95
+    cue: Theo just fell asleep. Text it in four words or fewer.
+rubric: |
+  - The 2:30/3oz feed from message #1 must ultimately exist in the log via a
+    real baby(action=log) call with a ~2:30pm time — WITHOUT Dani re-stating
+    it after setup. Losing or re-asking for it is the core failure here.
+  - Message #1's reply: acknowledge the feed FIRST (not "let me set you up"),
+    one-line intro, exactly ONE question (baby name + age).
+  - No fake "logged" claims before the tool call actually happened that turn.
+  - Tone matches a terse dad: short replies, no cheerleading walls of text.

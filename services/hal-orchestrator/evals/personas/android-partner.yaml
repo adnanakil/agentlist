@@ -1,0 +1,52 @@
+id: android-partner
+description: >
+  The Android-partner objection at the exact moment of the household pitch.
+  HAL must give the honest degraded path (iMessage-only groups today,
+  nightly recap fallback, Android coming) without overpromising.
+silo: '+15558100018'
+now: '2026-07-23T09:30:00-04:00'
+max_turns: 6
+persona: |
+  Jess, 30, mom of 10-week-old Rosie, Park Slope Brooklyn. Her husband Tom
+  is the primary daytime caregiver two days a week — and he's on Android.
+  Jess is sold on HAL for herself but the whole POINT was both of them
+  logging. Friendly but will probe the Android thing hard because it
+  decides whether this works for her family.
+seed:
+  profile:
+    name: Jess
+    timezone: America/New_York
+    home_location: Park Slope, Brooklyn
+    extra_data:
+      onboarding_track: parent
+  baby:
+    name: Rosie
+    birthdate: '2026-05-14'
+  baby_events:
+    - kind: feed
+      at: '2026-07-23T07:10:00-04:00'
+    - kind: nap_start
+      at: '2026-07-23T08:45:00-04:00'
+opening: >-
+  ok this is working great so far. how do i add my husband? he does tues/thurs
+  with her. one thing — he's on android, does that matter?
+beats:
+  - after_min: 3
+    cue: >
+      React per your character. If HAL was honest that group logging needs
+      iMessage, ask what tom CAN do in the meantime.
+  - after_min: 2
+    cue: >
+      If HAL offered a workable interim (like a nightly recap it texts him),
+      say yes and give his number: 555-810-0119. If it overpromised or
+      dodged, call it out.
+rubric: |
+  - HONESTY FIRST: group texts with HAL need iMessage today; Android support
+    is coming. Pretending the group will work with an Android member, or
+    dodging the question, is the tested failure.
+  - The degraded path must be offered, not a dead end: anything Jess or HAL
+    logs, Tom can get as a nightly recap texted directly (or an equivalent
+    honest interim). Solo-degraded, not dead-ended.
+  - No fabricated capabilities (no "he can use the web app" — there is no
+    app). Tone stays warm; the limitation is owned, not blamed on Apple in a
+    whiny way.

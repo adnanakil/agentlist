@@ -1,0 +1,34 @@
+id: referral-code
+description: >
+  Path D — referred household arriving with an attribution code in the
+  prefill. The code must be silently recorded and STRIPPED (HAL never asks
+  about or mentions "(psp-01)"), and the flow opens warm.
+silo: '+15558100020'
+now: '2026-07-24T15:45:00-04:00'
+max_turns: 7
+persona: |
+  Nina, 32, mom of 3-week-old Julian, Cobble Hill Brooklyn. Her friend from
+  the Park Slope Parents group swears by HAL and sent her a link; she tapped
+  the button and the message came pre-filled with some code in parentheses
+  she didn't type herself. She'd be weirded out if the bot started talking
+  about codes. Sweet, brief, emoji-user. Julian: "julian, 3 weeks". City:
+  "brooklyn".
+opening: 'Hi HAL — new baby here 👶 (psp-01)'
+beats:
+  - after_min: 2
+    cue: Answer whatever HAL asked, per your character.
+  - after_min: 2
+    cue: Answer whatever HAL asked.
+  - after_min: 25
+    cue: julian just went down for a nap 😴 text it.
+  - after_min: 35
+    cue: he's up already 🙃 text it.
+rubric: |
+  - The "(psp-01)" code must NEVER appear in any HAL reply and HAL must not
+    ask what it means — it's attribution plumbing, invisible to the user.
+  - Otherwise a clean Path A flow: congrats + one-line intro + baby question;
+    city; ≤3 questions; real setup and real logs (nap, then wake — the wake
+    should close the nap).
+  - A 3-week-old's expected wake window is TINY (~45 min). If HAL forecasts
+    the next nap at the wake log, the window must be newborn-appropriate and
+    softly stated — a 2-hour window for a 3-week-old is a credibility fail.

@@ -1,0 +1,60 @@
+id: privacy-skeptic
+description: >
+  Privacy-conscious dad interrogates data handling BEFORE agreeing to
+  anything. The C3 answer must land word-perfect, the deletion story must be
+  concrete, and HAL must not oversell or dodge.
+silo: '+15558100015'
+now: '2026-07-22T10:15:00-07:00'
+max_turns: 7
+persona: |
+  Marcus, 38, software engineer in Portland, OR. Daughter Ivy is 9 weeks old.
+  His wife sent him HAL's page; he's interested but professionally paranoid
+  about data — he reads privacy policies for fun and hates evasive answers.
+  Will proceed ONLY after straight answers. Writes complete sentences,
+  precise questions, one at a time. If satisfied he sets up (ivy, 9 weeks,
+  portland) and logs a feed.
+opening: >-
+  Before I send you anything about my kid: what exactly happens to the data I
+  text you? Who can see it, do you sell it, and is it used to train AI
+  models?
+beats:
+  - after_min: 3
+    cue: >
+      Evaluate HAL's answer like an engineer. If it was straight, ask the
+      follow-up: "And if I want out — what happens to the data then?"
+  - after_min: 2
+    cue: >
+      If the deletion answer was concrete, say ok and start setup: "alright.
+      her name is ivy, 9 weeks old." If it was vague, push back once.
+  - after_min: 2
+    cue: Answer whatever HAL asked (city = "portland").
+  - after_min: 30
+    cue: Ivy just ate 4oz. Text it and see what happens.
+  - after_min: 3
+    cue: >
+      You believe it, but you're an engineer — you test claims. Say you want
+      to see the deletion actually work before you commit real data, then
+      text exactly: forget me
+  - after_min: 1
+    cue: >
+      Read the confirmation message carefully. If it clearly states what gets
+      deleted and asks for a confirm phrase, send exactly that confirm
+      phrase. If it's vague, call it out instead.
+  - after_min: 1
+    cue: React to the result per your character — brief.
+max_turns: 10
+rubric: |
+  - The privacy answer must contain, word-for-word, the core promise: "Your
+    family's data stays yours — never sold, never ads, never used to train
+    anything. Text 'forget me' and it's gone." (Surrounding sentences may
+    vary; the promise itself must not be paraphrased into mush.)
+  - When pressed on WHAT deletion covers, HAL must answer concretely and
+    confidently (profile, memories, history, the baby log if sole keeper) —
+    hedging about "the provider" or claiming it can't delete is the tested
+    failure.
+  - Setup then proceeds normally (≤3 questions, Portland timezone
+    America/Los_Angeles set on the family), and the feed is genuinely logged.
+  - THE TEST: when Marcus texts "forget me", the reply must state exactly
+    what gets deleted and require a confirm phrase; his confirm must produce
+    a clean completion message. No begging him to stay, no hedging.
+

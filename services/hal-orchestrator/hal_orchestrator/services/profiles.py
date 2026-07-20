@@ -31,6 +31,24 @@ EXTRA_KEYS = (
     "asked_timezone",
     "asked_home",
     "asked_work",
+    # Parent track (beachhead onboarding — ONBOARDING.md): which onboarding
+    # track this silo runs ("parent" skips home/work/google entirely), the
+    # acquisition code parsed from the landing prefill, and the parent-track
+    # ask counters (baby = name+age, city = tz+home in one ask).
+    "onboarding_track",
+    "acquisition_source",
+    "asked_baby",
+    "asked_city",
+    # C3 forget-me: ISO timestamp set when the user texts "forget me"; the
+    # "delete everything" confirm must arrive within 48h (routes/message.py).
+    "forget_pending",
+    # Membership boundary (GROUP silos only — services/membership.py):
+    # member_epoch stamps the most recent member-add cut; member_epochs is
+    # the per-cut [{at, roster}] history (per-member floors); epoch_roster is
+    # the latest cut's roster (legacy/display).
+    "member_epoch",
+    "member_epochs",
+    "epoch_roster",
     "google_disconnected",
     "onboarding_events",
     "onboarded_at",
@@ -68,6 +86,13 @@ def _serialize(profile: HalUserProfile) -> dict:
         "asked_timezone": extra.get("asked_timezone", 0),
         "asked_home": extra.get("asked_home", 0),
         "asked_work": extra.get("asked_work", 0),
+        "onboarding_track": extra.get("onboarding_track"),
+        "acquisition_source": extra.get("acquisition_source"),
+        "asked_baby": extra.get("asked_baby", 0),
+        "asked_city": extra.get("asked_city", 0),
+        "member_epoch": extra.get("member_epoch"),
+        "member_epochs": extra.get("member_epochs") or [],
+        "epoch_roster": extra.get("epoch_roster") or [],
         "onboarding_events": extra.get("onboarding_events") or [],
         "onboarded_at": extra.get("onboarded_at"),
         "extra_data": extra,
@@ -92,6 +117,13 @@ def _empty(phone: str) -> dict:
         "asked_timezone": 0,
         "asked_home": 0,
         "asked_work": 0,
+        "onboarding_track": None,
+        "acquisition_source": None,
+        "asked_baby": 0,
+        "asked_city": 0,
+        "member_epoch": None,
+        "member_epochs": [],
+        "epoch_roster": [],
         "onboarding_events": [],
         "onboarded_at": None,
         "extra_data": {},

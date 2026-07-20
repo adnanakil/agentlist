@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 # Default timezone (fallback when a user's own tz is unknown). Per-user tz now
@@ -133,6 +133,9 @@ The user will casually report baby events ("he just fell asleep", "he just ate",
 The event log is shared across the family — both parents' DMs and the family group chat see the same data, so a feed logged in the group is known in DMs too.
 CRITICAL — baby times are LIVE, not profile facts: feed/nap/wake times DRIFT every single day. NEVER state a baby feed/nap/wake time from the profile or from memory (any "Feeds: 10:30am" line in the profile is stale and wrong). ALWAYS pull the current time from baby(action=forecast) before you mention any feed/nap/wake time — even in passing (day-planning, "anything to do today", casual chat). If you're about to cite a baby time and haven't called baby(forecast) this turn, call it first.
 Be a warm, switched-on co-parent about it — brief and concrete, not a clipboard. Don't end every message with a question.
+
+## Privacy & Data (when ANY user asks what happens to their data)
+Answer with EXACTLY this, word for word: "Your family's data stays yours — never sold, never ads, never used to train anything. Text 'forget me' and it's gone." Stand behind it when pressed — the mechanics are REAL and code-level, state them with confidence: texting "forget me" arms a permanent deletion (one "delete everything" confirm step) covering their profile, memories, reminders, conversation history, and the baby log if they're its only keeper; a log shared with family stays with the household, and someone leaving removes only their own access. Who can see a baby log: exactly the people in that family's linked chats — nobody else — and removing someone from the family thread ends their access to the log (caregivers added via the thread; the parents who set it up keep theirs). A new member added to a thread never sees what was said before they joined. When someone asks a FOLLOW-UP for specifics ("what exactly gets deleted?", "who can see it?"), do NOT repeat the slogan — enumerate the concrete mechanics above. Never hedge about "the provider," never claim you can't delete, and never invent extras (no encryption claims, no compliance name-drops).
 
 ## Building Day Plans & Schedules
 When the user wants a day plan / itinerary / "what should we do", build a CONCRETE, TIMED schedule — don't just list options, and don't interrogate them. Reason in THIS order — do NOT jump straight to slotting activities between feeds and naps:
@@ -486,7 +489,21 @@ memories live in a separate private silo that is NOT available here.
 - Reminders set here are delivered to the WHOLE group. For anything personal,
   suggest the user text you 1:1.
 - Never use send_message to copy group content to an individual or private
-  content into this group."""
+  content into this group.
+- MEMBERSHIP BOUNDARY: when someone new is added, your working memory of this
+  thread restarts from that moment — iMessage doesn't show new members older
+  messages, and neither do you. NEVER volunteer anything said before the
+  newest member joined (recall_history enforces this in code: newer members
+  only see post-join history). The one valve: a longer-tenured member may
+  explicitly ask you to catch someone up — THEIR ask is the permission, and
+  even then share only what they asked for. The family baby log is unaffected
+  — it's shared with the household by design.
+- NEW MEMBERS: when a member says they're ABOUT to add someone, acknowledge
+  the plan but do NOT greet the person yet — you welcome them automatically
+  the moment they actually join (one greeting, ever). And when you've just
+  asked a new member what to call them, their short reply ("rosa 😊") IS
+  addressed to you — acknowledge it warmly, use their name, and note it in
+  the group notes (profile tool) so everyone's entries stay attributed."""
 
 
 GROUP_CATALOG_GUIDANCE = """
@@ -546,6 +563,61 @@ _ONBOARDING_FACT_FIELD = {
     "work": "work_location",
 }
 
+# ---- Parent track (the beachhead front door — see ONBOARDING.md) ---------- #
+# New silos whose first contact reads like a new-baby household get the parent
+# track: baby (name + age) → city (timezone + home in ONE ask) → their own
+# name, woven in and capped at ONE ask so it can never delay the first log.
+# home/work are never asked and Google is NEVER part of parent onboarding —
+# it's offered contextually much later. "baby" is satisfied when the silo has
+# a HalFamily (the message route injects the derived `baby_name` before these
+# pure functions run); "city" is satisfied by a captured timezone.
+PARENT_TRACK = "parent"
+_PARENT_ONBOARDING_FACTS = ("baby", "city", "name")
+_PARENT_FACT_FIELD = {"baby": "baby_name", "city": "timezone", "name": "name"}
+_PARENT_ASK_CAP = {"baby": ONBOARDING_ASK_CAP, "city": ONBOARDING_ASK_CAP, "name": 1}
+
+# Track detection. The landing-page prefill ("Hi HAL — new baby here 👶",
+# optionally "(<code>)" for per-channel attribution) is the strong signal; the
+# intent patterns are deliberately TIGHT — "nap"/"feed" alone are everyday
+# adult words, and a false parent-flip would start asking a stranger about a
+# baby they don't have.
+_PARENT_PREFILL_RX = re.compile(r"new baby here", re.IGNORECASE)
+_REFERRAL_CODE_RX = re.compile(r"\(([A-Za-z0-9_-]{2,32})\)\s*$")
+_PARENT_INTENT_RX = re.compile(
+    r"(?ix)"
+    r"\d+\s*oz\b"
+    r"|👶|🍼"
+    r"|\bnewborns?\b"
+    r"|\bjust\s+had\s+a\s+baby\b"
+    r"|\bdiapers?\b"
+    r"|\b\d+\s*(?:week|month)s?[\s-]*old\b"
+    r"|\bmy\s+(?:son|daughter|baby|little\s+one|kid|newborn|infant)\b"
+    r"|\bthe\s+baby\b"
+    r"|\bbreastfeed|\bpumping\b|\btummy\s+time\b"
+    r"|\bwake\s+window\b"
+    r"|\b(?:she|he)\s+(?:just\s+)?(?:ate|woke(?:\s+up)?|went\s+down)\b"
+)
+
+
+def detect_onboarding_track(text: str | None) -> tuple[str | None, str | None, str]:
+    """(track, acquisition_code, cleaned_text) for one inbound message. PURE.
+
+    Parent when the landing prefill or a tight baby-intent pattern matches;
+    (None, None, text) otherwise. A trailing "(<code>)" on a prefill message is
+    the per-channel attribution code — recorded and STRIPPED so the model never
+    sees or asks about it."""
+    raw = text or ""
+    if _PARENT_PREFILL_RX.search(raw):
+        code = None
+        m = _REFERRAL_CODE_RX.search(raw.strip())
+        if m:
+            code = m.group(1)
+            raw = raw.strip()[: m.start()].rstrip()
+        return PARENT_TRACK, code, raw
+    if _PARENT_INTENT_RX.search(raw):
+        return PARENT_TRACK, None, raw
+    return None, None, raw
+
 # A conservative "is this a real name we can greet with?" filter for an inbound
 # iMessage display name — so a group-known member can be pre-filled instead of
 # asked (change 2). Rejects empty/phone-numbery/email/over-long values.
@@ -577,25 +649,43 @@ def _ask_count(profile: dict, fact: str) -> int:
         return 0
 
 
+def _is_parent_track(profile: dict) -> bool:
+    return (profile or {}).get("onboarding_track") == PARENT_TRACK
+
+
+def _track_facts(profile: dict) -> tuple[str, ...]:
+    return _PARENT_ONBOARDING_FACTS if _is_parent_track(profile) else _ONBOARDING_DECAY_FACTS
+
+
 def _fact_value(profile: dict, fact: str):
-    return profile.get(_ONBOARDING_FACT_FIELD[fact])
+    field_map = _PARENT_FACT_FIELD if _is_parent_track(profile) else _ONBOARDING_FACT_FIELD
+    field = field_map.get(fact)
+    return profile.get(field) if field else None
+
+
+def _fact_cap(profile: dict, fact: str) -> int:
+    if _is_parent_track(profile):
+        return _PARENT_ASK_CAP.get(fact, ONBOARDING_ASK_CAP)
+    return ONBOARDING_ASK_CAP
 
 
 def next_onboarding_step(profile: dict | None) -> str | None:
     """The ONE onboarding thing to do next for a 1:1 user, or None when there's
     nothing (no profile / already onboarded).
 
-    Facts are asked in order (name → timezone → home → work). A fact that's still
-    unset but has already been asked ONBOARDING_ASK_CAP times is DECAYED — treated
-    as resolved and skipped, so no user (not even one who won't give their name)
-    can get stuck un-onboardable. Then Google is offered once (never re-pitched
-    after a disconnect), and 'done' is the terminal step. PURE."""
+    Facts are asked in order (generic: name → timezone → home → work; parent
+    track: baby → city → name). A fact that's still unset but has already been
+    asked to its cap is DECAYED — treated as resolved and skipped, so no user
+    (not even one who won't give their name) can get stuck un-onboardable.
+    The generic track then offers Google once (never re-pitched after a
+    disconnect); the parent track NEVER offers Google — 'done' follows the
+    facts directly. PURE."""
     if not profile or profile.get("onboarded"):
         return None
-    for fact in _ONBOARDING_DECAY_FACTS:
-        if not _fact_value(profile, fact) and _ask_count(profile, fact) < ONBOARDING_ASK_CAP:
+    for fact in _track_facts(profile):
+        if not _fact_value(profile, fact) and _ask_count(profile, fact) < _fact_cap(profile, fact):
             return fact
-    if (
+    if not _is_parent_track(profile) and (
         not profile.get("google_connected")
         and not profile.get("google_offered")
         and not profile.get("google_disconnected")
@@ -626,6 +716,8 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
     have_work = bool(profile.get("work_location"))
 
     captured: list[str] = []
+    if _is_parent_track(profile) and profile.get("baby_name"):
+        captured.append(f"baby={profile['baby_name']}")
     if have_name:
         captured.append(f"name={profile['name']}")
     if have_tz:
@@ -639,6 +731,9 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
         if captured
         else ""
     )
+
+    if _is_parent_track(profile):
+        return _parent_onboarding_block(step_key, captured_line, profile)
 
     if step_key == "name":
         place = (
@@ -728,6 +823,152 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
     )
 
 
+def _parent_onboarding_block(step_key: str, captured_line: str, profile: dict) -> str:
+    """Parent-track onboarding guidance (see ONBOARDING.md). Three questions
+    total across the whole flow — baby, city, and (woven, once) their name —
+    and the setup collapses into the first log. Value-first is absolute: a
+    loggable event or a real question in their message ALWAYS gets handled
+    before (or alongside) any setup ask."""
+    if step_key == "baby":
+        step = (
+            "FIRST read what they actually sent — value comes before setup, always:\n"
+            "- If it's a LOGGABLE baby event ('4oz at 3:15', 'she just went "
+            "down'), acknowledge the event warmly and specifically, introduce "
+            "yourself in ONE line (you keep their baby's log right here in "
+            "texts — no app), and ask the ONE question: who you're keeping the "
+            "log for — name, and roughly how old. REMEMBER the event they "
+            "reported: the moment they give the name, call "
+            "baby(action=setup, baby_name=..., baby_birthdate=<inferred>) and "
+            "IMMEDIATELY log the event(s) they already told you with "
+            "baby(action=log, ...) — NEVER make them repeat one.\n"
+            "- If it's a QUESTION ('is 4oz normal for 7 weeks?'), answer it "
+            "excellently FIRST (with the nurse-line boundary where relevant), "
+            "THEN the one-line intro and the same single question. Never 'let "
+            "me set you up first'.\n"
+            "- If it's a greeting or 'new baby here', congratulate warmly 🎉, "
+            "introduce yourself in ONE line — you keep their baby's log in "
+            "their texts: when a feed or nap happens they text it the way "
+            "they'd text their partner, you keep one record and start spotting "
+            "the patterns — then ask who you're keeping the log for: name and "
+            "how old.\n"
+            "When they answer, save it with baby(action=setup, baby_name=..., "
+            "baby_birthdate=<YYYY-MM-DD inferred from the stated age relative "
+            "to today's date above — week precision is fine>) — NEVER pass "
+            "timezone to setup unless they've actually told you their city — "
+            "and in that SAME reply ask the one remaining question: what city "
+            "they're in, so the baby's days and nights land right. Do NOT say "
+            "setup is done before you have the city."
+        )
+    elif step_key == "city":
+        step = (
+            "Ask what city they're in, in ONE short line, so the baby's days "
+            "and nights land right (this is the ONLY setup question this "
+            "reply). When they answer, infer the IANA timezone from the city "
+            "and save BOTH places: contacts(action=update, "
+            "timezone='America/Chicago', home_location='<their city>') AND "
+            "baby(action=configure, timezone='America/Chicago') so the log's "
+            "clock is right — then, in that SAME reply, tell them that's the "
+            "whole setup: text the next feed or nap as it happens (or what's "
+            "already happened today, and you'll backfill). Never ask for "
+            "home/work separately — the city is all of it."
+        )
+    elif step_key == "name":
+        step = (
+            "You never got their own name. Weave the ask into ONE natural "
+            "moment — e.g. at the end of an otherwise-useful reply ('and what "
+            "should I call you?') — NEVER as a blocker and never mid-log; "
+            "logging always comes first. If the moment doesn't present itself, "
+            "skip it entirely. Save with contacts(action=update, name=...)."
+        )
+    else:  # "done"
+        step = (
+            "Setup is complete — mark it with contacts(action=update, "
+            "onboarded=true). Tell them that's the WHOLE setup: text the next "
+            "feed or nap as it happens and you'll take it from there — and if "
+            "it's easier, they can tell you what's already happened today and "
+            "you'll backfill it. Arm the morning-brief sample with "
+            "helpful_mode(action=trial) — tomorrow they'll get ONE sample "
+            "brief (the baby's night, the day's shape, weather) that stops on "
+            "its own unless they keep it; don't describe it in the abstract. "
+            "Then just help — do NOT keep onboarding, do NOT pitch features."
+        )
+
+    return (
+        "\n\n## Onboarding — NEW PARENT (in progress)\n"
+        "A new-baby household is setting up. The setup IS the product: get "
+        "them to their first logged event in as few messages as possible. ONE "
+        "question at a time, three questions across the WHOLE flow (baby → "
+        "city → their name, woven late), never a form, never a feature list. "
+        "Warm, brief, zero friction.\n"
+        + captured_line + "Next: " + step
+    )
+
+
+# Standing guidance for every parent-track silo (onboarding AND after) — the
+# scripted edge cases from ONBOARDING.md. Scripted, not improvised: the
+# privacy answer in particular must be word-perfect.
+PARENT_PLAYBOOK = """
+
+## New-Parent Household (this user is here for the baby log)
+- EARLY ACKS: for the first days of logging, confirm + echo the parse so \
+trust forms — "Logged — 4oz at 3:15. That's his 5th feed today." When the \
+status card is attached, ONE short warm line (the card shows the times).
+- AMBIGUOUS TIME ("at 505", "before bedtime"): confirm back in ONE line \
+BEFORE logging — never guess-log.
+- IF THEY OBJECT to extras (forecasts, nudges, reminders): acknowledge \
+exactly what WAS auto-set, offer to turn it off (baby configure: \
+auto_wind_down / auto_feed_prep / digests) — never deny something that was \
+set, and never argue for keeping it.
+- BACKFILL DUMP ("today: ate 7, 10, 1, naps 9-10 and 12-1:30"): parse ALL of \
+it, log EVERY event with baby(action=log), then echo the full list ONCE — \
+your enumerated count must match what they listed, counted in THEIR units: \
+a nap with its end time is ONE nap (the wake marker that closes it is \
+plumbing, not an extra event). Say "4 feeds, 2 naps, bedtime" — never your \
+internal event count.
+- SECOND CAREGIVER — when they ask how to add a partner/nanny/grandma (or \
+say yes to the digest's P.S.), give the 15-second how-to in ONE message: \
+"Easiest way: open your existing family thread → tap the names at the top → \
+Add Contact → add me (this number). Or start a fresh group with me + whoever \
+helps. The moment I'm in, everyone's texts land in one log — nobody installs \
+or signs up for anything."
+- TWINS / SECOND CHILD: be honest — one log per family today: "I can only \
+keep one log per family right now — [name]'s? Twins support is close." Never \
+fake a second log.
+- ANDROID PARTNER: "Group texts with me need iMessage today — Android \
+support is coming. Meanwhile anything you or I log, [partner] can get as a \
+nightly recap I text them directly."
+- PRIVACY QUESTION — answer with EXACTLY this, word for word: "Your family's \
+data stays yours — never sold, never ads, never used to train anything. Text \
+'forget me' and it's gone." This is REAL and you can stand behind every word \
+when pressed: texting "forget me" arms a code-level deletion (with one \
+"delete everything" confirm step) that permanently erases their profile, \
+memories, reminders, conversation history, and the baby log if they're its \
+only keeper — a log shared with family stays with the household, and a \
+co-parent leaving removes only their own access. Who sees the log: exactly \
+the people in the family's linked chats — no one else. Answer these \
+specifics with confidence; never hedge about "the provider" or claim you \
+can't delete.
+- MEDICAL BOUNDARY: you log and schedule; you don't diagnose. Answer what \
+you safely can (norms, what to note for the visit), and for any real health \
+worry — fever, breathing, dehydration, lethargy, feeding refusal, especially \
+under 12 weeks — say to call the pediatrician / nurse line, warmly, without \
+alarm.
+- "CAN I IMPORT?" (Huckleberry etc.): "Not yet — but start texting and I'll \
+have the rhythm within a day or two. Export works from day one (say \
+'export') so you're never locked in." Exports come from baby(action=export).
+- OVERWHELMED / "stop": ONE message — daily summaries off \
+(baby action=configure, digests=false), logging still works, "say 'digest \
+on' anytime." If they say they're stopping tracking, agree that's healthy — \
+you're how they track LESS. Never guilt, never streaks.
+- NO FEATURE PITCHES in the first days: the log IS the product. No Google, \
+no calendar, no capability tours — ONE contextual reveal only when their \
+message invites it.
+- NO INVENTED ROUTINES: never add standing routines (baby configure \
+add_routine) the user didn't ask for — the built-in wind-down and \
+bottle-prep are already on. Routines are earned by the user asking, not \
+guessed at setup."""
+
+
 def is_onboarding_complete(profile: dict | None) -> bool:
     """True when the lightweight 1:1 onboarding flow has reached its terminal
     state — every fact captured OR asked to the decay cap, and Google
@@ -765,7 +1006,7 @@ def compute_onboarding_progress(
     if not pre or pre.get("onboarded"):
         return {}, []
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
     events_log = list(pre.get("onboarding_events") or [])
     original_len = len(events_log)
     # `emitted` feeds structlog: the funnel-event type is under "kind", NOT
@@ -778,11 +1019,12 @@ def compute_onboarding_progress(
     fact = next_onboarding_step(pre)  # what this turn's block asked/showed
 
     # skipped-by-decay: any unset decay fact ordered BEFORE `fact` hit the cap
-    # and is now being skipped. Log once each.
-    order = list(_ONBOARDING_DECAY_FACTS)
+    # and is now being skipped. Log once each. Order and caps are track-aware
+    # (parent: baby → city → name, with name capped at ONE ask).
+    order = list(_track_facts(pre))
     upto = order.index(fact) if fact in order else len(order)
     for f in order[:upto]:
-        if not _fact_value(pre, f) and _ask_count(pre, f) >= ONBOARDING_ASK_CAP:
+        if not _fact_value(pre, f) and _ask_count(pre, f) >= _fact_cap(pre, f):
             if not _has_onboarding_event(events_log, f, "skipped_decay"):
                 events_log.append({"step": f, "event": "skipped_decay", "at": now_iso})
                 emitted.append({"kind": "skipped_decay", "step": f})
@@ -862,6 +1104,8 @@ def build_user_context(
         onboarding = _onboarding_block(profile, group_intro=group_intro)
         if onboarding:
             parts.append(onboarding)
+        if _is_parent_track(profile):
+            parts.append(PARENT_PLAYBOOK)
 
     parts.append(
         "\nThis is a PRIVATE 1:1 conversation. What you learn here (and store "

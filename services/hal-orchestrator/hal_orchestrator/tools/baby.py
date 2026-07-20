@@ -9,7 +9,7 @@ forecast so the model can answer with real, data-grounded predictions.
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import structlog
@@ -23,6 +23,8 @@ from hal_orchestrator.services.baby import (
     create_family,
     delete_last_event,
     detect_regression,
+    ensure_family_member,
+    event_trigger_stats,
     fmt_duration,
     fmt_time,
     forecast_next,
@@ -38,7 +40,7 @@ log = structlog.get_logger()
 
 HISTORY_DAYS = 14  # analytics window loaded per call
 
-CONFIG_BOOL_KEYS = {"auto_reminders", "auto_wind_down", "auto_feed_prep"}
+CONFIG_BOOL_KEYS = {"auto_reminders", "auto_wind_down", "auto_feed_prep", "digests"}
 CARD_KINDS = {"feed", "nap_start", "wake", "bedtime"}
 _CARD_IMAGE_SOURCE = "baby_status_card"
 _DAY_CARD_IMAGE_SOURCE = "baby_day_card"
@@ -80,6 +82,23 @@ async def _attach_status_card(ctx: ToolContext) -> bool:
     )
 
 
+def _age_str(birthdate, now: datetime) -> str | None:
+    """Human age ('11 weeks old') so age-dependent answers (wake windows,
+    feed norms) are grounded in the tool result, not the model's guess."""
+    if birthdate is None:
+        return None
+    days = (now.date() - birthdate).days
+    if days < 0:
+        return None
+    weeks = days // 7
+    if weeks < 16:
+        return f"{weeks} weeks old"
+    months = days // 30
+    if months < 24:
+        return f"{months} months old"
+    return f"{days // 365} years old"
+
+
 def _parse_time(value: str | None, now: datetime) -> datetime | None:
     """ISO timestamp -> aware UTC. Empty/None/'now' -> now."""
     if not value or value.strip().lower() == "now":
@@ -92,14 +111,50 @@ def _parse_time(value: str | None, now: datetime) -> datetime | None:
         # The model is instructed to pass local ISO times with offset; if it
         # forgets, assume the family timezone is handled by the caller.
         return None
-    return at.astimezone(timezone.utc)
+    return at.astimezone(UTC)
 
 
 async def tool_baby(args: dict, ctx: ToolContext) -> str:
     action = args.get("action", "")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     family = await get_family_for_silo(ctx.session, ctx.phone)
+
+    # A group thread whose SENDER already has a family: link the thread to
+    # that family the first time baby traffic happens here — never create a
+    # second, competing log. "The moment I'm in, everyone's texts land in one
+    # log." Membership means baby traffic happened there (the one-way valve).
+    linked_thread_now = False
+    if family is None and ctx.is_group and ctx.sender_phone:
+        sender_family = await get_family_for_silo(ctx.session, ctx.sender_phone)
+        if sender_family is not None:
+            await ensure_family_member(ctx.session, sender_family, ctx.phone)
+            family = sender_family
+            linked_thread_now = True
+            log.info(
+                "onboarding.family_thread_joined",
+                family=str(family.id),
+                thread=ctx.phone,
+                via=ctx.sender_phone,
+            )
+
+    # A family thread must be PERMANENTLY watched: the bridge only forwards
+    # group messages that mention "hal" / carry an image or link / are in the
+    # watched set, and the auto-watch from HAL's replies expires after 24h of
+    # quiet. Without this, a bare "4oz at 3:15" texted to a lapsed thread is
+    # silently dropped at the bridge — invisible log loss, the one failure
+    # this product can never have. Idempotent; promotes any TTL watch.
+    if ctx.is_group and family is not None:
+        try:
+            from hal_orchestrator.services.watched import add_watched
+
+            await add_watched(
+                ctx.session, ctx.phone,
+                note="family thread — baby log (permanent)",
+                ttl_hours=None,
+            )
+        except Exception:
+            log.exception("baby.family_watch_failed", silo=ctx.phone)
 
     if action == "setup":
         if family is not None:
@@ -107,12 +162,49 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         baby_name = (args.get("baby_name") or "").strip()
         if not baby_name:
             return "Error: baby_name is required for setup."
-        family = await create_family(ctx.session, ctx.phone, baby_name)
+        birthdate = None
+        if args.get("baby_birthdate"):
+            try:
+                birthdate = datetime.fromisoformat(
+                    str(args["baby_birthdate"])
+                ).date()
+            except ValueError:
+                birthdate = None
+        tz_name = (args.get("timezone") or "").strip() or None
+        if tz_name:
+            try:
+                ZoneInfo(tz_name)
+            except Exception:
+                tz_name = None
+        if not tz_name:
+            # Every baby time renders in family.timezone — inherit the
+            # creator's profile timezone instead of defaulting a non-Eastern
+            # household to New York time.
+            from hal_orchestrator.services.profiles import get_profile
+
+            creator = ctx.sender_phone or ctx.phone
+            prof = await get_profile(ctx.session, creator)
+            tz_name = prof.get("timezone") or None
+        family = await create_family(
+            ctx.session,
+            ctx.phone,
+            baby_name,
+            timezone_name=tz_name,
+            baby_birthdate=birthdate,
+        )
         return (
-            f"Set up tracking for {baby_name}. Log events with "
-            f"baby(action=log, kind=feed|nap_start|wake|bedtime). Auto-reminders "
-            f"(wind-down, bottle prep) are on by default — configure with "
-            f"baby(action=configure)."
+            f"Set up tracking for {baby_name}"
+            + (f" (born {birthdate})" if birthdate else "")
+            + (f", timezone {family.timezone}" if tz_name else "")
+            + ". Log events with baby(action=log, kind=feed|nap_start|wake|"
+            "bedtime). Auto-reminders (wind-down, bottle prep) are on by "
+            "default — configure with baby(action=configure)."
+            + (
+                ""
+                if tz_name
+                else " NOTE: timezone not set yet — when you learn their city, "
+                "call baby(action=configure, timezone=<IANA zone>)."
+            )
         )
 
     if family is None:
@@ -142,19 +234,91 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         if kind == "nap_start" and event_at.astimezone(tz).hour >= 18:
             kind = "bedtime"
 
+        logger_id = ctx.sender_phone or ctx.phone
+        total_before, loggers_before = await event_trigger_stats(
+            ctx.session, family.id
+        )
+
         await add_event(
             ctx.session, family, kind, event_at,
-            logged_by=ctx.sender_phone or ctx.phone, silo=ctx.phone,
+            logged_by=logger_id, silo=ctx.phone,
             note=(args.get("note") or "")[:500],
         )
+
+        # A caregiver logging from a group thread gets their own 1:1 silo on
+        # the family too, so "text me directly" works with the same log.
+        if ctx.is_group and ctx.sender_phone and ctx.sender_phone != ctx.phone:
+            await ensure_family_member(ctx.session, family, ctx.sender_phone)
+
+        if total_before == 0:
+            log.info(
+                "onboarding.first_log",
+                family=str(family.id),
+                silo=ctx.phone,
+                kind=kind,
+            )
 
         events = as_pairs(
             await load_events(ctx.session, family.id, since=now - timedelta(days=HISTORY_DAYS))
         )
-        forecast = forecast_next(events, tz, now)
+        forecast = forecast_next(events, tz, now, birthdate=family.baby_birthdate)
         auto_set = await apply_auto_reminders(
             ctx.session, family, kind, event_at, ctx.phone, forecast, now
         )
+
+        # Once-ever, code-triggered moments (never model-whim — ONBOARDING.md):
+        # the Win-2 forecast reveal (first wake-after-nap OR 3 logged events)
+        # and the Win-3 second-caregiver acknowledgment. Never both in one
+        # reply — the caregiver moment wins and the reveal waits for a later
+        # log. Flags live in family.state; the dict is REASSIGNED so JSONB
+        # persists.
+        state = dict(family.state or {})
+        state_dirty = False
+        reveal_now = False
+        win3_now = False
+        if (
+            logger_id not in loggers_before
+            and len(loggers_before) == 1
+            and not state.get("win3_acked")
+        ):
+            state["win3_acked"] = now.isoformat()
+            state_dirty = True
+            win3_now = True
+            created = getattr(family, "created_at", None)
+            hours = None
+            if created is not None:
+                if created.tzinfo is None:
+                    created = created.replace(tzinfo=UTC)
+                hours = round((now - created).total_seconds() / 3600, 1)
+            log.info(
+                "onboarding.second_caregiver_first_log",
+                family=str(family.id),
+                logger=logger_id,
+                hours_from_start=hours,
+            )
+        if (
+            not win3_now
+            and not state.get("forecast_revealed")
+            # Early-life only: the reveal is an onboarding payoff. A family
+            # already past ~a dozen events (including any that predate this
+            # feature) never gets a belated "first" reveal.
+            and total_before < 12
+            and (
+                total_before + 1 >= 3
+                or (kind == "wake" and any(k == "nap_start" for k, _ in events))
+            )
+        ):
+            state["forecast_revealed"] = now.isoformat()
+            state_dirty = True
+            reveal_now = True
+            log.info(
+                "onboarding.forecast_shown",
+                family=str(family.id),
+                events=total_before + 1,
+            )
+        if state_dirty:
+            family.state = state
+            await ctx.session.flush()
 
         # Card-on-log: a feed/nap/wake/bedtime update gets the visual status
         # card automatically (user preference: a card on every nap & eating
@@ -180,6 +344,32 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             lines.append(
                 "Tell the user briefly what was set — do NOT ask whether to set reminders."
             )
+        if reveal_now:
+            lines.append(
+                "[FIRST FORECAST REVEAL — once ever, and it's now: in this "
+                "SAME reply, right after the log ack, give the payoff nobody "
+                "asked for — the forecast above (the next sleepy window / next "
+                "feed) in ONE warm line, keeping its stated uncertainty "
+                "wording. Add that you'll quietly flag it ~15 min ahead and "
+                "they can say 'stop nudges' anytime. This overrides the "
+                "one-short-line card rule for THIS reply only.]"
+            )
+        if win3_now:
+            lines.append(
+                f"[SECOND CAREGIVER — this is the first log from a NEW person "
+                f"on {baby}'s record. Acknowledge it ONCE, warmly, in this "
+                f"reply — e.g. \"Got it — logged. (That's two of you on "
+                f"{baby}'s log now — I'll keep everyone's entries straight.)\" "
+                f"Never repeat this acknowledgment.]"
+            )
+        if linked_thread_now:
+            lines.append(
+                f"[THIS THREAD WAS JUST LINKED to {baby}'s log. If you haven't "
+                f"introduced yourself in this group, add ONE line: you keep "
+                f"{baby}'s log — anyone here can text feeds/naps/diapers the "
+                f"way they'd say it out loud and it all lands in one record; "
+                f"you'll stay quiet otherwise 🤫]"
+            )
         return "\n".join(lines)
 
     if action == "forecast":
@@ -188,7 +378,10 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         )
         if not events:
             return f"No events logged yet for {baby}."
-        return format_forecast(forecast_next(events, tz, now), tz, baby, now)
+        return format_forecast(
+            forecast_next(events, tz, now, birthdate=family.baby_birthdate),
+            tz, baby, now,
+        )
 
     if action == "card":
         # The visual baby-monitor card is delivered as a real image attachment.
@@ -239,17 +432,56 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             return f"No events logged yet for {baby}."
         local_today = now.astimezone(tz).date()
 
+        age = _age_str(family.baby_birthdate, now)
+        age_part = f" ({age})" if age else ""
         if period in ("today", "yesterday"):
             d = local_today if period == "today" else local_today - timedelta(days=1)
             summary = summarize_day(events, tz, d)
-            out = [f"{baby} — {period} ({d.strftime('%a %b %-d')}):",
+            out = [f"{baby}{age_part} — {period} ({d.strftime('%a %b %-d')}):",
                    format_day_summary(summary, tz, baby)]
             if period == "today":
-                out += ["", format_forecast(forecast_next(events, tz, now), tz, baby, now)]
+                out += ["", format_forecast(
+                    forecast_next(events, tz, now, birthdate=family.baby_birthdate),
+                    tz, baby, now,
+                )]
+                # The one family-thread growth nudge, ever: when this family
+                # still logs solo (one silo — no thread, no second caregiver),
+                # the first day summary closes with the group-chat P.S.
+                # Code-gated so it can never repeat or nag (ONBOARDING.md).
+                if not (family.state or {}).get("thread_ps_sent"):
+                    from sqlalchemy import func
+                    from sqlalchemy import select as sa_select
+
+                    from ag_db.models import HalFamilyMember
+
+                    n_members = (
+                        await ctx.session.execute(
+                            sa_select(func.count())
+                            .select_from(HalFamilyMember)
+                            .where(HalFamilyMember.family_id == family.id)
+                        )
+                    ).scalar_one()
+                    if n_members <= 1:
+                        st = dict(family.state or {})
+                        st["thread_ps_sent"] = now.isoformat()
+                        family.state = st
+                        await ctx.session.flush()
+                        log.info(
+                            "onboarding.thread_howto_ps", family=str(family.id)
+                        )
+                        out.append(
+                            "[GROWTH P.S. — once ever, this family logs solo: "
+                            "end your reply with exactly this postscript: "
+                            "\"P.S. — this log works best as a group chat. Add "
+                            "anyone who does feeds or naps — partner, nanny, "
+                            "grandma — to a group text with me and everyone "
+                            "can log to the same record. Want the 15-second "
+                            "how-to?\"]"
+                        )
             return "\n".join(out)
 
         # week: per-day digest + patterns + regression flags
-        out = [f"{baby} — last 7 days:"]
+        out = [f"{baby}{age_part} — last 7 days:"]
         for i in range(6, -1, -1):
             d = local_today - timedelta(days=i)
             s = summarize_day(events, tz, d)
@@ -263,7 +495,7 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             out.append(
                 f"- {d.strftime('%a')}: {naps}, {len(s['feeds'])} feeds{night}{bed}"
             )
-        p = compute_patterns(events, tz, now)
+        p = compute_patterns(events, tz, now, birthdate=family.baby_birthdate)
         out.append(
             f"Pattern: naps ~{fmt_duration(int(p['nap_minutes']))}, wake windows "
             f"~{fmt_duration(int(p['wake_window_minutes']))}, feeds every "
@@ -306,9 +538,41 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             f"{fmt_time(event.event_at, tz)}."
         )
 
+    if action == "export":
+        # Day-one data portability ("you're never locked in"): the whole log
+        # as plain CSV lines the user can keep, paste, or import elsewhere.
+        events_raw = await load_events(ctx.session, family.id)
+        if not events_raw:
+            return f"No events logged yet for {baby} — nothing to export."
+        rows = ["date,time,kind,note,logged_by"]
+        for e in events_raw[-1000:]:
+            local = e.event_at.astimezone(tz)
+            note = (e.note or "").replace(",", ";").replace("\n", " ")
+            rows.append(
+                f"{local:%Y-%m-%d},{local:%H:%M},{e.kind},{note},{e.logged_by or ''}"
+            )
+        return (
+            f"[{baby}'s complete log as CSV ({len(events_raw)} events, "
+            "timezone-local). Send the CSV to the user verbatim — it's theirs. "
+            "One short line of framing max.]\n" + "\n".join(rows)
+        )
+
     if action == "configure":
         settings = dict(family.settings or {})
         changed: list[str] = []
+        if args.get("timezone"):
+            tz_arg = str(args["timezone"]).strip()
+            try:
+                ZoneInfo(tz_arg)
+            except Exception:
+                return (
+                    "Error: timezone must be a valid IANA zone like "
+                    "America/Chicago."
+                )
+            family.timezone = tz_arg
+            settings["tz_set"] = True
+            changed.append(f"timezone={tz_arg}")
+            tz = ZoneInfo(tz_arg)
         for key in CONFIG_BOOL_KEYS:
             if key in args:
                 settings[key] = bool(args[key])
@@ -354,5 +618,6 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
 
     return (
         f"Unknown baby action: {action}. "
-        "Use: log, forecast, stats, card, day_card, recent, setup, configure, undo."
+        "Use: log, forecast, stats, card, day_card, recent, setup, configure, "
+        "undo, export."
     )
