@@ -752,7 +752,7 @@ async function handleAction(input) {
     const { url, action = 'extract', selector, text, javascript } = input;
     const { browser, context, page } = await launchBrowser();
 
-    try {
+    const run = async () => {
         switch (action) {
             case 'extract':
             case 'read': {
@@ -844,8 +844,30 @@ async function handleAction(input) {
             default:
                 return { error: `Unknown action: ${action}. Use: extract, scrape, screenshot, click, type, evaluate, read, links` };
         }
+    };
+
+    // Hard-cap the action and bound the close: a wedged page call must not
+    // keep the finally from running — an unclosed Chromium leaks its whole
+    // process tree, and enough of those leave the container unable to fork.
+    let deadline;
+    try {
+        const running = run();
+        running.catch(() => {}); // a late rejection after losing the race must not crash node
+        return await Promise.race([
+            running,
+            new Promise((_resolve, reject) => {
+                deadline = setTimeout(
+                    () => reject(new Error('Browser action timed out after 85s')),
+                    85000,
+                );
+            }),
+        ]);
     } finally {
-        await browser.close().catch(() => {});
+        clearTimeout(deadline);
+        await Promise.race([
+            browser.close().catch(() => {}),
+            new Promise((resolve) => setTimeout(resolve, 10000)),
+        ]);
     }
 }
 

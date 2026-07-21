@@ -16,6 +16,16 @@ function parseBoolean(value, defaultValue = true) {
     return !['0', 'false', 'no', 'off'].includes(String(value).toLowerCase());
 }
 
+// spawn EAGAIN means the container can no longer fork (PID exhaustion from
+// leaked Chromium processes). Nothing will succeed again until a restart, so
+// answer the in-flight request and exit — Railway brings up a fresh container.
+function exitIfCannotFork(error) {
+    if (/EAGAIN/.test(error?.message || '')) {
+        console.error('Browser spawn hit EAGAIN — exiting so Railway restarts the container');
+        setTimeout(() => process.exit(1), 250);
+    }
+}
+
 function authorized(req) {
     const expected = process.env.SCRAPER_API_KEY;
     if (!expected) return true;
@@ -45,6 +55,7 @@ async function scrapeHandler(req, res) {
     } catch (error) {
         const status = /private|internal|valid absolute|credentials|http or https/i.test(error.message) ? 400 : 502;
         res.status(status).json({ error: error.message });
+        exitIfCannotFork(error);
     }
 }
 
@@ -85,6 +96,7 @@ app.post('/', async (req, res) => {
         if (!res.headersSent) {
             res.status(500).json({ error: err.message });
         }
+        exitIfCannotFork(err);
     }
 });
 
