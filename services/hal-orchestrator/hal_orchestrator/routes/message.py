@@ -844,6 +844,10 @@ class CurrentLocationData(BaseModel):
 
 class MessageRequest(BaseModel):
     message_id: str | None = Field(default=None, min_length=1, max_length=255)
+    # Transport this message arrived on. Default keeps the pre-channel Mac
+    # bridge working unchanged; the WhatsApp bridge sends "whatsapp". Recorded
+    # per silo so proactive outbox sends route back to the same bridge.
+    channel: str = Field(default="imessage", pattern=r"^(imessage|whatsapp)$")
     phone: str = Field(min_length=1, max_length=255)
     text: str = Field(max_length=12000)
     sender_name: str | None = Field(default=None, max_length=200)
@@ -1078,6 +1082,16 @@ def build_message_router() -> APIRouter:
                 chat_id = body.phone
                 sender_phone = None
         silo = (chat_id or body.phone) if is_group else (sender_phone or body.phone)
+
+        # Remember which transport this silo speaks on (skip synthetic internal
+        # turns — they say nothing about where the user actually is).
+        if not body.internal:
+            from hal_orchestrator.services.delivery import record_silo_channel
+
+            try:
+                await record_silo_channel(session, silo, body.channel)
+            except Exception:
+                log.exception("message.channel_record_failed", silo=silo)
 
         # Claim the bridge event before any model call or side effect. Older
         # bridge payloads without message_id remain accepted for a staged rollout.
@@ -2465,17 +2479,26 @@ def build_message_router() -> APIRouter:
     async def drain_outbox(
         ack: bool = True,
         limit: int = 100,
+        channel: str = "imessage",
         session: AsyncSession = Depends(get_session),
     ) -> dict:
-        """Claim durable deliveries.
+        """Claim durable deliveries for one bridge channel.
 
         ``ack=true`` preserves the legacy drain-on-read bridge. New bridges use
         ``ack=false`` and POST /api/outbox/ack after AppleScript succeeds.
+        ``channel`` defaults to imessage so the pre-channel Mac bridge keeps
+        draining only its own deliveries.
         """
         import hal_orchestrator.state as state
-        from hal_orchestrator.services.delivery import DurableOutbox, claim
+        from hal_orchestrator.services.delivery import (
+            KNOWN_CHANNELS,
+            DurableOutbox,
+            claim,
+        )
 
-        messages = await claim(session, limit=limit, auto_ack=ack)
+        if channel not in KNOWN_CHANNELS:
+            raise HTTPException(status_code=400, detail="unknown channel")
+        messages = await claim(session, limit=limit, auto_ack=ack, channel=channel)
         await session.commit()
         # Preserve startup/test queue compatibility.
         if isinstance(state.outbox, DurableOutbox):

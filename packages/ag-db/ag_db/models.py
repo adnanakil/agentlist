@@ -475,6 +475,11 @@ class HalOutboxMessage(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     destination: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Which bridge delivers this row ("imessage" | "whatsapp") — each bridge
+    # drains only its own channel.
+    channel: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="imessage", server_default="imessage"
+    )
     text: Mapped[str] = mapped_column(Text, nullable=False)
     images: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # [{mime_type, data, ext}]
     idempotency_key: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
@@ -488,6 +493,18 @@ class HalOutboxMessage(Base):
     __table_args__ = (
         Index("ix_hal_outbox_pending", "status", "available_at"),
         Index("ix_hal_outbox_lease", "lease_until"),
+    )
+
+
+class HalSiloChannel(Base):
+    """Last transport a silo spoke on — routes silo-addressed outbox rows."""
+
+    __tablename__ = "hal_silo_channels"
+
+    silo: Mapped[str] = mapped_column(String(255), primary_key=True)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
 
