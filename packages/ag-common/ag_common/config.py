@@ -67,7 +67,7 @@ class HalOrchestratorConfig(BaseConfig):
     # supposed to catch an OpenAI outage. An explicit per-call thinking_level
     # (e.g. the watch poll forcing MINIMAL) still overrides this.
     openai_reasoning_effort: str = "xhigh"
-    gemini_model: str = "gemini-3.5-flash"  # MAIN user-facing agent loop
+    gemini_model: str = "gemini-3.6-flash"  # MAIN user-facing agent loop
     # Resilience: if the MAIN loop's model fails (Anthropic 529 Overloaded, a
     # depleted-credits error, timeouts), try these models in order before giving
     # up — so one provider/model being down doesn't take HAL down. Comma-
@@ -77,12 +77,12 @@ class HalOrchestratorConfig(BaseConfig):
     # Opus-only overload (no Gemini credits needed); Gemini = cross-provider
     # cover for an all-Anthropic outage (needs the Gemini key funded to fire).
     model_fallbacks: str = "claude-sonnet-4-6,gemini-3.1-pro-preview"
-    gemini_flash_model: str = "gemini-3.5-flash"  # in-process specialist sub-agents
+    gemini_flash_model: str = "gemini-3.6-flash"  # in-process specialist sub-agents
     # Always-on BACKGROUND machinery (heartbeat, nightly grading, self-critique)
     # — kept on a cheap model independent of the main loop, so a premium main
     # model (e.g. Claude Opus) only fires on real user messages, not the 24/7
     # heartbeat/grading/critic that otherwise dominate spend.
-    gemini_background_model: str = "gemini-3.5-flash"
+    gemini_background_model: str = "gemini-3.6-flash"
     # Thinking level for Gemini 3.5+ models. Valid: LOW, MEDIUM, HIGH, or empty
     # to disable. Empty/"NONE" → no thinkingConfig sent. Default MEDIUM gives a
     # nice quality boost without the latency of HIGH.

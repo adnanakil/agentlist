@@ -32,7 +32,7 @@ Usage:
   DATABASE_PUBLIC_URL=... HAL_BRIDGE_SECRET=... python scripts/eval_real_day.py [id ...]
 Env: DATABASE_URL or DATABASE_PUBLIC_URL, HAL_BRIDGE_SECRET, optional HAL_URL,
      EVAL_SILO (guarded), EVAL_BG_MODEL (heartbeat model; default matches the
-     production GEMINI_BACKGROUND_MODEL, gemini-3.5-flash).
+     production GEMINI_BACKGROUND_MODEL, gemini-3.6-flash).
 """
 import asyncio
 import json
@@ -48,7 +48,7 @@ import httpx
 URL = os.environ.get("HAL_URL", "https://hal-orchestrator-production.up.railway.app/api/message")
 TEST_SILO = "+15555550100"
 SILO = os.environ.get("EVAL_SILO", TEST_SILO)
-BG_MODEL = os.environ.get("EVAL_BG_MODEL", "gemini-3.5-flash")
+BG_MODEL = os.environ.get("EVAL_BG_MODEL", "gemini-3.6-flash")
 ET = ZoneInfo("America/New_York")
 
 TEST_PROFILE_NOTES = (

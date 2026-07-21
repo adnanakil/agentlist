@@ -13,8 +13,9 @@ input / cached-read / output. Sources, verified 2026-07-13:
   orchestrator's shim uses). claude-sonnet-5 has intro pricing ($2.00/$10.00)
   through 2026-08-31; the table carries the standard $3.00/$15.00 so
   projections don't understate costs after the intro lapses.
-- Google (gemini-3.5-flash, for when the Gemini account is refunded):
-  https://ai.google.dev/gemini-api/docs/pricing ($1.50/$0.15/$9.00).
+- Google: https://ai.google.dev/gemini-api/docs/pricing — gemini-3.6-flash
+  ($1.50/$0.15/$7.50, verified 2026-07-21) and gemini-3.5-flash
+  ($1.50/$0.15/$9.00, kept for cost reports over pre-3.6 runs).
 
 Billing semantics baked into cost_of():
 - `reasoning` tokens (OpenAI Responses reasoning, Anthropic thinking) are a
@@ -43,6 +44,7 @@ PRICES: dict[str, tuple[float, float, float, float]] = {
     "claude-sonnet-5": (3.00, 0.30, 15.00, 3.75),
     "claude-haiku-4-5": (1.00, 0.10, 5.00, 1.25),
     "gemini-3.5-flash": (1.50, 0.15, 9.00, 0.0),
+    "gemini-3.6-flash": (1.50, 0.15, 7.50, 0.0),
 }
 
 

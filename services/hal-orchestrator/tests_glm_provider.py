@@ -85,8 +85,8 @@ async def _route(model):
 
 s1 = asyncio.run(_route("glm-5.2"))
 check("glm-5.2 -> call_glm", s1.get("glm") == "glm-5.2" and "native" not in s1)
-s2 = asyncio.run(_route("gemini-3.5-flash"))
-check("gemini-* -> native (not GLM)", s2.get("native") == "gemini-3.5-flash" and "glm" not in s2)
+s2 = asyncio.run(_route("gemini-3.6-flash"))
+check("gemini-* -> native (not GLM)", s2.get("native") == "gemini-3.6-flash" and "glm" not in s2)
 
 print()
 if failures:

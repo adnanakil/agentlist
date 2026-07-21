@@ -171,8 +171,8 @@ async def _route(model):
 
 s1 = asyncio.run(_route("gpt-5.6-luna"))
 check("gpt-5.6-luna -> call_openai", s1.get("openai") == "gpt-5.6-luna" and "native" not in s1)
-s2 = asyncio.run(_route("gemini-3.5-flash"))
-check("gemini-* -> native (not OpenAI)", s2.get("native") == "gemini-3.5-flash" and "openai" not in s2)
+s2 = asyncio.run(_route("gemini-3.6-flash"))
+check("gemini-* -> native (not OpenAI)", s2.get("native") == "gemini-3.6-flash" and "openai" not in s2)
 blocky = [{"role": "user", "parts": [{"text": "hi"}]},
           {"role": "model", "parts": [{"_claude_block": {"type": "thinking"}}, {"text": "t"}]}]
 
