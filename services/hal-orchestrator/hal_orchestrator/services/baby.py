@@ -31,6 +31,10 @@ log = structlog.get_logger()
 
 SLEEP_STARTS = {"nap_start", "bedtime"}
 EVENT_KINDS = {"feed", "nap_start", "bedtime", "wake", "tummy_time", "diaper", "note"}
+# Events that mean the baby is up. Logged during an open NAP they imply the
+# wake just wasn't recorded. Night sleep is exempt — dream feeds and overnight
+# changes don't mean the baby is up for the day.
+AWAKE_KINDS = {"feed", "tummy_time", "diaper"}
 
 # A "nap" longer than this is assumed to be a missed wake log, not real sleep.
 MAX_NAP_HOURS = 4
@@ -246,6 +250,43 @@ async def add_event(
     await session.flush()
     log.info("baby.event", family=str(family.id), kind=kind, at=str(event_at))
     return event
+
+
+async def infer_wake_if_napping(
+    session: AsyncSession,
+    family: HalFamily,
+    kind: str,
+    event_at: datetime,
+    logged_by: str | None,
+    silo: str,
+) -> HalBabyEvent | None:
+    """Close an open nap when an awake-implying event lands inside it.
+
+    "Ate 2:10" during a nap that started 12:37 means the baby woke and the wake
+    wasn't logged — insert the wake at the event's time so the card, forecast,
+    and nap-cap watcher all see him up. Naps only: a feed during night sleep
+    (bedtime) is a dream feed, not a wake-up.
+    """
+    if kind not in AWAKE_KINDS:
+        return None
+    stmt = (
+        select(HalBabyEvent)
+        .where(
+            HalBabyEvent.family_id == family.id,
+            HalBabyEvent.kind.in_(list(SLEEP_STARTS | {"wake"})),
+            HalBabyEvent.event_at < event_at,
+        )
+        .order_by(HalBabyEvent.event_at.desc())
+        .limit(1)
+    )
+    last = (await session.execute(stmt)).scalar_one_or_none()
+    if last is None or last.kind != "nap_start":
+        return None
+    return await add_event(
+        session, family, "wake", event_at,
+        logged_by=logged_by, silo=silo,
+        note=f"Inferred — {kind} logged while the nap was still open.",
+    )
 
 
 async def load_events(

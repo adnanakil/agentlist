@@ -31,6 +31,7 @@ from hal_orchestrator.services.baby import (
     format_day_summary,
     format_forecast,
     get_family_for_silo,
+    infer_wake_if_napping,
     load_events,
     summarize_day,
 )
@@ -239,6 +240,12 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             ctx.session, family.id
         )
 
+        # Infer the missed wake BEFORE inserting this event, so the lookback
+        # query sees only prior state.
+        inferred_wake = await infer_wake_if_napping(
+            ctx.session, family, kind, event_at,
+            logged_by=logger_id, silo=ctx.phone,
+        )
         await add_event(
             ctx.session, family, kind, event_at,
             logged_by=logger_id, silo=ctx.phone,
@@ -265,6 +272,10 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         auto_set = await apply_auto_reminders(
             ctx.session, family, kind, event_at, ctx.phone, forecast, now
         )
+        if inferred_wake is not None:
+            auto_set += await apply_auto_reminders(
+                ctx.session, family, "wake", event_at, ctx.phone, forecast, now
+            )
 
         # Once-ever, code-triggered moments (never model-whim — ONBOARDING.md):
         # the Win-2 forecast reveal (first wake-after-nap OR 3 logged events)
@@ -339,6 +350,12 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
                 "",
                 format_forecast(forecast, tz, baby, now),
             ]
+        if inferred_wake is not None:
+            lines.append(
+                f"Note: {baby} was still logged as napping, so this {kind.replace('_', ' ')} "
+                f"also closed the nap — wake recorded at {fmt_time(event_at, tz)}. Mention "
+                "this in one short clause so they can correct the wake time if it was earlier."
+            )
         if auto_set:
             lines.append("Auto-set reminders (standing preference): " + "; ".join(auto_set))
             lines.append(
