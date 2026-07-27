@@ -57,6 +57,13 @@ def render_landing(number: str, code: str | None = None) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HAL — the baby log that lives in your group chat</title>
 <meta name="description" content="Your whole household on one baby schedule. Parents, nanny, grandma text feeds and naps to the family thread — HAL keeps one record, forecasts the next nap, and recaps the day. No app.">
+<meta name="application-name" content="HAL">
+<meta property="og:site_name" content="HAL">
+<meta property="og:title" content="HAL — the baby log that lives in your group chat">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://www.texthal.com/">
+<link rel="canonical" href="https://www.texthal.com/">
+<script type="application/ld+json">{{"@context":"https://schema.org","@type":"WebSite","name":"HAL","alternateName":"texthal.com","url":"https://www.texthal.com/"}}</script>
 <style>
   :root {{ color-scheme: dark; }}
   * {{ margin:0; padding:0; box-sizing:border-box; }}

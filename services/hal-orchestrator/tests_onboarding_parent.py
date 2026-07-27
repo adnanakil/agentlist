@@ -232,7 +232,7 @@ check("timezone_name defaults to None (caller decides)",
 # --- 8. landing renderer ----------------------------------------------------- #
 print("\nlanding renderer:")
 html = render_landing("+15550001234")
-check("hero is the beachhead line", "The baby log that lives in your group chat." in html)
+check("hero is the beachhead line", "HAL — the baby log that lives in your group chat." in html)
 check("sms prefill is the parent selector", "new%20baby%20here" in html)
 check("privacy line verbatim", "never sold, never ads" in html and "forget me" in html)
 html_code = render_landing("+15550001234", code="psp-01")

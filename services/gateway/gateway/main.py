@@ -1,11 +1,12 @@
 """Gateway application factory."""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from ag_common.errors import AgentGateError, agentgate_error_handler
 from ag_db.session import create_engine_and_session
@@ -81,6 +82,20 @@ def create_app() -> FastAPI:
     app.add_exception_handler(AgentGateError, agentgate_error_handler)  # type: ignore[arg-type]
 
     # --- Middleware (outermost first) ---
+    @app.middleware("http")
+    async def legacy_hal_domain_redirect(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        # HAL's retired tryhal.xyz domain parks on this service (Railway caps
+        # custom domains per service, and hal-orchestrator's slots hold
+        # texthal.com); redirect it home so old links keep working.
+        host = request.headers.get("host", "").split(":")[0].lower()
+        if host == "tryhal.xyz" or host.endswith(".tryhal.xyz"):
+            return RedirectResponse(
+                url=f"https://www.texthal.com{request.url.path}", status_code=301
+            )
+        return await call_next(request)
+
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(
         CORSMiddleware,
