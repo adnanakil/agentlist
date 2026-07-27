@@ -27,6 +27,7 @@ from ag_db.models import (
     HalConversation,
     HalLearningCandidate,
     HalMessage,
+    HalPageHit,
     HalUserProfile,
 )
 from ag_db.session import get_session
@@ -326,5 +327,110 @@ def build_admin_router() -> APIRouter:
         await reject(session, candidate, note)
         await session.commit()
         return JSONResponse({"ok": True})
+
+    @router.get("/admin/traffic", response_class=HTMLResponse)
+    async def site_traffic(
+        token: str = Query(""),
+        format: str = Query("html"),
+        authorization: str = Header(""),
+        session: AsyncSession = Depends(get_session),
+    ):
+        bearer = ""
+        if authorization.startswith("Bearer "):
+            bearer = authorization[len("Bearer ") :].strip()
+        _check_token(bearer or token)
+        now = datetime.now(timezone.utc)
+        since_30d = now - timedelta(days=30)
+        since_14d = now - timedelta(days=14)
+
+        day = func.date_trunc("day", HalPageHit.created_at).label("day")
+        daily = (
+            await session.execute(
+                select(
+                    day,
+                    func.count().filter(HalPageHit.is_bot.is_(False)).label("views"),
+                    func.count(func.distinct(HalPageHit.visitor_hash))
+                    .filter(HalPageHit.is_bot.is_(False))
+                    .label("uniques"),
+                    func.count().filter(HalPageHit.is_bot.is_(True)).label("bots"),
+                )
+                .where(HalPageHit.created_at >= since_30d)
+                .group_by(day)
+                .order_by(day.desc())
+            )
+        ).all()
+        referrers = (
+            await session.execute(
+                select(HalPageHit.referrer, func.count().label("n"))
+                .where(
+                    HalPageHit.created_at >= since_14d,
+                    HalPageHit.is_bot.is_(False),
+                    HalPageHit.referrer.is_not(None),
+                )
+                .group_by(HalPageHit.referrer)
+                .order_by(func.count().desc())
+                .limit(15)
+            )
+        ).all()
+        paths = (
+            await session.execute(
+                select(HalPageHit.path, func.count().label("n"))
+                .where(HalPageHit.created_at >= since_14d, HalPageHit.is_bot.is_(False))
+                .group_by(HalPageHit.path)
+                .order_by(func.count().desc())
+            )
+        ).all()
+
+        data = {
+            "daily": [
+                {
+                    "day": r.day.strftime("%Y-%m-%d"),
+                    "views": r.views,
+                    "uniques": r.uniques,
+                    "bots": r.bots,
+                }
+                for r in daily
+            ],
+            "referrers_14d": [{"referrer": r.referrer, "hits": r.n} for r in referrers],
+            "paths_14d": [{"path": r.path, "hits": r.n} for r in paths],
+        }
+        if format == "json":
+            return JSONResponse(data)
+
+        esc = html.escape
+        day_rows = "".join(
+            f"<tr><td>{d['day']}</td><td>{d['views']}</td>"
+            f"<td>{d['uniques']}</td><td class='dim'>{d['bots']}</td></tr>"
+            for d in data["daily"]
+        ) or "<tr><td colspan=4>No hits recorded yet</td></tr>"
+        ref_rows = "".join(
+            f"<tr><td>{esc(r['referrer'] or '')}</td><td>{r['hits']}</td></tr>"
+            for r in data["referrers_14d"]
+        ) or "<tr><td colspan=2>No referrers yet (direct visits only)</td></tr>"
+        path_rows = "".join(
+            f"<tr><td>{esc(p['path'])}</td><td>{p['hits']}</td></tr>"
+            for p in data["paths_14d"]
+        )
+        return HTMLResponse(f"""<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site traffic — HAL admin</title><style>
+body {{ background:#111; color:#ddd; font-family:-apple-system, system-ui, sans-serif;
+       max-width:720px; margin:0 auto; padding:32px 16px; }}
+h1 {{ font-size:20px; margin-bottom:4px; }} h2 {{ font-size:15px; margin:26px 0 8px; }}
+p.sub {{ color:#888; font-size:13px; }}
+table {{ border-collapse:collapse; width:100%; font-size:14px; }}
+td, th {{ text-align:left; padding:5px 10px 5px 0; border-bottom:1px solid #2a2a2a; }}
+th {{ color:#888; font-weight:600; font-size:12px; }} .dim {{ color:#666; }}
+</style></head><body>
+<h1>Site traffic</h1>
+<p class="sub">Server-side counts for texthal.com — no client tracker. Uniques are
+day-salted visitor hashes (no IPs stored). Bots counted separately.</p>
+<h2>Daily (last 30 days)</h2>
+<table><tr><th>Day (UTC)</th><th>Views</th><th>Uniques</th><th>Bot hits</th></tr>{day_rows}</table>
+<h2>Top referrers (14 days)</h2>
+<table><tr><th>Referrer</th><th>Hits</th></tr>{ref_rows}</table>
+<h2>Pages (14 days)</h2>
+<table><tr><th>Path</th><th>Hits</th></tr>{path_rows}</table>
+</body></html>""")
 
     return router

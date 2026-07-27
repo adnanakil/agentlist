@@ -18,6 +18,7 @@ from sqlalchemy import text
 
 import hal_orchestrator.state as state
 from ag_db.session import create_engine_and_session
+from hal_orchestrator.middleware.page_hits import PageHitMiddleware
 from hal_orchestrator.middleware.request_size import ContentLengthLimitMiddleware
 from hal_orchestrator.middleware.security_headers import SecurityHeadersMiddleware
 from hal_orchestrator.routes.admin import build_admin_router
@@ -234,6 +235,7 @@ def create_app() -> FastAPI:
         ContentLengthLimitMiddleware, max_bytes=state.settings.max_request_bytes
     )
     application.add_middleware(SecurityHeadersMiddleware)
+    application.add_middleware(PageHitMiddleware)
 
     # Health check
     @application.get("/health")

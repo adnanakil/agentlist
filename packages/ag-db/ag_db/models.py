@@ -1069,3 +1069,26 @@ class HalGroupMember(Base):
         Index("ix_hal_group_members_last_spoke_at", "last_spoke_at"),
         UniqueConstraint("group_silo", "member_silo", name="uq_hal_group_members_group_member"),
     )
+
+
+class HalPageHit(Base):
+    """One landing-site page view, recorded server-side (no client JS, no
+    cookies — consistent with the site's no-tracking promise). visitor_hash
+    is sha256(ip|user_agent|utc_day) truncated: raw IPs are never stored,
+    and the day salt means hashes can't be joined across days. Bots are
+    flagged, not dropped, so crawler traffic stays visible separately."""
+
+    __tablename__ = "hal_page_hits"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    path: Mapped[str] = mapped_column(String(255), nullable=False)
+    referrer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    visitor_hash: Mapped[str] = mapped_column(String(16), nullable=False)
+    is_bot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_hal_page_hits_created_at", "created_at"),
+        Index("ix_hal_page_hits_path", "path"),
+    )
