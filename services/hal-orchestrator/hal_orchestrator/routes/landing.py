@@ -309,7 +309,7 @@ Bedtime's usually ~7:15. He ran a little light on naps today, so a touch earlier
 
   <p class="privacy">Your family's data stays yours — never sold, never ads,
   never used to train anything. Text 'forget me' and it's gone.</p>
-  <footer><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></footer>
+  <footer>© 2026 HAL · <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></footer>
 </body></html>"""
 
 
