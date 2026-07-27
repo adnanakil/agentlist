@@ -102,6 +102,8 @@ class FakeCtx:
     def __init__(self, key, resp):
         self.settings = HalOrchestratorConfig(google_maps_api_key=key)
         self.http_client = FakeHTTP(resp)
+        self.user_text = ""
+        self.current_location = None
 
 
 async def run_tool():
