@@ -20,7 +20,7 @@ import re
 from urllib.parse import quote
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from hal_orchestrator.routes.logo_data import LOGO_DATA_URI
 from hal_orchestrator.state import get_settings
@@ -321,6 +321,25 @@ def build_landing_router() -> APIRouter:
         code = c if c and _CODE_RX.match(c) else None
         return HTMLResponse(
             render_landing(get_settings().hal_public_number, code=code)
+        )
+
+    @router.get("/robots.txt", include_in_schema=False)
+    async def robots() -> PlainTextResponse:
+        return PlainTextResponse(
+            "User-agent: *\nAllow: /\nSitemap: https://www.texthal.com/sitemap.xml\n"
+        )
+
+    @router.get("/sitemap.xml", include_in_schema=False)
+    async def sitemap() -> PlainTextResponse:
+        pages = ["", "privacy", "terms"]
+        urls = "\n".join(
+            f"  <url><loc>https://www.texthal.com/{p}</loc></url>" for p in pages
+        )
+        return PlainTextResponse(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            f"{urls}\n</urlset>\n",
+            media_type="application/xml",
         )
 
     return router
