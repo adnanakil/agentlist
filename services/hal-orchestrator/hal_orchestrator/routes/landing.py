@@ -1,4 +1,4 @@
-"""GET / — the tryhal.xyz landing page.
+"""GET / — the texthal.com landing page.
 
 The beachhead front door (BEACHHEAD.md): the household baby-schedule pitch.
 One page, no JS, no signup flow — the demo IS the pitch: a mocked family

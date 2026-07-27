@@ -52,7 +52,7 @@ check("auto-refresh set", 'http-equiv="refresh"' in h)
 
 
 
-# --- landing page ("/", tryhal.xyz) — pure renderer ------------------------- #
+# --- landing page ("/", texthal.com) — pure renderer ------------------------ #
 from hal_orchestrator.routes.landing import _pretty_number, render_landing
 
 print("\nlanding page:")

@@ -36,36 +36,43 @@ so the CASA assessment is still required — that's the cost of inbox features.
 
 ---
 
-## ⚠️ Blocker 0 — point tryhal.xyz at HAL, then verify it
+## ⚠️ Blocker 0 — point texthal.com at HAL, then verify it
 
 Google will **not** verify an app whose homepage/privacy/redirect live on
-`*.up.railway.app` (you can't prove you own `railway.app`). Domain: **tryhal.xyz**.
+`*.up.railway.app` (you can't prove you own `railway.app`). Domain: **texthal.com**.
 
-**Already done (by Claude):** `tryhal.xyz` + `www.tryhal.xyz` are attached to the
-hal-orchestrator Railway service (the stale `tryhal.com` entries were removed).
+**Already done (by Claude):** `texthal.com` + `www.texthal.com` are attached to the
+hal-orchestrator Railway service (the older `tryhal.xyz` entries were removed —
+Railway's plan caps custom domains per service, and the domain moved to
+texthal.com).
 
-**You do — set DNS at Namecheap** (Domain List → tryhal.xyz → Advanced DNS):
+**You do — set DNS at Namecheap** (Domain List → texthal.com → Advanced DNS):
 1. DELETE the existing `CNAME www → parkingpage.namecheap.com`.
-2. DELETE the existing `URL Redirect @ → http://www.tryhal.xyz/`.
-3. ADD `CNAME` — Host `www` — Value `bk523lyv.up.railway.app`.
-4. ADD `ALIAS` — Host `@` — Value `7u4dul25.up.railway.app`.
+2. DELETE the existing `URL Redirect @ → http://www.texthal.com/`.
+3. ADD `CNAME` — Host `www` — Value `n0dd7rsf.up.railway.app`.
+4. ADD `ALIAS` — Host `@` — Value `wvkxiimu.up.railway.app`.
    (Namecheap BasicDNS has an "ALIAS Record" type that works at the root. If it's
-   not offered, keep an apex `URL Redirect @ → https://www.tryhal.xyz` and treat
-   `www.tryhal.xyz` as canonical instead.)
+   not offered, keep an apex `URL Redirect @ → https://www.texthal.com` and treat
+   `www.texthal.com` as canonical instead.)
+5. ADD the two ownership TXT records Railway issued — Host `_railway-verify` and
+   Host `_railway-verify.www`. Get the current values with
+   `railway domain status <id> --service hal-orchestrator` (they are regenerated
+   per domain, so read them live rather than copying stale ones from this doc).
 
 Railway auto-issues the SSL cert once DNS resolves (minutes to a couple hours).
 `/privacy` and `/terms` already work at the Railway URL; after DNS they resolve at
-`https://tryhal.xyz/privacy` too.
+`https://texthal.com/privacy` too.
 
 **Then verify ownership** in **Google Search Console**
-(https://search.google.com/search-console): add `tryhal.xyz` as a Domain property
+(https://search.google.com/search-console): add `texthal.com` as a Domain property
 and complete the TXT-record verification (another record at Namecheap). This is
 what lets you list it as an authorized domain on the consent screen.
 
 **Then move the OAuth redirect onto the domain:** in the Cloud Console OAuth
-client, add `https://tryhal.xyz/api/google/callback` to Authorized redirect URIs
-(keep the Railway one too), then set Railway `GOOGLE_REDIRECT_URI` to the new
-value. Do this only after DNS + SSL are live, or the connect flow breaks.
+client, add `https://www.texthal.com/api/google/callback` to Authorized redirect
+URIs (keep the Railway one too). Railway `GOOGLE_REDIRECT_URI` is already set to
+that value, so the connect flow stays broken until the Console entry exists and
+DNS + SSL are live.
 
 ---
 
@@ -97,9 +104,9 @@ request exactly the set the code ships.
 
 1. **User type:** External. **Publishing status:** In production (see Blocker 1).
 2. **App info:** name "HAL", user support email, an app logo (120×120 PNG),
-   app homepage `https://tryhal.xyz`, privacy `https://tryhal.xyz/privacy`,
-   terms `https://tryhal.xyz/terms`.
-3. **Authorized domains:** `tryhal.xyz` (must be Search-Console-verified).
+   app homepage `https://texthal.com`, privacy `https://texthal.com/privacy`,
+   terms `https://texthal.com/terms`.
+3. **Authorized domains:** `texthal.com` (must be Search-Console-verified).
 4. **Scopes:** add exactly the set you chose above.
 5. **Submit for verification.** For each sensitive/restricted scope, paste a
    justification (drafts below). Attach a **demo video** (script below).
@@ -119,7 +126,7 @@ request exactly the set the code ships.
 
 ### Demo video (record with QuickTime/Loom; ~2–3 min, no login shown)
 
-1. Show `tryhal.xyz` (homepage) and the `/privacy` page with the Limited Use line.
+1. Show `texthal.com` (homepage) and the `/privacy` page with the Limited Use line.
 2. In Messages, text HAL "connect google" → tap the link → the Google consent
    screen (show the scopes) → approve → the "connected" confirmation.
 3. Demonstrate each scope: "what's on my calendar today?" (calendar.readonly);
@@ -160,7 +167,7 @@ Google-user-data turns through does **not** train on API data:
 
 ## Order of operations
 
-1. Point tryhal.xyz at HAL + verify it in Search Console (Blocker 0).
+1. Point texthal.com at HAL + verify it in Search Console (Blocker 0).
 2. Set publishing status → In production (Blocker 1).
 3. Fill in the `TODO(owner)` fields in `routes/legal.py`; redeploy.
 4. Pick your scope set; trim `SCOPES` if launching lighter.

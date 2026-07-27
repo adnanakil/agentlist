@@ -5,7 +5,7 @@ Prepared 2026-07-09 for the ADA-CASA AL1 assessment Google requires by
 scope) verification moving. Companion to `GOOGLE_VERIFICATION.md`.
 
 App under assessment: the HAL orchestrator (FastAPI, Python 3.12) deployed at
-`https://www.tryhal.xyz` on Railway, plus shared packages `ag-common`/`ag-db`.
+`https://www.texthal.com` on Railway, plus shared packages `ag-common`/`ag-db`.
 The iMessage bridge (separate Mac, stdlib-only script) never touches Google
 user data directly — it relays chat text to/from the orchestrator over an
 authenticated HTTPS API.

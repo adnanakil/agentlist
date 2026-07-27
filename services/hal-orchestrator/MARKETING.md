@@ -311,7 +311,7 @@ No mail-merge blasts; two per week, warm and specific.
 
 ## Attribution codes (`?c=` registry)
 
-`tryhal.xyz/?c=<code>` puts the code in the sms prefill; HAL strips it and
+`texthal.com/?c=<code>` puts the code in the sms prefill; HAL strips it and
 records `acquisition_source` on the profile. Reddit rules mostly forbid
 links — there, the product is mentioned by NAME only and attribution is
 organic (that's fine; the funnel still shows `track_selected` volume).

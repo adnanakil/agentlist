@@ -215,7 +215,7 @@ class HalOrchestratorConfig(BaseConfig):
     encryption_key: str = ""
     # Where the nightly self-improvement digest (feature proposals) is sent.
     admin_phone: str = ""
-    # HAL's public iMessage number, shown on the tryhal.com landing page ("/").
+    # HAL's public iMessage number, shown on the texthal.com landing page ("/").
     # Unset -> the page shows a coming-soon variant without a number.
     hal_public_number: str = ""
     # Separate purpose-bound key for public card links. Production refuses to
