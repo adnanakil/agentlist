@@ -62,7 +62,7 @@ check("weird input passes through", _pretty_number("hal") == "hal")
 h = render_landing("+16505551234")
 check("sms link present", 'href="sms:+16505551234' in h)
 check("pretty number shown", "(650) 555-1234" in h)
-check("one-liner present", "personal assistant that lives in your texts" in h)
+check("one-liner present", "HAL — the baby log that lives in your group chat" in h)
 h2 = render_landing("")
 check("no number -> coming soon (no sms link)", "coming soon" in h2 and "sms:" not in h2)
 

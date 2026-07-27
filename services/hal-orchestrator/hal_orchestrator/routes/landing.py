@@ -69,10 +69,6 @@ def render_landing(number: str, code: str | None = None) -> str:
   .logo {{ width:84px; height:84px; border-radius:19px; overflow:hidden;
            margin-bottom:20px; box-shadow:0 6px 28px rgba(0,0,0,.45); }}
   .logo img {{ width:100%; height:100%; object-fit:cover; display:block; }}
-  .mark {{
-    font-size:14px; font-weight:600; letter-spacing:.42em; text-indent:.42em;
-    color:#8b8b93; text-transform:uppercase; margin-bottom:26px;
-  }}
   h1 {{
     font-size:clamp(27px, 5.6vw, 46px); font-weight:650; letter-spacing:-.02em;
     line-height:1.12; max-width:20ch; margin-bottom:16px;
@@ -167,8 +163,7 @@ def render_landing(number: str, code: str | None = None) -> str:
 </style></head>
 <body>
   <div class="logo"><img src="{LOGO_DATA_URI}" alt="HAL logo"></div>
-  <div class="mark">HAL</div>
-  <h1>The baby log that lives in your group chat.</h1>
+  <h1>HAL — the baby log that lives in your group chat.</h1>
   <p class="sub">Your whole household on one schedule. Parents, nanny,
   grandma — everyone texts feeds and naps the way they'd say them out loud,
   and HAL keeps one record straight. No app.</p>
