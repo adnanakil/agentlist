@@ -992,12 +992,12 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "google_auth",
                 "description": (
-                    "Manage the user's Google connection (Calendar read & write, "
-                    "Gmail read), scoped to this 1:1 chat. Actions: status (is it "
+                    "Manage the user's Google connection (Calendar read & write), "
+                    "scoped to this 1:1 chat. Actions: status (is it "
                     "connected, and as which account), start (returns a one-tap consent "
                     "LINK — send it to the user verbatim on its own line and ask them to "
                     "tap it, approve, and text back), disconnect (revoke + forget). If "
-                    "google_calendar or google_gmail says it's not connected, call "
+                    "google_calendar says it's not connected, call "
                     "start. Personal — refuses in group chats."
                 ),
                 "parameters": {
@@ -1041,32 +1041,6 @@ MAIN_TOOLS: list[dict] = [
                         "description": {"type": "string", "description": "Event notes/description (for create_event)"},
                         "location": {"type": "string", "description": "Event location (for create_event)"},
                         "attendees": {"type": "array", "items": {"type": "string"}, "description": "Attendee email addresses to invite (for create_event)"},
-                    },
-                    "required": ["action"],
-                },
-            },
-            {
-                "name": "google_gmail",
-                "description": (
-                    "Read the user's Gmail (READ-ONLY — HAL cannot send or draft "
-                    "email). Actions: list_emails (query defaults to 'is:unread'; "
-                    "supports Gmail search like 'is:unread newer_than:1d', returns "
-                    "ids + sender + subject + snippet), read_email (full body by "
-                    "message_id). Requires the user to have connected Google "
-                    "(google_auth). If the user asks you to send or reply to an "
-                    "email, say you can pull up the thread but they'll need to send "
-                    "from their own Mail app. Personal — refuses in group chats."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {
-                            "type": "string",
-                            "enum": ["list_emails", "read_email"],
-                        },
-                        "query": {"type": "string", "description": "Gmail search query, e.g. 'is:unread newer_than:1d'"},
-                        "max_results": {"type": "integer", "description": "Default 10"},
-                        "message_id": {"type": "string", "description": "Message id (for read_email)"},
                     },
                     "required": ["action"],
                 },

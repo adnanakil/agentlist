@@ -472,7 +472,7 @@ _ACTION_CLAIMS: list[tuple[re.Pattern, frozenset, str]] = [
             r"email (is )?(sent|on its way))\b",
             re.I,
         ),
-        frozenset({"google_gmail", "delegate"}),
+        frozenset({"delegate"}),
         "email",
     ),
 ]
