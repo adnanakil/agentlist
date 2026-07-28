@@ -27,9 +27,25 @@ log = structlog.get_logger()
 TRACKED_PATHS = {"/", "/privacy", "/terms"}
 
 _BOT_RE = re.compile(
-    r"bot|crawl|spider|slurp|preview|scan|monitor|probe|curl|wget|python-requests|httpx|go-http",
+    r"bot|crawl|spider|slurp|preview|scan|monitor|probe|curl|wget|python|httpx|"
+    r"go-http|java|scrapy|measurement|inspection|lighthouse|headless|phantom|"
+    r"selenium|censys|zgrab|nuclei|expanse|dataprovider",
     re.I,
 )
+
+# Scanners love stale browser UAs; versions this old are extinct among real
+# users in 2026, and NT 6.x (Win 7/8) / 32-bit Linux desktops likewise.
+_UA_VERSION_RE = re.compile(r"(?:Chrome|Firefox)/(\d+)")
+_ANCIENT_PLATFORM_RE = re.compile(r"Windows NT [56]\.|Linux i686")
+
+
+def _looks_bot(user_agent: str) -> bool:
+    if _BOT_RE.search(user_agent):
+        return True
+    if _ANCIENT_PLATFORM_RE.search(user_agent):
+        return True
+    m = _UA_VERSION_RE.search(user_agent)
+    return bool(m) and int(m.group(1)) < 115
 
 
 def _visitor_hash(ip: str, user_agent: str) -> str:
@@ -49,7 +65,7 @@ async def _record(path: str, referrer: str, user_agent: str, ip: str) -> None:
                     referrer=referrer[:2000] or None,
                     user_agent=user_agent[:2000] or None,
                     visitor_hash=_visitor_hash(ip, user_agent),
-                    is_bot=bool(_BOT_RE.search(user_agent)),
+                    is_bot=_looks_bot(user_agent),
                 )
             )
             await session.commit()
