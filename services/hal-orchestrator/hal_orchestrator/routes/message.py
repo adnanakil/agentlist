@@ -845,9 +845,11 @@ class CurrentLocationData(BaseModel):
 class MessageRequest(BaseModel):
     message_id: str | None = Field(default=None, min_length=1, max_length=255)
     # Transport this message arrived on. Default keeps the pre-channel Mac
-    # bridge working unchanged; the WhatsApp bridge sends "whatsapp". Recorded
-    # per silo so proactive outbox sends route back to the same bridge.
-    channel: str = Field(default="imessage", pattern=r"^(imessage|whatsapp)$")
+    # bridge working unchanged; the WhatsApp bridge sends "whatsapp"; the admin
+    # test console sends "test" so simulated silos never route to a real
+    # bridge. Recorded per silo so proactive outbox sends route back to the
+    # same transport.
+    channel: str = Field(default="imessage", pattern=r"^(imessage|whatsapp|test)$")
     phone: str = Field(min_length=1, max_length=255)
     text: str = Field(max_length=12000)
     sender_name: str | None = Field(default=None, max_length=200)

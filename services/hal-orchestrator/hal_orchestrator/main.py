@@ -28,6 +28,7 @@ from hal_orchestrator.routes.landing import build_landing_router
 from hal_orchestrator.routes.legal import build_legal_router
 from hal_orchestrator.routes.message import build_message_router
 from hal_orchestrator.routes.stripe import build_stripe_router
+from hal_orchestrator.routes.testconsole import build_testconsole_router
 from hal_orchestrator.services.baby_watch import baby_watch_loop
 from hal_orchestrator.services.cron import run_cron_checker
 from hal_orchestrator.services.curator import curator_loop
@@ -250,6 +251,9 @@ def create_app() -> FastAPI:
 
     # Admin dashboard (token-protected, read-only)
     application.include_router(build_admin_router())
+
+    # Test console (token-protected; simulated onboarding on fake silos)
+    application.include_router(build_testconsole_router())
 
     # Public landing page (texthal.com)
     application.include_router(build_landing_router())

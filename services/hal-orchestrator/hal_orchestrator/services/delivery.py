@@ -21,7 +21,10 @@ from ag_db.models import HalOutboxMessage, HalSiloChannel
 
 log = structlog.get_logger()
 
-KNOWN_CHANNELS = ("imessage", "whatsapp")
+# "test" is the admin test console (routes/testconsole.py): simulated silos
+# record it as their transport so every outbox row addressed to them — proactive
+# sends included — is claimed by the console, never by a real bridge.
+KNOWN_CHANNELS = ("imessage", "whatsapp", "test")
 
 
 async def channel_of(session: AsyncSession, silo: str) -> str:
