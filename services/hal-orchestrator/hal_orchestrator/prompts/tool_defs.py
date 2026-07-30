@@ -477,7 +477,7 @@ MAIN_TOOLS: list[dict] = [
                 "description": (
                     "Manage the current user's contact profile. "
                     "Actions: get (read profile), update (set fields like name, "
-                    "timezone, home_location, work_location, onboarded, "
+                    "timezone, home_location, work_location, "
                     "google_connected, google_offered, email, notes), "
                     "add_contact (save a person's number under a name — 'wife', "
                     "'Mom', 'Seth' — so send_message works by name; when the "
@@ -525,10 +525,6 @@ MAIN_TOOLS: list[dict] = [
                         "work_location": {
                             "type": "string",
                             "description": "Where the user works or spends their days.",
-                        },
-                        "onboarded": {
-                            "type": "boolean",
-                            "description": "Set to true after onboarding is complete",
                         },
                         "google_connected": {
                             "type": "boolean",

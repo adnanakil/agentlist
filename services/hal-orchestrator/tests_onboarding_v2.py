@@ -162,7 +162,8 @@ check("follow-up line asks about daily", "every morning" in TRIAL_FOLLOWUP)
 # done step arms the trial (change 5).
 done = _onboarding_block({**allfacts, "google_offered": True})
 check("done step arms the trial brief", done and "helpful_mode(action=trial)" in done)
-check("done step still flips onboarded", done and "onboarded=true" in done)
+check("done step leaves the flag to the code backstop",
+      done and "recorded automatically" in done and "onboarded=true" not in done)
 
 
 # --- helpful tool: trial arms; on/off commit/clear -------------------------- #

@@ -22,6 +22,12 @@ async def tool_contacts(args: dict, ctx: ToolContext) -> str:
             for k, v in args.items()
             if k not in ("action", "contact_name", "contact_phone") and v is not None
         }
+        # `onboarded` is code-owned: the message route's funnel backstop flips
+        # it when the flow truly reaches its terminal step. A model that sets
+        # it early (observed alongside the very first name save) would skip the
+        # remaining onboarding steps — timezone/home/work and the Google offer.
+        if fields.pop("onboarded", None) is not None and not fields:
+            return "Noted — onboarding completion is tracked automatically."
         if not fields:
             return "Error: no fields to update"
         profile = await update_profile(ctx.session, ctx.phone, **fields)

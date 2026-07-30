@@ -89,9 +89,11 @@ complete = {
     "work_location": "DTLA",
 }
 b5 = _onboarding_block({**base, **complete, "google_offered": True})
-check("step6 completes after offer", b5 and "onboarded=true" in b5)
+check("step6 completes after offer (code-owned flag)",
+      b5 and "recorded automatically" in b5 and "onboarded=true" not in b5)
 b5b = _onboarding_block({**base, **complete, "google_connected": True})
-check("step6 completes after connect", b5b and "onboarded=true" in b5b)
+check("step6 completes after connect (code-owned flag)",
+      b5b and "recorded automatically" in b5b and "onboarded=true" not in b5b)
 
 print("is_onboarding_complete:")
 check("empty -> incomplete", not is_onboarding_complete(None))

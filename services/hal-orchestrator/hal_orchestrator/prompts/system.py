@@ -789,8 +789,8 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
         )
     else:  # "done"
         step = (
-            "Onboarding is complete. Mark it done with "
-            "contacts(action=update, onboarded=true). In the SAME reply, offer to "
+            "Onboarding is complete — it's recorded automatically, nothing to "
+            "save. In the SAME reply, offer to "
             "SHOW them the morning brief by just sending one: say you'll send "
             "tomorrow morning's brief (weather, their day, a local idea) as a "
             "sample and it stops on its own if they don't want it — arm it with "
@@ -881,8 +881,8 @@ def _parent_onboarding_block(step_key: str, captured_line: str, profile: dict) -
         )
     else:  # "done"
         step = (
-            "Setup is complete — mark it with contacts(action=update, "
-            "onboarded=true). Tell them that's the WHOLE setup: text the next "
+            "Setup is complete — it's recorded automatically, nothing to "
+            "save. Tell them that's the WHOLE setup: text the next "
             "feed or nap as it happens and you'll take it from there — and if "
             "it's easier, they can tell you what's already happened today and "
             "you'll backfill it. Arm the morning-brief sample with "
