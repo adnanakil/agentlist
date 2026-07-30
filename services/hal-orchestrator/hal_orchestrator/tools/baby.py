@@ -45,6 +45,7 @@ CONFIG_BOOL_KEYS = {"auto_reminders", "auto_wind_down", "auto_feed_prep", "diges
 CARD_KINDS = {"feed", "nap_start", "wake", "bedtime"}
 _CARD_IMAGE_SOURCE = "baby_status_card"
 _DAY_CARD_IMAGE_SOURCE = "baby_day_card"
+_EXAMPLE_CARD_IMAGE_SOURCE = "baby_example_card"
 
 
 async def _attach_card(ctx: ToolContext, render, source: str) -> bool:
@@ -193,6 +194,23 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             timezone_name=tz_name,
             baby_birthdate=birthdate,
         )
+
+        # Show, don't tell: attach an EXAMPLE status card so the parent sees
+        # the nap/feed monitor they're getting before a single event exists.
+        # A real event logged later this same turn replaces it (see the log
+        # action's supersede below).
+        async def _render_example() -> bytes:
+            from hal_orchestrator.services.baby_card import render_example_card
+
+            return render_example_card(
+                family.baby_name,
+                ZoneInfo(family.timezone),
+                datetime.now(UTC),
+            )
+
+        example_attached = await _attach_card(
+            ctx, _render_example, _EXAMPLE_CARD_IMAGE_SOURCE
+        )
         return (
             f"Set up tracking for {baby_name}"
             + (f" (born {birthdate})" if birthdate else "")
@@ -205,6 +223,15 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
                 if tz_name
                 else " NOTE: timezone not set yet — when you learn their city, "
                 "call baby(action=configure, timezone=<IANA zone>)."
+            )
+            + (
+                " [An EXAMPLE status card image is attached — the live "
+                f"baby-monitor view they'll get for {baby_name}: nap state, "
+                "expected wake, next feed, bedtime. Point at it in ONE short "
+                "line — it fills itself in as they text feeds and naps. Do "
+                "NOT re-list the times on the card.]"
+                if example_attached
+                else ""
             )
         )
 
@@ -336,6 +363,14 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         # update). Attach the rendered PNG directly so iMessage receives a real
         # image instead of a URL whose Open Graph metadata creates a link card.
         card_attached = kind in CARD_KINDS and await _attach_status_card(ctx)
+        if card_attached:
+            # A real card supersedes the setup-time EXAMPLE preview: when the
+            # first log lands in the same turn as setup, send only the truth.
+            ctx.result_images[:] = [
+                image
+                for image in ctx.result_images
+                if image.get("_source") != _EXAMPLE_CARD_IMAGE_SOURCE
+            ]
 
         if card_attached:
             lines = [

@@ -92,3 +92,30 @@ if failures:
     print(f"{len(failures)} FAILED: {failures}")
     sys.exit(1)
 print("all passed")
+
+# --- example card (setup-time preview) -------------------------------------- #
+print("\nexample card:")
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
+
+from hal_orchestrator.services.baby_card import (
+    build_example_card_data,
+    render_example_card,
+)
+
+now = datetime(2026, 7, 30, 14, 0, tzinfo=UTC)
+ex = build_example_card_data("Theo", ZoneInfo("America/New_York"), now)
+check("example is flagged", ex.get("_example") is True)
+check("example shows a napping state", ex["state"] == "napping")
+check("example times derive from now", ex["now"] == "10:00 AM" and ex["asleep_since"] == "9:35 AM")
+check("example has feed + wake + bedtime", all(ex[k] for k in ("last_feed", "next_feed", "expected_wake", "expected_bedtime")))
+png = render_example_card("Theo", ZoneInfo("America/New_York"), now)
+check("example renders a PNG", png[:8] == b"\x89PNG\r\n\x1a\n" and len(png) > 5000)
+real = render_card_png({**ex, "_example": False})
+check("example badge changes the pixels", png != real)
+
+print()
+if failures:
+    print(f"{len(failures)} FAILED: {failures}")
+    sys.exit(1)
+print("all passed (incl. example card)")
