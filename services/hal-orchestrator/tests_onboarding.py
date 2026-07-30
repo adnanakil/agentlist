@@ -58,35 +58,37 @@ check(
 )
 
 b1 = _onboarding_block({**base, "name": "Sarah"})
-check("step2 asks timezone", b1 and "timezone" in b1.lower())
+check("step2 probes for a little one", b1 and "little one" in b1.lower())
+check("step2 sets up the log on yes", b1 and "baby(action=setup" in b1)
+check("step2 never re-raises after a no", b1 and "NEVER raise it again" in b1)
 check("step2 lists captured name", b1 and "name=Sarah" in b1)
 check("step2 doesn't re-ask name", b1 and "ask their name" not in b1)
 
-b2 = _onboarding_block({**base, "name": "Sarah", "timezone": "America/Los_Angeles"})
-check("step3 asks where they live", b2 and "live" in b2.lower())
-check("step3 lists tz captured", b2 and "timezone=America/Los_Angeles" in b2)
+# "no" path: the single ask decays -> city (tz + home in ONE ask)
+b2 = _onboarding_block({**base, "name": "Sarah", "asked_little_one": 1})
+check("step3 asks city (weather/events framing)", b2 and "city or neighborhood" in b2)
+check("step3 captures tz AND home in one ask", b2 and "home_location" in b2)
+check("step3 gives a local taste", b2 and "get_weather" in b2)
 
-b3 = _onboarding_block(
-    {**base, "name": "S", "timezone": "America/Los_Angeles", "home_location": "LA"}
-)
-check("step4 asks work", b3 and "work" in b3.lower())
+# "yes" path: the family satisfies the probe -> city next, baby shown captured
+b2b = _onboarding_block({**base, "name": "Sarah", "baby_name": "Luna"})
+check("yes-path moves on to city", b2b and "city or neighborhood" in b2b)
+check("yes-path lists captured baby", b2b and "baby=Luna" in b2b)
 
 b4 = _onboarding_block(
     {
         **base,
         "name": "S",
+        "asked_little_one": 1,
         "timezone": "America/Los_Angeles",
-        "home_location": "LA",
-        "work_location": "DTLA",
     }
 )
-check("step5 offers google", b4 and "google_auth" in b4 and "optional" in b4.lower())
+check("step4 offers google", b4 and "google_auth" in b4 and "optional" in b4.lower())
 
 complete = {
     "name": "S",
+    "asked_little_one": 1,
     "timezone": "America/Los_Angeles",
-    "home_location": "LA",
-    "work_location": "DTLA",
 }
 b5 = _onboarding_block({**base, **complete, "google_offered": True})
 check("step6 completes after offer (code-owned flag)",
@@ -98,6 +100,10 @@ check("step6 completes after connect (code-owned flag)",
 print("is_onboarding_complete:")
 check("empty -> incomplete", not is_onboarding_complete(None))
 check("name only -> incomplete", not is_onboarding_complete({**base, "name": "Sarah"}))
+check(
+    "baby set but no city -> incomplete",
+    not is_onboarding_complete({**base, "name": "S", "baby_name": "Luna"}),
+)
 check(
     "missing google offer/connect -> incomplete",
     not is_onboarding_complete({**base, **complete}),

@@ -1614,12 +1614,11 @@ def build_message_router() -> APIRouter:
                 except Exception:
                     log.exception("message.track_select_failed", silo=silo)
 
-        # Parent-track derived fact: "baby" is satisfied by the silo's
-        # HalFamily. Injected here (a derived field, never persisted on the
-        # profile) so the pure step machine can see it.
-        if profile.get("onboarding_track") == PARENT_TRACK and not profile.get(
-            "onboarded"
-        ):
+        # Derived onboarding fact: the silo's HalFamily satisfies the parent
+        # track's "baby" step AND the generic track's "little_one" probe.
+        # Injected here (a derived field, never persisted on the profile) so
+        # the pure step machine can see it.
+        if not is_group and not profile.get("onboarded"):
             try:
                 from hal_orchestrator.services.baby import get_family_for_silo
 
@@ -2375,26 +2374,27 @@ def build_message_router() -> APIRouter:
             # post-hooks, so a failure here can never break the reply).
             if not is_group and not body.internal:
                 fresh = await get_profile(session, silo)
-                # Parent track: re-derive the "baby" fact (a HalFamily may have
-                # been created THIS turn) and, once the city answer landed a
-                # timezone, sync it onto the family so the log's clock is right
-                # even if the model forgot the baby(configure, timezone=...) leg.
-                if fresh.get("onboarding_track") == PARENT_TRACK:
-                    from hal_orchestrator.services.baby import get_family_for_silo
+                # Re-derive the baby fact (a HalFamily may have been created
+                # THIS turn — parent track's "baby" step or the generic
+                # track's "little_one" probe) and, once the city answer landed
+                # a timezone, sync it onto the family so the log's clock is
+                # right even if the model forgot the baby(configure,
+                # timezone=...) leg.
+                from hal_orchestrator.services.baby import get_family_for_silo
 
-                    fam = await get_family_for_silo(session, silo)
-                    if fam is not None:
-                        fresh["baby_name"] = fam.baby_name
-                        fam_settings = dict(fam.settings or {})
-                        if fresh.get("timezone") and not fam_settings.get("tz_set"):
-                            fam.timezone = fresh["timezone"]
-                            fam_settings["tz_set"] = True
-                            fam.settings = fam_settings
-                            log.info(
-                                "baby.family_tz_synced",
-                                silo=silo,
-                                timezone=fresh["timezone"],
-                            )
+                fam = await get_family_for_silo(session, silo)
+                if fam is not None:
+                    fresh["baby_name"] = fam.baby_name
+                    fam_settings = dict(fam.settings or {})
+                    if fresh.get("timezone") and not fam_settings.get("tz_set"):
+                        fam.timezone = fresh["timezone"]
+                        fam_settings["tz_set"] = True
+                        fam.settings = fam_settings
+                        log.info(
+                            "baby.family_tz_synced",
+                            silo=silo,
+                            timezone=fresh["timezone"],
+                        )
                 onb_updates, onb_events = compute_onboarding_progress(profile, fresh)
                 for ev in onb_events:
                     log.info("onboarding.step", silo=silo, **ev)

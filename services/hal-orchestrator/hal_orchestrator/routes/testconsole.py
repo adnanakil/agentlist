@@ -334,7 +334,15 @@ def build_testconsole_router() -> APIRouter:
                 "onboarded_at": prof.get("onboarded_at"),
                 "asked": {
                     key: prof.get(f"asked_{key}", 0)
-                    for key in ("name", "timezone", "home", "work", "baby", "city")
+                    for key in (
+                        "name",
+                        "little_one",
+                        "city",
+                        "baby",
+                        "timezone",
+                        "home",
+                        "work",
+                    )
                 },
                 "forget_pending": extra.get("forget_pending"),
                 "plan": extra.get("plan"),

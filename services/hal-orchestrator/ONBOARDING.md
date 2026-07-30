@@ -36,6 +36,13 @@ around the first thing they text it.**
 
 ## What changes vs. onboarding v2
 
+> **2026-07-29 update:** the generic track is now a guided path too:
+> name → **little-one probe** ("do we have a little one we're keeping an
+> eye on? 👶", ONE ask, never re-raised after a no; a yes sets up the baby
+> log right there) → **city** (timezone + home in one ask, framed as
+> weather/events) → Google. home/work are no longer asked — the enricher
+> learns them. The v2 column below is kept for history.
+
 | v2 (generic) | Parent track |
 |---|---|
 | name → timezone → home → work → Google → trial brief | name → **baby (name + age)** → timezone-via-city → **first log** → *(earned)* family thread → trial brief |

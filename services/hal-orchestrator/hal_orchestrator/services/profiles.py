@@ -31,6 +31,10 @@ EXTRA_KEYS = (
     "asked_timezone",
     "asked_home",
     "asked_work",
+    # Generic-track baby probe ("do we have a little one?") — cap 1, so a
+    # "no" is never re-asked. asked_timezone/home/work above are legacy
+    # counters from the pre-guided funnel, kept readable for old profiles.
+    "asked_little_one",
     # Parent track (beachhead onboarding — ONBOARDING.md): which onboarding
     # track this silo runs ("parent" skips home/work/google entirely), the
     # acquisition code parsed from the landing prefill, and the parent-track
@@ -86,6 +90,7 @@ def _serialize(profile: HalUserProfile) -> dict:
         "asked_timezone": extra.get("asked_timezone", 0),
         "asked_home": extra.get("asked_home", 0),
         "asked_work": extra.get("asked_work", 0),
+        "asked_little_one": extra.get("asked_little_one", 0),
         "onboarding_track": extra.get("onboarding_track"),
         "acquisition_source": extra.get("acquisition_source"),
         "asked_baby": extra.get("asked_baby", 0),
@@ -117,6 +122,7 @@ def _empty(phone: str) -> dict:
         "asked_timezone": 0,
         "asked_home": 0,
         "asked_work": 0,
+        "asked_little_one": 0,
         "onboarding_track": None,
         "acquisition_source": None,
         "asked_baby": 0,

@@ -554,13 +554,21 @@ message so you can help proactively. That makes restraint critical:
 # profile_enricher to fill it silently. Ordered — the first unmet, non-decayed
 # fact is the next step.
 ONBOARDING_ASK_CAP = 2
-_ONBOARDING_DECAY_FACTS = ("name", "timezone", "home", "work")
+# Generic track: a guided path, not a form — name, then ONE probe for the
+# baby use-case (HAL's best trick; a "no" is never re-asked, cap 1), then
+# city (timezone + home in ONE ask, framed as weather/events), then the
+# Google offer. home/work are no longer asked — the enricher learns them.
+_ONBOARDING_DECAY_FACTS = ("name", "little_one", "city")
 _ONBOARDING_FACT_FIELD = {
     "name": "name",
-    "timezone": "timezone",
-    "home": "home_location",
-    "work": "work_location",
+    # Satisfied by the silo's HalFamily (derived baby_name injected by the
+    # message route) — i.e. "yes, and the log is set up". A "no" resolves
+    # via the cap-1 decay after the single ask.
+    "little_one": "baby_name",
+    # Satisfied by a captured timezone — the one city answer carries tz+home.
+    "city": "timezone",
 }
+_GENERIC_ASK_CAP = {"name": ONBOARDING_ASK_CAP, "little_one": 1, "city": ONBOARDING_ASK_CAP}
 
 # ---- Parent track (the beachhead front door — see ONBOARDING.md) ---------- #
 # New silos whose first contact reads like a new-baby household get the parent
@@ -665,14 +673,14 @@ def _fact_value(profile: dict, fact: str):
 def _fact_cap(profile: dict, fact: str) -> int:
     if _is_parent_track(profile):
         return _PARENT_ASK_CAP.get(fact, ONBOARDING_ASK_CAP)
-    return ONBOARDING_ASK_CAP
+    return _GENERIC_ASK_CAP.get(fact, ONBOARDING_ASK_CAP)
 
 
 def next_onboarding_step(profile: dict | None) -> str | None:
     """The ONE onboarding thing to do next for a 1:1 user, or None when there's
     nothing (no profile / already onboarded).
 
-    Facts are asked in order (generic: name → timezone → home → work; parent
+    Facts are asked in order (generic: name → little_one → city; parent
     track: baby → city → name). A fact that's still unset but has already been
     asked to its cap is DECAYED — treated as resolved and skipped, so no user
     (not even one who won't give their name) can get stuck un-onboardable.
@@ -715,7 +723,7 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
     have_work = bool(profile.get("work_location"))
 
     captured: list[str] = []
-    if _is_parent_track(profile) and profile.get("baby_name"):
+    if profile.get("baby_name"):
         captured.append(f"baby={profile['baby_name']}")
     if have_name:
         captured.append(f"name={profile['name']}")
@@ -752,27 +760,32 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
             "question. When they tell you, save it with "
             "contacts(action=update, name=...)."
         )
-    elif step_key == "timezone":
+    elif step_key == "little_one":
         step = (
-            "Ask what city or timezone they're in so your times and reminders are "
-            "right. Infer the IANA zone from a city/state (e.g. 'I'm in LA' -> "
-            "America/Los_Angeles) and save it with "
-            "contacts(action=update, timezone='America/Los_Angeles')."
+            "You don't know yet whether there's a baby in the picture — and the "
+            "baby log is your best trick. In ONE warm line, ask: 'Do we have a "
+            "little one we're keeping an eye on? 👶' with a clause on why — you "
+            "keep feeds, naps and diapers logged from plain texts, shared with "
+            "anyone in the family thread. "
+            "If YES: get the baby's name and age or birthdate (ONE ask covers "
+            "both) and start the log with baby(action=setup, baby_name=..., "
+            "baby_birthdate=YYYY-MM-DD). Never guess a timezone — leave it unset "
+            "until you know their city. Don't ask for a schedule: say you'll "
+            "pick up the rhythm from the first day of logging. "
+            "If NO: one light line ('no problem — plenty else I can do') and "
+            "move on. NEVER raise it again."
         )
-    elif step_key == "home":
+    elif step_key == "city":
         step = (
-            "Ask where they live (neighborhood/city) so you can help with weather, "
-            "day plans and travel. Save it with "
-            "contacts(action=update, home_location=...). THEN, in the same reply, "
-            "give them one small taste of what you do: check get_weather for their "
-            "area and offer ONE concrete, same-day useful thing (a nice window for "
-            "a walk, rain to plan around, a real nearby spot via places) — one "
-            "line, genuinely local, never generic."
-        )
-    elif step_key == "work":
-        step = (
-            "Ask where they work or spend their days (or 'work from home'). Save it "
-            "with contacts(action=update, work_location=...)."
+            "Ask where they're based — city or neighborhood — so you can keep an "
+            "eye on their weather and what's happening nearby. ONE ask captures "
+            "everything: infer the IANA timezone from their answer and save BOTH "
+            "with contacts(action=update, timezone='America/...', "
+            "home_location=...). Never ask for timezone or home separately. "
+            "THEN, in the same reply, give one small taste of what you do: check "
+            "get_weather for their area and offer ONE concrete, same-day useful "
+            "thing (a nice window for a walk, rain to plan around, a real nearby "
+            "spot via places) — one line, genuinely local, never generic."
         )
     elif step_key == "google":
         step = (
