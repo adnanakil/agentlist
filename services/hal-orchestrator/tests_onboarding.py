@@ -60,7 +60,8 @@ check(
 b1 = _onboarding_block({**base, "name": "Sarah"})
 check("step2 probes for a little one", b1 and "little one" in b1.lower())
 check("step2 sets up the log on yes", b1 and "baby(action=setup" in b1)
-check("step2 never re-raises after a no", b1 and "NEVER raise it again" in b1)
+check("step2 never re-raises after a no", b1 and "NEVER raise the baby again" in b1)
+check("step2 chains into the city ask", b1 and "SAME reply" in b1)
 check("step2 lists captured name", b1 and "name=Sarah" in b1)
 check("step2 doesn't re-ask name", b1 and "ask their name" not in b1)
 

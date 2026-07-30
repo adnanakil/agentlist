@@ -1,7 +1,7 @@
 """Tests for the parent onboarding track (beachhead front door — ONBOARDING.md):
 
   1. track detection (landing prefill + code, tight baby-intent, no false flips)
-  2. parent step machine: baby → city → name(cap 1) → done; Google never offered
+  2. parent step machine: baby → city → name(cap 1) → google → done
   3. parent onboarding block content (value-first, one question, scripts)
   4. parent playbook scripts present (privacy verbatim, twins, Android, export)
   5. funnel accounting on the parent track (asked_baby / asked_city / name cap)
@@ -91,12 +91,19 @@ check("baby set -> city", next_onboarding_step(with_baby) == "city")
 with_city = {**with_baby, "timezone": "America/Chicago"}
 check("city (tz) set -> name", next_onboarding_step(with_city) == "name")
 with_name = {**with_city, "name": "Sam"}
-check("all parent facts -> done (NO google step)", next_onboarding_step(with_name) == "done")
-check("parent flow complete without google", is_onboarding_complete(with_name))
+check("all parent facts -> google offer", next_onboarding_step(with_name) == "google")
+check(
+    "parent flow complete once google offered",
+    is_onboarding_complete({**with_name, "google_offered": True}),
+)
+check("not complete before the google offer", not is_onboarding_complete(with_name))
 # name cap is ONE — a single unanswered ask decays it.
 name_asked_once = {**with_city, "asked_name": 1}
-check("name asked once -> done (cap 1)", next_onboarding_step(name_asked_once) == "done")
-check("name-declined parent is complete", is_onboarding_complete(name_asked_once))
+check("name asked once -> google (cap 1)", next_onboarding_step(name_asked_once) == "google")
+check(
+    "name-declined parent completes after google",
+    is_onboarding_complete({**name_asked_once, "google_offered": True}),
+)
 # baby/city keep the standard cap of 2.
 check(
     "baby asked once still asked",
@@ -110,10 +117,14 @@ check(
     "city asked to cap -> name",
     next_onboarding_step({**with_baby, "asked_city": 2}) == "name",
 )
-# google flags NEVER gate the parent track.
+# ONE calendar offer closes the parent track too (2026-07-29 owner call).
 check(
-    "google flags ignored on parent track",
-    next_onboarding_step({**with_name, "google_offered": False}) == "done",
+    "google offered -> done",
+    next_onboarding_step({**with_name, "google_offered": True}) == "done",
+)
+check(
+    "google disconnected never re-pitched",
+    next_onboarding_step({**with_name, "google_disconnected": True}) == "done",
 )
 # generic track unchanged.
 check("generic brand-new -> name", next_onboarding_step(base) == "name")
@@ -134,7 +145,14 @@ check("city step saves tz to BOTH profile and family", bc and "baby(action=confi
 check("city step captured line shows baby", bc and "baby=Leo" in bc)
 bn = _onboarding_block(with_city)
 check("name step is woven, never a blocker", bn and "NEVER as a blocker" in bn)
-bd = _onboarding_block(name_asked_once)
+bg = _onboarding_block(name_asked_once)
+check("google step frames the calendar for a parent", bg and "pediatrician" in bg)
+check(
+    "google step sends the link and stays optional",
+    bg and "google_auth(action=start)" in bg and "optional" in bg,
+)
+check("google step marks offered", bg and "google_offered=true" in bg)
+bd = _onboarding_block({**name_asked_once, "google_offered": True})
 check("done step leaves the flag to the code backstop",
       bd and "recorded automatically" in bd and "onboarded=true" not in bd)
 check("done step arms the trial brief", bd and "helpful_mode(action=trial)" in bd)
@@ -171,8 +189,10 @@ check("answered baby -> answered event, no increment", "asked_baby" not in upd2
 pre = {**with_city, "asked_name": 1}
 upd3, evs3 = compute_onboarding_progress(pre, pre)
 check("name decayed after ONE ask", any(e["kind"] == "skipped_decay" and e["step"] == "name" for e in evs3))
-check("parent completion fires without google", any(e["kind"] == "completed" for e in evs3))
-check("completion stamps onboarded_at", bool(upd3.get("onboarded_at")))
+check("no completion before the google offer", not any(e["kind"] == "completed" for e in evs3))
+upd4, evs4 = compute_onboarding_progress(pre, {**pre, "google_offered": True})
+check("completion fires once google offered", any(e["kind"] == "completed" for e in evs4))
+check("completion stamps onboarded_at", bool(upd4.get("onboarded_at")))
 
 
 # --- 6. age-normed wake windows + forecast confidence ------------------------ #

@@ -41,7 +41,12 @@ around the first thing they text it.**
 > eye on? 👶", ONE ask, never re-raised after a no; a yes sets up the baby
 > log right there) → **city** (timezone + home in one ask, framed as
 > weather/events) → Google. home/work are no longer asked — the enricher
-> learns them. The v2 column below is kept for history.
+> learns them. Each step is CHAINED into the previous reply (the name ack
+> asks the little-one question, the probe answer asks the city, the city
+> save closes with the calendar offer) so no reply dead-ends. Both tracks
+> now finish with the single optional Google-calendar offer — the parent
+> track included, superseding the "no Google in parent onboarding" row
+> below. The v2 column is kept for history.
 
 | v2 (generic) | Parent track |
 |---|---|

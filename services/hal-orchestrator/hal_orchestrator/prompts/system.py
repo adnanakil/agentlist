@@ -574,10 +574,11 @@ _GENERIC_ASK_CAP = {"name": ONBOARDING_ASK_CAP, "little_one": 1, "city": ONBOARD
 # New silos whose first contact reads like a new-baby household get the parent
 # track: baby (name + age) → city (timezone + home in ONE ask) → their own
 # name, woven in and capped at ONE ask so it can never delay the first log.
-# home/work are never asked and Google is NEVER part of parent onboarding —
-# it's offered contextually much later. "baby" is satisfied when the silo has
-# a HalFamily (the message route injects the derived `baby_name` before these
-# pure functions run); "city" is satisfied by a captured timezone.
+# home/work are never asked. The flow closes with the same single optional
+# Google-calendar offer as the generic track (2026-07-29 owner call — the
+# guided path ends at the calendar for everyone). "baby" is satisfied when
+# the silo has a HalFamily (the message route injects the derived `baby_name`
+# before these pure functions run); "city" is satisfied by a captured timezone.
 PARENT_TRACK = "parent"
 _PARENT_ONBOARDING_FACTS = ("baby", "city", "name")
 _PARENT_FACT_FIELD = {"baby": "baby_name", "city": "timezone", "name": "name"}
@@ -684,15 +685,14 @@ def next_onboarding_step(profile: dict | None) -> str | None:
     track: baby → city → name). A fact that's still unset but has already been
     asked to its cap is DECAYED — treated as resolved and skipped, so no user
     (not even one who won't give their name) can get stuck un-onboardable.
-    The generic track then offers Google once (never re-pitched after a
-    disconnect); the parent track NEVER offers Google — 'done' follows the
-    facts directly. PURE."""
+    Both tracks close with ONE Google (calendar) offer — never re-pitched
+    after a decline or disconnect. PURE."""
     if not profile or profile.get("onboarded"):
         return None
     for fact in _track_facts(profile):
         if not _fact_value(profile, fact) and _ask_count(profile, fact) < _fact_cap(profile, fact):
             return fact
-    if not _is_parent_track(profile) and (
+    if (
         not profile.get("google_connected")
         and not profile.get("google_offered")
         and not profile.get("google_disconnected")
@@ -758,7 +758,11 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
             "what to call them. If their message is only a bare greeting ('hi', "
             "'hey') with no request, just lead with the intro and the name "
             "question. When they tell you, save it with "
-            "contacts(action=update, name=...)."
+            "contacts(action=update, name=...) — and do NOT leave that reply "
+            "hanging on 'what can I help with': in the SAME reply ask the "
+            "next question, 'Do we have a little one we're keeping an eye "
+            "on? 👶' (one clause on why — you keep feeds and naps logged "
+            "from plain texts)."
         )
     elif step_key == "little_one":
         step = (
@@ -771,9 +775,13 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
             "both) and start the log with baby(action=setup, baby_name=..., "
             "baby_birthdate=YYYY-MM-DD). Never guess a timezone — leave it unset "
             "until you know their city. Don't ask for a schedule: say you'll "
-            "pick up the rhythm from the first day of logging. "
-            "If NO: one light line ('no problem — plenty else I can do') and "
-            "move on. NEVER raise it again."
+            "pick up the rhythm from the first day of logging. Then, in the "
+            "SAME reply, ask what city they're in so the log's clock lands "
+            "right. "
+            "If NO: one light line ('no problem — plenty else I can do'), and "
+            "in the SAME reply ask where they're based — city or neighborhood "
+            "— so you can keep an eye on their weather and what's happening "
+            "nearby. NEVER raise the baby again."
         )
     elif step_key == "city":
         step = (
@@ -785,7 +793,13 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
             "THEN, in the same reply, give one small taste of what you do: check "
             "get_weather for their area and offer ONE concrete, same-day useful "
             "thing (a nice window for a walk, rain to plan around, a real nearby "
-            "spot via places) — one line, genuinely local, never generic."
+            "spot via places) — one line, genuinely local, never generic. "
+            "FINALLY, close that same reply with the one optional extra: "
+            "connecting their Google calendar — call google_auth(action=start), "
+            "link on its own line, one line on what they get (you see their "
+            "day, warn before meetings), clearly skippable, you NEVER send "
+            "anything as them — then mark it with "
+            "contacts(action=update, google_offered=true)."
         )
     elif step_key == "google":
         step = (
@@ -892,6 +906,18 @@ def _parent_onboarding_block(step_key: str, captured_line: str, profile: dict) -
             "logging always comes first. If the moment doesn't present itself, "
             "skip it entirely. Save with contacts(action=update, name=...)."
         )
+    elif step_key == "google":
+        step = (
+            "The log is set up — ONE last optional extra: offer to connect "
+            "their Google calendar. Frame it for a parent in one line — you "
+            "can see pediatrician appointments and the family's day, and give "
+            "a heads-up before things collide with naps. Call "
+            "google_auth(action=start), send the link on its own line, and "
+            "make clear it's optional and setup is done either way. You'll "
+            "NEVER send anything as them. Then mark it offered with "
+            "contacts(action=update, google_offered=true) so it's never "
+            "pitched again."
+        )
     else:  # "done"
         step = (
             "Setup is complete — it's recorded automatically, nothing to "
@@ -972,9 +998,9 @@ have the rhythm within a day or two. Export works from day one (say \
 (baby action=configure, digests=false), logging still works, "say 'digest \
 on' anytime." If they say they're stopping tracking, agree that's healthy — \
 you're how they track LESS. Never guilt, never streaks.
-- NO FEATURE PITCHES in the first days: the log IS the product. No Google, \
-no calendar, no capability tours — ONE contextual reveal only when their \
-message invites it.
+- NO FEATURE PITCHES in the first days: the log IS the product. Beyond the \
+single optional calendar offer at the END of setup, no capability tours — \
+ONE contextual reveal only when their message invites it.
 - NO INVENTED ROUTINES: never add standing routines (baby configure \
 add_routine) the user didn't ask for — the built-in wind-down and \
 bottle-prep are already on. Routines are earned by the user asking, not \
