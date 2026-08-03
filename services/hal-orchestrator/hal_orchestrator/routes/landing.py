@@ -131,8 +131,8 @@ def render_landing(number: str, code: str | None = None) -> str:
   .hero-inner {{ width:min(1280px, 100%); position:relative; z-index:2; text-align:left; }}
   .eyebrow {{ font-size:13px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; }}
   .hero h1 {{
-    max-width:780px; margin:26px 0 28px; font-size:clamp(58px, 7.7vw, 112px);
-    line-height:.9; letter-spacing:-.072em; font-weight:500;
+    max-width:780px; margin:26px 0 28px; font-size:clamp(52px, 6.6vw, 96px);
+    line-height:.9; letter-spacing:-.025em; font-weight:500;
   }}
   .hero h1 span {{ display:block; color:var(--green-bright); }}
   .hero-copy {{ max-width:590px; margin:0; font-size:clamp(18px, 2vw, 24px);
@@ -154,7 +154,7 @@ def render_landing(number: str, code: str | None = None) -> str:
     gap:clamp(48px, 10vw, 150px); align-items:start; }}
   .kicker {{ color:var(--blue); font-size:14px; font-weight:700; letter-spacing:.08em;
     text-transform:uppercase; margin-bottom:22px; }}
-  .display {{ font-size:clamp(46px, 6.7vw, 96px); line-height:.98; letter-spacing:-.06em; font-weight:500; }}
+  .display {{ font-size:clamp(40px, 5.7vw, 82px); line-height:.98; letter-spacing:-.025em; font-weight:500; }}
   .intro-copy {{ font-size:clamp(22px, 3vw, 39px); line-height:1.18; letter-spacing:-.04em;
     max-width:720px; color:#3c4043; }}
   .intro-copy strong {{ color:var(--green); font-weight:600; }}
@@ -238,7 +238,7 @@ def render_landing(number: str, code: str | None = None) -> str:
   .shield {{ width:150px; aspect-ratio:1; border-radius:50%; background:var(--green-bright); color:var(--green);
     display:grid; place-items:center; font-size:58px; }}
   .privacy-panel .kicker {{ color:var(--green-bright); }}
-  .privacy-panel h2 {{ font-size:clamp(40px, 5.5vw, 76px); line-height:1; letter-spacing:-.055em;
+  .privacy-panel h2 {{ font-size:clamp(40px, 5.5vw, 76px); line-height:1; letter-spacing:-.025em;
     font-weight:500; margin-bottom:28px; }}
   .privacy-panel p {{ color:#d8ecdf; font-size:19px; line-height:1.55; max-width:680px; }}
   .privacy-list {{ display:grid; gap:13px; margin-top:28px; list-style:none; color:#fff; font-size:16px; }}
@@ -259,7 +259,7 @@ def render_landing(number: str, code: str | None = None) -> str:
   .final-cta::before {{ content:""; position:absolute; width:620px; height:620px; border-radius:50%;
     background:#90f4ea; opacity:.18; top:-420px; left:calc(50% - 310px); }}
   .final-cta .section-inner {{ position:relative; }}
-  .final-cta h2 {{ font-size:clamp(52px, 8vw, 112px); line-height:.92; letter-spacing:-.065em;
+  .final-cta h2 {{ font-size:clamp(52px, 8vw, 112px); line-height:.92; letter-spacing:-.025em;
     font-weight:500; max-width:900px; margin:0 auto 38px; }}
   .primary-cta {{ display:inline-flex; align-items:center; gap:32px; background:var(--ink); color:#fff;
     padding:18px 20px 18px 27px; border-radius:999px; text-decoration:none; font-size:18px; font-weight:650;
