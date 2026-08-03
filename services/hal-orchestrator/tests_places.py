@@ -99,11 +99,11 @@ class FakeHTTP:
 
 
 class FakeCtx:
-    def __init__(self, key, resp):
+    def __init__(self, key, resp, user_text="", current_location=None):
         self.settings = HalOrchestratorConfig(google_maps_api_key=key)
         self.http_client = FakeHTTP(resp)
-        self.user_text = ""
-        self.current_location = None
+        self.user_text = user_text
+        self.current_location = current_location
 
 
 async def run_tool():
@@ -150,6 +150,28 @@ async def run_tool():
     ctx = FakeCtx("k", FakeResp(400, {"error": {"message": "bad request"}}))
     out = await tool_places({"query": "coffee"}, ctx)
     check("HTTP error → status + message", "HTTP 400" in out and "bad request" in out, out)
+
+    # Live-location turn without a location → no-guess boundary, no HTTP call.
+    ctx = FakeCtx("k", FakeResp(200, {"places": _PLACES}), user_text="coffee near me")
+    out = await tool_places({"query": "coffee"}, ctx)
+    check("live location missing → no-guess message", "live location is unavailable" in out, out)
+    check("live location missing → no http call", ctx.http_client.calls == [], ctx.http_client.calls)
+
+    # Live-location turn with a label → query rebuilt around the live label,
+    # overriding any model-guessed area.
+    ctx = FakeCtx(
+        "k",
+        FakeResp(200, {"places": _PLACES}),
+        user_text="coffee near me",
+        current_location={"label": "Fort Greene"},
+    )
+    await tool_places({"query": "coffee near Park Slope"}, ctx)
+    call = ctx.http_client.calls[0]
+    check(
+        "live label overrides guessed area",
+        call["json"].get("textQuery") == "coffee near Fort Greene",
+        call["json"],
+    )
 
 
 asyncio.run(run_tool())
