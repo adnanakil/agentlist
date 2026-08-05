@@ -21,6 +21,7 @@ broken in production:
 
 from __future__ import annotations
 
+import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -34,10 +35,32 @@ failures: list[str] = []
 notes: list[str] = []
 
 
+def _ssl_context() -> ssl.SSLContext:
+    """Verified TLS that also works on the Hal Mac.
+
+    The python.org macOS build ships without a usable system root store, so a
+    default context there fails every request with CERTIFICATE_VERIFY_FAILED —
+    which would look exactly like "the deploy broke production". Load certifi's
+    roots on top when available (it is already a transitive dependency). Never
+    disable verification: a verifier that trusts anything verifies nothing.
+    """
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+
+        ctx.load_verify_locations(certifi.where())
+    except Exception:
+        pass
+    return ctx
+
+
+SSL_CTX = _ssl_context()
+
+
 def get(path: str = "/", ua: str = UA_IOS) -> tuple[int, str, dict]:
     req = urllib.request.Request(BASE + path, headers={"User-Agent": ua})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=TIMEOUT, context=SSL_CTX) as r:
             return r.status, r.read().decode("utf-8", "replace"), dict(r.headers)
     except urllib.error.HTTPError as e:
         return e.code, "", dict(e.headers or {})
@@ -100,7 +123,7 @@ req = urllib.request.Request(
     method="POST",
 )
 try:
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+    with urllib.request.urlopen(req, timeout=TIMEOUT, context=SSL_CTX) as r:
         check("tap beacon accepts events", r.status == 204, f"got {r.status}")
 except Exception as e:
     check("tap beacon accepts events", False, str(e))
