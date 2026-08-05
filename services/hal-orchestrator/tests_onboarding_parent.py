@@ -292,6 +292,20 @@ _b = sum(landing_variant(h) == "b" for h in _hashes)
 check(f"coin is fair ({_b}/4000 in arm b)", 1850 < _b < 2150)
 check("malformed hash never crashes",
       landing_variant("") == "a" and landing_variant("zz") == "a")
+
+# sms: body separator is chosen server-side (Android wants ?, iOS wants &) so the
+# markup is correct without JS; the beacon rewrite is only a fallback.
+from hal_orchestrator.routes.landing import sms_separator
+
+_AND = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/120 Mobile"
+_IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Version/17.0 Mobile Safari"
+check("android gets ?body=", sms_separator(_AND) == "?")
+check("ios gets &body=", sms_separator(_IOS) == "&")
+check("unknown/absent UA falls back to the iOS form",
+      sms_separator(None) == "&" and sms_separator("") == "&")
+check("android markup needs no JS to be correct",
+      "?body=" in render_landing("+15550001234", user_agent=_AND)
+      and "&body=" in render_landing("+15550001234", user_agent=_IOS))
 check("privacy line verbatim", "never sold, never ads" in html and "forget me" in html)
 html_code = render_landing("+15550001234", code="psp-01")
 check("?c= code lands in the prefill", "%28psp-01%29" in html_code)

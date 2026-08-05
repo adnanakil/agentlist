@@ -53,9 +53,20 @@ from hal_orchestrator.state import get_settings
 # strips + records the "(<code>)" attribution suffix. Never drop that phrase.
 SMS_PREFILL = "Hi HAL — new baby here 👶 What can you do?"
 
+# Android wants "?body=" (RFC 5724); iOS/macOS want "&body=". The separator is
+# chosen server-side from the request UA so the markup is already right without
+# JS — "/" is no-store, so per-UA markup can't be cached across visitors.
+_ANDROID_UA_RX = re.compile(r"android", re.IGNORECASE)
+
+
+def sms_separator(user_agent: str | None) -> str:
+    return "?" if _ANDROID_UA_RX.search(user_agent or "") else "&"
+
+
 # Minimal inline JS. Four jobs, all conversion-critical, all fail-open:
-#   1. Android wants "?body="; iOS/macOS want "&body=". The markup ships the iOS
-#      form (our dominant channel) and this rewrites it for Android UAs.
+#   1. Belt-and-braces for the separator above: if the markup somehow reached an
+#      Android device carrying the iOS form, rewrite it client-side. A no-op when
+#      the server already got it right.
 #   2. Keepalive tap beacon before the native SMS app steals the tab.
 #   3. Sticky mobile bar hides only while the hero CTA is already on screen —
 #      CSS shows the bar by default, so a JS failure leaves the CTA visible.
@@ -121,17 +132,23 @@ def _cta_label(pretty: str, variant: str) -> str:
     return f"Text {pretty}" if variant == "b" else "Text HAL"
 
 
-def render_landing(number: str, code: str | None = None, variant: str = "a") -> str:
+def render_landing(
+    number: str,
+    code: str | None = None,
+    variant: str = "a",
+    user_agent: str | None = None,
+) -> str:
     """Render the landing page with an optional SMS attribution code.
 
     `variant` picks the primary-CTA copy (see middleware.page_hits.landing_variant)
     and is echoed into <body data-variant> so the tap beacon reports what was
-    actually on screen rather than re-deriving it.
+    actually on screen rather than re-deriving it. `user_agent` only selects the
+    sms: body separator; it is never stored here.
     """
     pretty = _pretty_number(number)
     sms = re.sub(r"[^\d+]", "", number or "")
     body = SMS_PREFILL + (f" ({code})" if code else "")
-    sms_href = f"sms:{sms}&body={quote(body)}"
+    sms_href = f"sms:{sms}{sms_separator(user_agent)}body={quote(body)}"
     label = _cta_label(pretty, variant)
     # Three CTAs: hero (above the fold), sticky mobile bar, and the closing
     # section. Paid traffic lands on the hero and mostly never scrolls. The hero
@@ -641,9 +658,15 @@ def build_landing_router() -> APIRouter:
     @router.get("/", response_class=HTMLResponse, include_in_schema=False)
     async def landing(request: Request, c: str | None = None) -> HTMLResponse:
         code = c if c and _CODE_RX.match(c) else None
-        variant = landing_variant(visitor_hash(*_client_id(request)))
+        ip, ua = _client_id(request)
+        variant = landing_variant(visitor_hash(ip, ua))
         return HTMLResponse(
-            render_landing(get_settings().hal_public_number, code=code, variant=variant),
+            render_landing(
+                get_settings().hal_public_number,
+                code=code,
+                variant=variant,
+                user_agent=ua,
+            ),
             # The two arms differ in the HTML itself, so a cached copy would
             # serve one arm to everyone downstream of the cache.
             headers={"Cache-Control": "private, no-store"},
