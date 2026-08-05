@@ -255,6 +255,43 @@ print("\nlanding renderer:")
 html = render_landing("+15550001234")
 check("hero is the beachhead line", "HAL — the baby log that lives in your group chat." in html)
 check("sms prefill is the parent selector", "new%20baby%20here" in html)
+check("hero has an above-the-fold CTA", 'id="herocta"' in html)
+check("sticky mobile CTA present", 'id="stickycta"' in html and "has-sticky" in html)
+check("number is a desktop copy target", 'class="copy-num" data-num="+15550001234"' in html)
+
+# --- 8b. hero-CTA A/B ---------------------------------------------------------- #
+from hal_orchestrator.middleware.page_hits import LANDING_VARIANTS, landing_variant
+
+print("\ncta experiment:")
+hero_a = html.split('id="herocta"')[1].split("</div>")[0]
+html_b = render_landing("+15550001234", variant="b")
+hero_b = html_b.split('id="herocta"')[1].split("</div>")[0]
+_label = lambda blk: blk.split("<span>")[1].split("</span>")[0]  # noqa: E731
+check("arm a says Text HAL", _label(hero_a) == "Text HAL")
+check("arm b says Text <number>", _label(hero_b) == "Text (555) 000-1234")
+check("hero carries no number line in either arm",
+      "copy-num" not in hero_a and "copy-num" not in hero_b)
+check("variant echoed for the beacon",
+      '<body class="has-sticky" data-variant="a">' in html
+      and '<body class="has-sticky" data-variant="b">' in html_b)
+check("sticky bar follows the arm",
+      ">Text HAL<" in html.split('id="stickycta"')[1].split("</div>")[0]
+      and ">Text (555) 000-1234<" in html_b.split('id="stickycta"')[1].split("</div>")[0])
+check("closing CTA stays constant (number always spelled out once)",
+      html.count('class="copy-num"') == 1 and html_b.count('class="copy-num"') == 1)
+check("unknown variant falls back to arm a", ">Text HAL<" in
+      render_landing("+15550001234", variant="zzz").split('id="herocta"')[1])
+# Assignment: deterministic per visitor hash, and a fair coin across hashes.
+import hashlib as _hl
+check("same visitor keeps their arm (no reshuffle on reload)",
+      landing_variant("0123456789abcdef") == landing_variant("0123456789abcdef"))
+check("both arms are reachable",
+      {landing_variant(f"{'0' * 15}{d:x}") for d in range(16)} == set(LANDING_VARIANTS))
+_hashes = [_hl.sha256(f"v{i}".encode()).hexdigest()[:16] for i in range(4000)]
+_b = sum(landing_variant(h) == "b" for h in _hashes)
+check(f"coin is fair ({_b}/4000 in arm b)", 1850 < _b < 2150)
+check("malformed hash never crashes",
+      landing_variant("") == "a" and landing_variant("zz") == "a")
 check("privacy line verbatim", "never sold, never ads" in html and "forget me" in html)
 html_code = render_landing("+15550001234", code="psp-01")
 check("?c= code lands in the prefill", "%28psp-01%29" in html_code)

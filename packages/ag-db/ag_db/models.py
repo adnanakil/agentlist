@@ -1009,7 +1009,9 @@ class HalBabyEvent(Base):
     family_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("hal_families.id", ondelete="CASCADE"), nullable=False
     )
-    # feed | nap_start | wake | bedtime | tummy_time | diaper | note
+    # feed | nap_start | wake | bedtime | tummy_time | diaper | medicine |
+    # bath | play | screen_time | solids | symptom | milestone | note
+    # (services.baby.EVENT_KINDS is the source of truth; must fit String(16))
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     event_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     logged_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -1086,9 +1088,42 @@ class HalPageHit(Base):
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
     visitor_hash: Mapped[str] = mapped_column(String(16), nullable=False)
     is_bot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    utm_source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    utm_medium: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    utm_campaign: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    attribution_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Which hero-CTA copy this visitor was actually served ("a" = "Text HAL",
+    # "b" = "Text (646) 513-1421"). NULL on "/" rows predating the experiment
+    # and on non-landing paths, which have no CTA to vary.
+    variant: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (
         Index("ix_hal_page_hits_created_at", "created_at"),
         Index("ix_hal_page_hits_path", "path"),
+        Index("ix_hal_page_hits_utm_source", "utm_source"),
+    )
+
+
+class HalFunnelEvent(Base):
+    """A post-landing funnel event (e.g. sms_tap). visitor_hash matches the
+    convention in HalPageHit — day-salted sha256 of (ip, user_agent)."""
+
+    __tablename__ = "hal_funnel_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    attribution_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    utm_source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    utm_medium: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    utm_campaign: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    visitor_hash: Mapped[str] = mapped_column(String(16), nullable=False)
+    # The CTA copy the tapped page was rendered with — reported by the tap
+    # beacon, so it is what the visitor SAW, not a re-derivation.
+    variant: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("ix_hal_funnel_events_created_at", "created_at"),
+        Index("ix_hal_funnel_events_event_type", "event_type"),
     )

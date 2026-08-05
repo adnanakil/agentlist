@@ -2,7 +2,7 @@
 """GET / — the texthal.com landing page.
 
 The beachhead front door (BEACHHEAD.md): the household baby-schedule pitch.
-One page, no JS, no signup flow — the demo IS the pitch: a mocked family
+One page, minimal JS (tap beacon only), no signup flow — the demo IS the pitch: a mocked family
 thread showing mom/nanny/grandma logging to one record, the schedule math
 HAL gives back, and one tappable number. The sms prefill doubles as the
 parent-track selector ("Hi HAL — new baby here 👶", see ONBOARDING.md);
@@ -17,22 +17,91 @@ feature that doesn't exist.
 
 from __future__ import annotations
 
+import asyncio
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter
+import structlog
+from fastapi import APIRouter, Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
     PlainTextResponse,
     RedirectResponse,
+    Response,
 )
+
+import ag_db.session as db_session
+from ag_db.models import HalFunnelEvent
+from sqlalchemy import func, select
+
+from hal_orchestrator.middleware.page_hits import (
+    LANDING_VARIANTS,
+    landing_variant,
+    visitor_hash,
+)
+
+log = structlog.get_logger()
 
 from hal_orchestrator.routes.logo_data import LOGO_DATA_URI
 from hal_orchestrator.state import get_settings
 
-SMS_PREFILL = "Hi HAL — new baby here 👶"
+# The prefill is ALSO the parent-track selector: "new baby here" is the literal
+# trigger in prompts/system.py (_PARENT_PREFILL_RX) and the only branch that
+# strips + records the "(<code>)" attribution suffix. Never drop that phrase.
+SMS_PREFILL = "Hi HAL — new baby here 👶 What can you do?"
+
+# Minimal inline JS. Four jobs, all conversion-critical, all fail-open:
+#   1. Android wants "?body="; iOS/macOS want "&body=". The markup ships the iOS
+#      form (our dominant channel) and this rewrites it for Android UAs.
+#   2. Keepalive tap beacon before the native SMS app steals the tab.
+#   3. Sticky mobile bar hides only while the hero CTA is already on screen —
+#      CSS shows the bar by default, so a JS failure leaves the CTA visible.
+#   4. Desktop has no working sms: handler on Windows/Linux, so the number
+#      becomes a copy-to-clipboard button there instead of a dead link.
+_TAP_BEACON_JS = """<script>
+(function(){
+  var links=document.querySelectorAll('a[href^="sms:"]');
+  if(/android/i.test(navigator.userAgent||'')){
+    links.forEach(function(a){a.href=a.href.replace('&body=','?body=');});
+  }
+  function tap(){
+    var p=new URLSearchParams(window.location.search);
+    fetch('/tap',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:p.get('c'),utm_source:p.get('utm_source'),
+        utm_medium:p.get('utm_medium'),utm_campaign:p.get('utm_campaign'),
+        variant:document.body.getAttribute('data-variant')}),
+      keepalive:true}).catch(function(){});
+  }
+  links.forEach(function(a){a.addEventListener('click',tap);});
+
+  var bar=document.getElementById('stickycta'), hero=document.getElementById('herocta');
+  if(bar&&hero&&'IntersectionObserver' in window){
+    new IntersectionObserver(function(e){
+      bar.classList.toggle('is-hidden', e[0].isIntersecting);
+    },{threshold:.35}).observe(hero);
+  }
+
+  try{
+    if(!window.matchMedia('(pointer:coarse)').matches){
+      document.documentElement.classList.add('desk');
+    }
+  }catch(err){}
+  document.querySelectorAll('.copy-num').forEach(function(b){
+    b.addEventListener('click',function(){
+      if(!document.documentElement.classList.contains('desk')) return;
+      var n=b.getAttribute('data-num')||'', prev=b.textContent;
+      if(!navigator.clipboard) return;
+      navigator.clipboard.writeText(n).then(function(){
+        b.textContent='Copied \\u2713';
+        setTimeout(function(){b.textContent=prev;},2000);
+      }).catch(function(){});
+    });
+  });
+})();
+</script>"""
 _CODE_RX = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
 _BOTTLES_IMAGE = Path(__file__).parent.parent / "static" / "donebottles.png"
 
@@ -47,18 +116,54 @@ def _pretty_number(raw: str) -> str:
     return raw
 
 
-def render_landing(number: str, code: str | None = None) -> str:
-    """Render the landing page with an optional SMS attribution code."""
+def _cta_label(pretty: str, variant: str) -> str:
+    """The A/B'd primary-CTA copy: brand name vs. the literal number."""
+    return f"Text {pretty}" if variant == "b" else "Text HAL"
+
+
+def render_landing(number: str, code: str | None = None, variant: str = "a") -> str:
+    """Render the landing page with an optional SMS attribution code.
+
+    `variant` picks the primary-CTA copy (see middleware.page_hits.landing_variant)
+    and is echoed into <body data-variant> so the tap beacon reports what was
+    actually on screen rather than re-deriving it.
+    """
     pretty = _pretty_number(number)
     sms = re.sub(r"[^\d+]", "", number or "")
     body = SMS_PREFILL + (f" ({code})" if code else "")
     sms_href = f"sms:{sms}&body={quote(body)}"
-    cta = (
-        f'<a class="number primary-cta" href="{sms_href}">'
-        '<span>Text HAL</span><span class="cta-arrow" aria-hidden="true">↗</span></a>\n'
-        f'<p class="hint">{pretty} · no app, nothing to install</p>'
+    label = _cta_label(pretty, variant)
+    # Three CTAs: hero (above the fold), sticky mobile bar, and the closing
+    # section. Paid traffic lands on the hero and mostly never scrolls. The hero
+    # and sticky bar carry the A/B copy and NO number line — a second line under
+    # the button crowded the hero and buried the button it was explaining. The
+    # closing section stays constant and is the one place the number is always
+    # spelled out, which is also where a desktop visitor can copy it.
+    hero_cta = (
+        f'<div class="cta-block" id="herocta"><a class="number primary-cta cta-lg" href="{sms_href}">'
+        f'<span>{label}</span><span class="cta-arrow" aria-hidden="true">↗</span></a></div>'
         if number
         else '<p class="number soon">coming soon</p>'
+    )
+    cta = (
+        f'<div class="cta-block"><a class="number primary-cta" href="{sms_href}">'
+        '<span>Text HAL</span><span class="cta-arrow" aria-hidden="true">↗</span></a>'
+        f'<p class="hint"><button type="button" class="copy-num" data-num="{sms}">{pretty}</button>'
+        '<span class="hint-mob"> · no app, nothing to install</span>'
+        '<span class="hint-desk"> · text from your phone (tap to copy)</span></p></div>'
+        if number
+        else '<p class="number soon">coming soon</p>'
+    )
+    sticky_cta = (
+        f'<div class="sticky-cta" id="stickycta"><a class="sticky-btn" href="{sms_href}">'
+        f'<span>{label}</span><span aria-hidden="true">↗</span></a></div>'
+        if number
+        else ""
+    )
+    body_class = (
+        f' class="has-sticky" data-variant="{variant}"'
+        if number
+        else f' data-variant="{variant}"'
     )
     nav_cta = (
         f'<a class="nav-cta" href="{sms_href}">Text HAL <span aria-hidden="true">↗</span></a>'
@@ -137,7 +242,8 @@ def render_landing(number: str, code: str | None = None) -> str:
   .hero h1 span {{ display:block; color:var(--green-bright); }}
   .hero-copy {{ max-width:590px; margin:0; font-size:clamp(18px, 2vw, 24px);
     line-height:1.45; letter-spacing:-.015em; color:#e8f4ed; }}
-  .hero-chips {{ display:flex; flex-wrap:wrap; justify-content:flex-start; gap:10px; margin-top:34px; }}
+  .hero .cta-block {{ margin-top:38px; }}
+  .hero-chips {{ display:flex; flex-wrap:wrap; justify-content:flex-start; gap:10px; margin-top:30px; }}
   .chip {{ padding:10px 15px; border-radius:999px; font-size:13px; font-weight:650; }}
   .chip:nth-child(1) {{ background:#e8fffc; color:#02756e; }}
   .chip:nth-child(2) {{ background:#f7e9ff; color:#5a2f90; }}
@@ -266,8 +372,35 @@ def render_landing(number: str, code: str | None = None) -> str:
     box-shadow:0 12px 30px rgba(0,0,0,.18); transition:transform .18s ease, background .18s ease; }}
   .primary-cta:hover {{ transform:translateY(-2px); background:#000; }}
   .cta-arrow {{ width:34px; height:34px; border-radius:50%; background:#fff; color:#111; display:grid; place-items:center; }}
+  .cta-lg {{ font-size:21px; padding:21px 22px 21px 34px; gap:38px; }}
+  .cta-lg .cta-arrow {{ width:40px; height:40px; font-size:19px; }}
   .number.soon {{ display:inline-block; font-size:24px; font-weight:650; border-radius:999px; background:rgba(255,255,255,.16); padding:18px 28px; }}
   .hint {{ color:rgba(255,255,255,.78); margin-top:15px; font-size:14px; }}
+
+  /* Hero CTA — mint on the dark hero; the ink pill would vanish into it. */
+  .hero .primary-cta {{ background:var(--green-bright); color:var(--green);
+    box-shadow:0 16px 38px rgba(6,26,20,.42); }}
+  .hero .primary-cta:hover {{ background:#cfffe2; }}
+  .hero .cta-arrow {{ background:var(--green); color:var(--green-bright); }}
+  .hero .hint {{ color:#cfe6da; }}
+
+  .copy-num {{ background:none; border:0; padding:0; font:inherit; color:inherit; }}
+  .hint-desk {{ display:none; }}
+  html.desk .copy-num {{ cursor:pointer; text-decoration:underline; text-underline-offset:3px; }}
+  html.desk .hint-mob {{ display:none; }}
+  html.desk .hint-desk {{ display:inline; }}
+
+  /* Sticky mobile CTA. Shown by CSS (fail-open) and hidden by JS only while the
+     hero CTA is already in view. Everything below the fold still has one tap. */
+  .sticky-cta {{ display:none; position:fixed; left:0; right:0; bottom:0; z-index:30;
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+    background:rgba(11,40,32,.97); border-top:1px solid rgba(255,255,255,.14);
+    transition:transform .24s ease; }}
+  .sticky-cta.is-hidden {{ transform:translateY(115%); }}
+  .sticky-btn {{ display:flex; align-items:center; justify-content:center; gap:11px;
+    background:var(--green-bright); color:var(--green); border-radius:999px;
+    padding:16px 18px; font-size:17px; font-weight:700; letter-spacing:-.01em;
+    text-decoration:none; }}
 
   footer {{ background:#fff; padding:40px clamp(20px, 4vw, 64px); }}
   .footer-inner {{ width:min(1280px,100%); margin:0 auto; display:flex; align-items:center;
@@ -288,10 +421,20 @@ def render_landing(number: str, code: str | None = None) -> str:
     .feature-visual {{ min-height:560px; order:-1; }}
     .privacy-panel {{ gap:45px; }}
   }}
+  @media (max-width:820px) {{
+    .sticky-cta {{ display:block; }}
+    body.has-sticky {{ padding-bottom:92px; }}
+  }}
   @media (max-width:680px) {{
     .site-nav {{ height:68px; }} .nav-links > a:not(.nav-cta) {{ display:none; }}
     .nav-cta {{ padding:9px 14px; }}
-    .hero {{ min-height:750px; padding-top:120px; }}
+    .hero {{ min-height:750px; padding-top:104px; }}
+    /* Tighter hero rhythm so the CTA clears the fold on a 667px-tall phone. */
+    .hero h1 {{ margin:20px 0 20px; }}
+    .hero .cta-block {{ margin-top:26px; }}
+    .hero-chips {{ margin-top:24px; }}
+    .cta-lg {{ font-size:19px; padding:18px 19px 18px 28px; gap:26px; }}
+    .cta-lg .cta-arrow {{ width:36px; height:36px; font-size:17px; }}
     .hero-media {{ object-position:70% center; }}
     .hero::before {{ background:rgba(14,49,39,.7); }}
     .hero::after {{ background:linear-gradient(0deg, rgba(8,30,24,.42), transparent 45%); }}
@@ -310,9 +453,10 @@ def render_landing(number: str, code: str | None = None) -> str:
     .shield {{ width:108px; font-size:42px; }}
     .footer-inner {{ align-items:flex-start; flex-direction:column; }}
   }}
-  @media (prefers-reduced-motion:reduce) {{ html {{ scroll-behavior:auto; }} .primary-cta {{ transition:none; }} }}
+  @media (prefers-reduced-motion:reduce) {{ html {{ scroll-behavior:auto; }}
+    .primary-cta, .sticky-cta {{ transition:none; }} }}
 </style></head>
-<body>
+<body{body_class}>
   <nav class="site-nav" aria-label="Main navigation">
     <a class="brand" href="#top"><img src="{LOGO_DATA_URI}" alt=""><span>HAL</span></a>
     <div class="nav-links">
@@ -327,6 +471,7 @@ def render_landing(number: str, code: str | None = None) -> str:
         <p class="eyebrow">HAL — the baby log that lives in your group chat.</p>
         <h1>A calmer way to <span>keep up with baby.</span></h1>
         <p class="hero-copy">HAL turns the family group chat into one reliable baby schedule—without asking anyone to learn another app.</p>
+        {hero_cta}
         <div class="hero-chips" aria-label="Highlights">
           <span class="chip">One shared record</span><span class="chip">Helpful forecasts</span><span class="chip">No app to manage</span>
         </div>
@@ -438,18 +583,103 @@ def render_landing(number: str, code: str | None = None) -> str:
   </main>
 
   <footer><div class="footer-inner"><span class="footer-brand">HAL</span><span>© 2026 HAL</span><div class="footer-links"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div></div></footer>
+  {sticky_cta}
+{_TAP_BEACON_JS}
 </body></html>"""
+
+
+def _client_id(request: Request) -> tuple[str, str]:
+    """(ip, user_agent) — Railway's edge proxy puts the real client in XFF."""
+    fwd = request.headers.get("x-forwarded-for", "")
+    ip = fwd.split(",")[0].strip() or (request.client.host if request.client else "")
+    return ip, request.headers.get("user-agent", "")
+
+
+async def _record_tap(
+    code: str | None,
+    utm_source: str | None,
+    utm_medium: str | None,
+    utm_campaign: str | None,
+    visitor_hash: str,
+    variant: str | None = None,
+) -> None:
+    factory = db_session._session_factory
+    if factory is None:
+        return
+    try:
+        async with factory() as session:
+            # Dedup: skip if this visitor already tapped in the last 60 seconds.
+            cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+            recent = await session.scalar(
+                select(func.count()).where(
+                    HalFunnelEvent.event_type == "sms_tap",
+                    HalFunnelEvent.visitor_hash == visitor_hash,
+                    HalFunnelEvent.created_at > cutoff,
+                )
+            )
+            if recent:
+                return
+            session.add(
+                HalFunnelEvent(
+                    event_type="sms_tap",
+                    attribution_code=code,
+                    utm_source=utm_source,
+                    utm_medium=utm_medium,
+                    utm_campaign=utm_campaign,
+                    visitor_hash=visitor_hash,
+                    variant=variant,
+                )
+            )
+            await session.commit()
+    except Exception:
+        log.exception("funnel_event.record_failed", event_type="sms_tap")
 
 
 def build_landing_router() -> APIRouter:
     router = APIRouter()
 
     @router.get("/", response_class=HTMLResponse, include_in_schema=False)
-    async def landing(c: str | None = None) -> HTMLResponse:
+    async def landing(request: Request, c: str | None = None) -> HTMLResponse:
         code = c if c and _CODE_RX.match(c) else None
+        variant = landing_variant(visitor_hash(*_client_id(request)))
         return HTMLResponse(
-            render_landing(get_settings().hal_public_number, code=code)
+            render_landing(get_settings().hal_public_number, code=code, variant=variant),
+            # The two arms differ in the HTML itself, so a cached copy would
+            # serve one arm to everyone downstream of the cache.
+            headers={"Cache-Control": "private, no-store"},
         )
+
+    @router.post("/tap", include_in_schema=False, status_code=204)
+    async def sms_tap(request: Request) -> Response:
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        ip, ua = _client_id(request)
+
+        def _str_field(key: str, max_len: int) -> str | None:
+            v = data.get(key) if isinstance(data, dict) else None
+            return (str(v)[:max_len] or None) if isinstance(v, str) else None
+
+        code = _str_field("code", 64)
+        if code and not _CODE_RX.match(code):
+            code = None
+        # Trust the beacon's variant (it is what was rendered) but only as one
+        # of the known arms, so a hand-crafted POST can't invent buckets.
+        variant = _str_field("variant", 8)
+        if variant not in LANDING_VARIANTS:
+            variant = None
+        asyncio.get_running_loop().create_task(
+            _record_tap(
+                code=code,
+                utm_source=_str_field("utm_source", 255),
+                utm_medium=_str_field("utm_medium", 255),
+                utm_campaign=_str_field("utm_campaign", 255),
+                visitor_hash=visitor_hash(ip, ua),
+                variant=variant,
+            )
+        )
+        return Response(status_code=204)
 
     # Print-friendly attribution: texthal.com/go/<code> reads cleanly in an
     # ad or flyer and redirects to /?c=<code>, which seeds the sms prefill

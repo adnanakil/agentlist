@@ -48,12 +48,41 @@ def _looks_bot(user_agent: str) -> bool:
     return bool(m) and int(m.group(1)) < 115
 
 
-def _visitor_hash(ip: str, user_agent: str) -> str:
+def visitor_hash(ip: str, user_agent: str) -> str:
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return hashlib.sha256(f"{ip}|{user_agent}|{day}".encode()).hexdigest()[:16]
 
 
-async def _record(path: str, referrer: str, user_agent: str, ip: str) -> None:
+_visitor_hash = visitor_hash  # back-compat alias for existing callers
+
+# Landing hero-CTA experiment. The coin flip is a parity bit of the visitor
+# hash rather than random(), which buys two things: the same visitor keeps
+# their variant across reloads within a day (a reshuffle on refresh would
+# smear the two arms together), and the renderer and the page-hit recorder
+# derive the SAME variant from the same request without passing state between
+# them. Uniform because sha256 hex digits are uniform.
+LANDING_VARIANTS = ("a", "b")
+
+
+def landing_variant(vh: str) -> str:
+    """'a' (Text HAL) or 'b' (Text <number>) for a visitor hash. PURE."""
+    try:
+        return LANDING_VARIANTS[int(vh[-1], 16) & 1]
+    except (ValueError, IndexError):
+        return LANDING_VARIANTS[0]
+
+
+async def _record(
+    path: str,
+    referrer: str,
+    user_agent: str,
+    ip: str,
+    utm_source: str | None = None,
+    utm_medium: str | None = None,
+    utm_campaign: str | None = None,
+    attribution_code: str | None = None,
+    variant: str | None = None,
+) -> None:
     factory = db_session._session_factory
     if factory is None:
         return
@@ -64,8 +93,13 @@ async def _record(path: str, referrer: str, user_agent: str, ip: str) -> None:
                     path=path,
                     referrer=referrer[:2000] or None,
                     user_agent=user_agent[:2000] or None,
-                    visitor_hash=_visitor_hash(ip, user_agent),
+                    visitor_hash=visitor_hash(ip, user_agent),
                     is_bot=_looks_bot(user_agent),
+                    utm_source=utm_source,
+                    utm_medium=utm_medium,
+                    utm_campaign=utm_campaign,
+                    attribution_code=attribution_code,
+                    variant=variant,
                 )
             )
             await session.commit()
@@ -84,12 +118,21 @@ class PageHitMiddleware(BaseHTTPMiddleware):
             # Railway's edge proxy puts the real client in X-Forwarded-For.
             fwd = request.headers.get("x-forwarded-for", "")
             ip = fwd.split(",")[0].strip() or (request.client.host if request.client else "")
+            ua = request.headers.get("user-agent", "")
+            qp = request.query_params
+            # Only "/" carries the hero CTA, so only "/" is in the experiment.
+            variant = landing_variant(visitor_hash(ip, ua)) if request.url.path == "/" else None
             asyncio.get_running_loop().create_task(
                 _record(
                     request.url.path,
                     request.headers.get("referer", ""),
-                    request.headers.get("user-agent", ""),
+                    ua,
                     ip,
+                    variant=variant,
+                    utm_source=(qp.get("utm_source") or "")[:255] or None,
+                    utm_medium=(qp.get("utm_medium") or "")[:255] or None,
+                    utm_campaign=(qp.get("utm_campaign") or "")[:255] or None,
+                    attribution_code=(qp.get("c") or "")[:64] or None,
                 )
             )
         return response

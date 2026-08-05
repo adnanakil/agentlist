@@ -64,7 +64,11 @@ check("sms link present", 'href="sms:+16505551234' in h)
 check("pretty number shown", "(650) 555-1234" in h)
 check("one-liner present", "HAL — the baby log that lives in your group chat" in h)
 h2 = render_landing("")
-check("no number -> coming soon (no sms link)", "coming soon" in h2 and "sms:" not in h2)
+# NB: 'sms:' also appears inside the tap-beacon selector, so match the href.
+check("no number -> coming soon (no sms link)", "coming soon" in h2 and 'href="sms:' not in h2)
+check("no number -> no sticky bar",
+      'id="stickycta"' not in h2 and '<body class="has-sticky">' not in h2)
+check("hero CTA present when number set", 'id="herocta"' in h and "cta-lg" in h)
 
 print()
 if failures:
