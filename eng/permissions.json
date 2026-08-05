@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Agent",
+      "Task",
+      "Skill",
+      "ToolSearch",
+      "Monitor",
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskList",
+      "TaskGet",
+      "TaskOutput"
+    ],
+    "ask": [
+      "Bash(rm:*)",
+      "Bash(rmdir:*)",
+      "Bash(trash:*)",
+      "Bash(srm:*)",
+      "Bash(shred:*)",
+      "Bash(git rm:*)",
+      "Bash(git clean:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git checkout --:*)",
+      "Bash(git push:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git push --delete:*)",
+      "Bash(crontab -r:*)",
+      "Bash(launchctl bootout:*)",
+      "Bash(dropdb:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(alembic downgrade:*)",
+      "Bash(railway variables:*)",
+      "Bash(railway link:*)",
+      "Bash(railway delete:*)",
+      "Bash(python3 growth/scripts/gads.py:*)"
+    ]
+  }
+}
