@@ -38,7 +38,6 @@
       "Bash(dropdb:*)",
       "Bash(alembic upgrade:*)",
       "Bash(alembic downgrade:*)",
-      "Bash(railway variables:*)",
       "Bash(railway link:*)",
       "Bash(railway delete:*)",
       "Bash(python3 growth/scripts/gads.py:*)"
