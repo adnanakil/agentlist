@@ -22,11 +22,24 @@ cd "$REPO" || exit 1
 mkdir -p eng/state eng/reports
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] eng supervisor started (pid $$)" >> eng/state/supervisor.log
 
+# A cycle that crashed without clearing its lock must not wedge the other team
+# forever, so a lock older than STALE_MIN is ignored and cleared.
+STALE_MIN=90
+other_cycle_running() {
+  [ -f "$1" ] || return 1
+  if [ -n "$(find "$1" -mmin +$STALE_MIN 2>/dev/null)" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] clearing stale lock $1" >> eng/state/supervisor.log
+    rm -f "$1"
+    return 1
+  fi
+  return 0
+}
+
 while true; do
   python3 eng/scripts/queue_check.py >> eng/state/supervisor.log 2>&1
   rc=$?
   if [ "$rc" -eq 10 ]; then
-    if [ -f "$GROWTH_LOCK" ]; then
+    if other_cycle_running "$GROWTH_LOCK"; then
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] growth cycle in flight — deferring" >> eng/state/supervisor.log
     else
       date +%s > eng/state/last_cycle
