@@ -263,10 +263,12 @@ check("number is a desktop copy target", 'class="copy-num" data-num="+1555000123
 from hal_orchestrator.middleware.page_hits import LANDING_VARIANTS, landing_variant
 
 print("\ncta experiment:")
-hero_a = html.split('id="herocta"')[1].split("</div>")[0]
+# The herocta block now contains a cta-preview div before the <a>, so we
+# extract up to the first </a> and then find the label within primary-cta.
+hero_a = html.split('id="herocta"')[1].split("</a>")[0]
 html_b = render_landing("+15550001234", variant="b")
-hero_b = html_b.split('id="herocta"')[1].split("</div>")[0]
-_label = lambda blk: blk.split("<span>")[1].split("</span>")[0]  # noqa: E731
+hero_b = html_b.split('id="herocta"')[1].split("</a>")[0]
+_label = lambda blk: blk.split('primary-cta cta-lg"')[1].split("<span>")[1].split("</span>")[0]  # noqa: E731
 check("arm a says Text HAL", _label(hero_a) == "Text HAL")
 check("arm b says Text <number>", _label(hero_b) == "Text (555) 000-1234")
 check("hero carries no number line in either arm",

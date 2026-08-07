@@ -157,14 +157,18 @@ def render_landing(
     # closing section stays constant and is the one place the number is always
     # spelled out, which is also where a desktop visitor can copy it.
     hero_cta = (
-        f'<div class="cta-block" id="herocta"><a class="number primary-cta cta-lg" href="{sms_href}">'
-        f'<span>{label}</span><span class="cta-arrow" aria-hidden="true">↗</span></a></div>'
+        f'<div class="cta-block" id="herocta">'
+        f'<div class="cta-preview"><span class="sms-bubble">"Hi HAL — new baby here 👶"</span><p class="sms-preview-hint">Tap to send · HAL replies instantly</p></div>'
+        f'<a class="number primary-cta cta-lg" href="{sms_href}">'
+        f'<span>{label}</span><span class="cta-arrow" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/></svg></span></a>'
+        f'<p class="cta-mob-hint">Opens your Messages app · one text to start.</p>'
+        f'</div>'
         if number
         else '<p class="number soon">coming soon</p>'
     )
     cta = (
         f'<div class="cta-block"><a class="number primary-cta" href="{sms_href}">'
-        '<span>Text HAL</span><span class="cta-arrow" aria-hidden="true">↗</span></a>'
+        '<span>Text HAL</span><span class="cta-arrow" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/></svg></span></a>'
         f'<p class="hint"><button type="button" class="copy-num" data-num="{sms}">{pretty}</button>'
         '<span class="hint-mob"> · no app, nothing to install</span>'
         '<span class="hint-desk"> · text from your phone (tap to copy)</span></p></div>'
@@ -173,7 +177,7 @@ def render_landing(
     )
     sticky_cta = (
         f'<div class="sticky-cta" id="stickycta"><a class="sticky-btn" href="{sms_href}">'
-        f'<span>{label}</span><span aria-hidden="true">↗</span></a></div>'
+        f'<span>{label}</span><span aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/></svg></span></a></div>'
         if number
         else ""
     )
@@ -419,6 +423,11 @@ def render_landing(
     padding:16px 18px; font-size:17px; font-weight:700; letter-spacing:-.01em;
     text-decoration:none; }}
 
+  .cta-preview {{ display:none; margin-bottom:16px; }}
+  .sms-bubble {{ display:inline-block; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); border-radius:18px 18px 18px 5px; padding:9px 15px; font-size:14px; color:#d9ecdf; font-style:italic; }}
+  .sms-preview-hint {{ font-size:12px; color:#a8ccb8; margin-top:6px; }}
+  .cta-mob-hint {{ display:none; font-size:13px; color:#cfe6da; margin-top:10px; }}
+
   footer {{ background:#fff; padding:40px clamp(20px, 4vw, 64px); }}
   .footer-inner {{ width:min(1280px,100%); margin:0 auto; display:flex; align-items:center;
     justify-content:space-between; gap:25px; color:#5f6368; font-size:13px; }}
@@ -441,6 +450,8 @@ def render_landing(
   @media (max-width:820px) {{
     .sticky-cta {{ display:block; }}
     body.has-sticky {{ padding-bottom:92px; }}
+    .cta-preview {{ display:block; }}
+    .cta-mob-hint {{ display:block; }}
   }}
   @media (max-width:680px) {{
     .site-nav {{ height:68px; }} .nav-links > a:not(.nav-cta) {{ display:none; }}
