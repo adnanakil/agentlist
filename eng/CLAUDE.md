@@ -106,6 +106,23 @@ python3 eng/scripts/verify_prod.py     # required, not optional
 the dirty-tree guard in step 2 is not paranoia: deploying with someone else's
 half-finished edits present ships those edits to production.
 
+## Owned social accounts — context only, not your lane (added 2026-08-07)
+
+HAL has first-party Meta presence: Facebook Page "HAL - Baby Log by Text"
+(`61592858016305`), Instagram [@texthal4baby](https://www.instagram.com/texthal4baby/),
+Meta ad account `40885463`. Full detail lives in `growth/CLAUDE.md`.
+
+Why eng cares at all: **paid traffic now arrives from Meta as well as Google**,
+so landing-page and attribution work has a second source to account for. When
+touching `routes/landing.py`, `middleware/page_hits.py`, or anything reading
+`?c=` acquisition codes, do not assume Google is the only paid referrer — a
+change that silently drops Meta referrers will corrupt growth's numbers.
+
+What is still *not* your lane: the Pages, the ad account, campaigns, budgets,
+creative, and posting. Eng never posts to the Page or Instagram and never
+touches ads — same rule as campaigns. If you notice something wrong with an
+ad or a Page, report it and let growth act.
+
 ## Talking to growth
 
 - Unblocked something growth was waiting on? Say so in the ticket's `## Result`
