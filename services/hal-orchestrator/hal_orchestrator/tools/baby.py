@@ -9,18 +9,22 @@ forecast so the model can answer with real, data-grounded predictions.
 from __future__ import annotations
 
 import base64
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import structlog
 
 from hal_orchestrator.services.baby import (
+    AUX_KINDS,
     EVENT_KINDS,
     add_event,
     apply_auto_reminders,
     as_pairs,
+    as_triples,
     compute_patterns,
     create_family,
+    day_aux,
     delete_last_event,
     detect_regression,
     ensure_family_member,
@@ -28,11 +32,13 @@ from hal_orchestrator.services.baby import (
     fmt_duration,
     fmt_time,
     forecast_next,
+    format_day_aux,
     format_day_summary,
     format_forecast,
     get_family_for_silo,
     infer_wake_if_napping,
     load_events,
+    search_events,
     summarize_day,
 )
 from hal_orchestrator.tools.registry import ToolContext
@@ -246,6 +252,15 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
 
     if action == "log":
         kind = (args.get("kind") or "").strip()
+        note = (args.get("note") or "").strip()[:500]
+        filed_kind: str | None = None
+        if kind and kind not in EVENT_KINDS:
+            # People log things no taxonomy predicts ("haircut", "vaccine",
+            # "grandma visited"). Never bounce a real event over vocabulary —
+            # file it as a note carrying the original word so history finds it.
+            filed_kind = kind
+            note = f"{kind} — {note}"[:500] if note else kind[:500]
+            kind = "note"
         if kind not in EVENT_KINDS:
             return f"Error: kind must be one of {sorted(EVENT_KINDS)}."
         event_at = _parse_time(args.get("time"), now)
@@ -276,7 +291,7 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         await add_event(
             ctx.session, family, kind, event_at,
             logged_by=logger_id, silo=ctx.phone,
-            note=(args.get("note") or "")[:500],
+            note=note,
         )
 
         # A caregiver logging from a group thread gets their own 1:1 silo on
@@ -372,19 +387,26 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
                 if image.get("_source") != _EXAMPLE_CARD_IMAGE_SOURCE
             ]
 
+        label = filed_kind or kind.replace("_", " ")
         if card_attached:
             lines = [
-                f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
+                f"Logged: {baby} {label} at {fmt_time(event_at, tz)}.",
                 "[The updated status card is attached as an image. Reply with just "
                 "ONE short, warm line (e.g. \"Down he goes 💤\" / \"logged ✅\"); "
                 "do NOT re-list the times, the card has them.]",
             ]
         else:
             lines = [
-                f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
+                f"Logged: {baby} {label} at {fmt_time(event_at, tz)}.",
                 "",
                 format_forecast(forecast, tz, baby, now),
             ]
+        if filed_kind:
+            lines.append(
+                f"(No structured kind for '{filed_kind}' — stored as a note, "
+                "findable later with baby(action=history, query=...). If it "
+                "was really a feed/nap/wake/bedtime, undo and re-log.)"
+            )
         if inferred_wake is not None:
             lines.append(
                 f"Note: {baby} was still logged as napping, so this {kind.replace('_', ' ')} "
@@ -491,6 +513,9 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             summary = summarize_day(events, tz, d)
             out = [f"{baby}{age_part} — {period} ({d.strftime('%a %b %-d')}):",
                    format_day_summary(summary, tz, baby)]
+            aux_lines = format_day_aux(day_aux(as_triples(events_raw), tz, d), tz)
+            if aux_lines:
+                out.append(aux_lines)
             if period == "today":
                 out += ["", format_forecast(
                     forecast_next(events, tz, now, birthdate=family.baby_birthdate),
@@ -556,6 +581,20 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         if p["bedtime_minutes"] is not None:
             bm = int(p["bedtime_minutes"])
             out.append(f"Typical bedtime: {bm // 60 % 12 or 12}:{bm % 60:02d} PM")
+        week_cut = now - timedelta(days=7)
+        aux_counts = Counter(
+            kind
+            for kind, at, _ in as_triples(events_raw)
+            if kind in AUX_KINDS and at >= week_cut
+        )
+        if aux_counts:
+            out.append(
+                "Also this week: "
+                + ", ".join(
+                    f"{kind.replace('_', ' ')} ×{n}"
+                    for kind, n in aux_counts.most_common()
+                )
+            )
         flags = detect_regression(events, tz, now)
         if flags:
             out.append("⚠️ Possible sleep regression signals: " + "; ".join(flags))
@@ -578,6 +617,50 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             lines.append(
                 f"- {local.strftime('%a %-I:%M %p')} ({fmt_ago(e.event_at, now)}): "
                 f"{e.kind.replace('_', ' ')}{note}"
+            )
+        return "\n".join(lines)
+
+    if action == "history":
+        # Full-log search — "when did he last have tylenol", "how many poops
+        # this week", "when was his last bath". recent/stats only cover a few
+        # days; this is the lookback path with no horizon.
+        kind = (args.get("kind") or "").strip() or None
+        query = (args.get("query") or "").strip() or None
+        if kind is not None and kind not in EVENT_KINDS:
+            # An unknown kind is a concept, not vocabulary ("haircut") — fold
+            # it into the text search so lookups never bounce either.
+            query = f"{query} {kind}".strip() if query else kind
+            kind = None
+        since = None
+        if args.get("days"):
+            try:
+                since = now - timedelta(days=max(1, min(int(args["days"]), 400)))
+            except (TypeError, ValueError):
+                return "Error: days must be a number."
+        matches, total = await search_events(
+            ctx.session, family.id, kind=kind, query=query, since=since
+        )
+        scope_bits = [b for b in (
+            kind and f"kind={kind}",
+            query and f"matching '{query}'",
+            args.get("days") and f"last {args['days']} days",
+        ) if b]
+        scope = f" ({', '.join(scope_bits)})" if scope_bits else ""
+        if not matches:
+            return f"No events found for {baby}{scope}."
+        from hal_orchestrator.services.baby import fmt_ago
+
+        shown = matches[-30:]
+        header = f"{baby} — {total} event{'s' if total != 1 else ''}{scope}"
+        if total > len(shown):
+            header += f", showing the {len(shown)} most recent"
+        lines = [header + ":"]
+        for e in shown:
+            local = e.event_at.astimezone(tz)
+            note = f" ({e.note})" if e.note else ""
+            lines.append(
+                f"- {local.strftime('%a %b %-d, %-I:%M %p')} "
+                f"({fmt_ago(e.event_at, now)}): {e.kind.replace('_', ' ')}{note}"
             )
         return "\n".join(lines)
 
@@ -670,6 +753,6 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
 
     return (
         f"Unknown baby action: {action}. "
-        "Use: log, forecast, stats, card, day_card, recent, setup, configure, "
-        "undo, export."
+        "Use: log, forecast, stats, card, day_card, recent, history, setup, "
+        "configure, undo, export."
     )

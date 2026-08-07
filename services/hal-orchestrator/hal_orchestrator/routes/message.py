@@ -904,6 +904,14 @@ class OutboxAckRequest(BaseModel):
     delivered: bool = True
 
 
+class OutboxEnqueueRequest(BaseModel):
+    # Trusted local jobs (e.g. the Mac TikTok scroller) hand HAL a text to
+    # deliver to the user over a bridge channel.
+    phone: str = Field(min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=4096)
+    channel: str = "whatsapp"
+
+
 def _stable_message_payload(body: MessageRequest) -> dict:
     """Exclude an ephemeral location refresh from inbound idempotency."""
     return body.model_dump(
@@ -2527,5 +2535,33 @@ def build_message_router() -> APIRouter:
         count = await acknowledge(session, message_ids, delivered=body.delivered)
         await session.commit()
         return {"acknowledged": count}
+
+    @router.post(
+        "/api/outbox/enqueue",
+        dependencies=[Depends(verify_bridge_auth)],
+    )
+    async def enqueue_outbox(
+        body: OutboxEnqueueRequest,
+        session: AsyncSession = Depends(get_session),
+    ) -> dict:
+        """Enqueue one outbound text for a bridge to deliver.
+
+        Lets trusted local jobs (anything holding the bridge secret, e.g. the
+        Mac TikTok scroller) text the user without going through the agent
+        loop. Uses the same durable outbox the rest of the service produces
+        into, so delivery/lease semantics are identical.
+        """
+        from hal_orchestrator.services.delivery import KNOWN_CHANNELS, enqueue
+
+        if body.channel not in KNOWN_CHANNELS:
+            raise HTTPException(status_code=400, detail="unknown channel")
+        message_id = await enqueue(
+            session,
+            to=body.phone,
+            text=body.text,
+            channel=body.channel,
+        )
+        await session.commit()
+        return {"id": str(message_id) if message_id else None}
 
     return router

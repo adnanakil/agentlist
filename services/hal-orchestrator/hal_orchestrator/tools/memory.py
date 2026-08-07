@@ -8,11 +8,14 @@ from hal_orchestrator.services.memory import list_memories, recall, remember
 from hal_orchestrator.tools.registry import ToolContext
 
 # Timestamped baby-care events belong in the structured baby log, not memory.
-# Heuristic: mentions the baby + a care verb + an explicit clock time, and is
+# Heuristic: mentions the baby + a care word + an explicit clock time, and is
 # NOT a durable rule ("schedule", "whenever", ...). Soft net behind the system
 # prompt, which already directs baby events to the baby tool.
 _CARE_VERBS = re.compile(
-    r"\b(fed|ate|eating|feed|nap|napping|asleep|sleep|slept|woke|wake|bedtime)\b",
+    r"\b(fed|ate|eating|feed|nap|napping|asleep|sleep|slept|woke|wake|bedtime"
+    r"|poop\w*|pee\w*|diaper|bath|bathed|played?|playtime|tv|screen\s?time"
+    r"|solids|tummy\s?time|tylenol|motrin|ibuprofen|acetaminophen|medicine"
+    r"|meds?|dose|vitamin\s?d?)\b",
     re.I,
 )
 _CLOCK_TIME = re.compile(r"\d{1,2}:\d{2}\s*(am|pm)?|\d{1,2}\s*(am|pm)\b", re.I)
@@ -43,7 +46,9 @@ async def tool_memory(args: dict, ctx: ToolContext) -> str:
             return (
                 "Not saved: this is a baby care event, which belongs in the "
                 "structured baby log. Use baby(action=log, kind=feed|nap_start|"
-                "wake|bedtime, time=<ISO>) instead."
+                "wake|bedtime|diaper|medicine|bath|play|screen_time|solids|"
+                "tummy_time|symptom|milestone|note, time=<ISO>) instead — "
+                "details like drug + dose go in note."
             )
         return await remember(
             ctx.session, ctx.phone, content, ctx.http_client, ctx.settings
