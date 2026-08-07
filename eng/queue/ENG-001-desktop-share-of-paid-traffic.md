@@ -2,9 +2,9 @@
 
 - id: ENG-001
 - from: adnan
-- status: open
+- status: done
 - priority: P1
-- blast: unset
+- blast: green
 - opened: 2026-08-05
 - experiment: EXP-006
 
@@ -45,4 +45,36 @@ baseline — measure against what is actually shipped.
 
 ## Result
 
-(pending)
+**Script**: `eng/scripts/device_traffic.py` (re-runnable, uses Railway DB via `railway variables`)
+
+**Data window**: full available window (all `hal_page_hits` rows)
+
+**Findings**:
+
+| Device  | All hits | % of all | Google hits | % of Google | sms_taps | tap% |
+|---------|----------|----------|-------------|-------------|----------|------|
+| mobile  | 532      | 40.2%    | 2           | 100%        | 0        | 0.0% |
+| tablet  | 10       | 0.8%     | 0           | 0%          | 0        | 0.0% |
+| desktop | 782      | 59.1%    | 0           | 0%          | 0        | 0.0% |
+| TOTAL   | 1,324    | —        | 2           | —           | 0        | 0.0% |
+
+**Primary finding**: INCONCLUSIVE on the paid-traffic desktop question — the
+campaign was paused (2026-08-05 cycle 4) before enough paid hits accumulated.
+Only 2 `utm_source=google` rows are in `hal_page_hits`, both classified as
+mobile. That is not a representative sample; the question cannot be answered
+from this data.
+
+**Secondary finding (significant)**: 59% of ALL landing traffic is desktop.
+With 0 real sms_tap events across all 1,324 visits (from any device), there is
+no tap-rate delta to compare yet — but the 59% desktop share of organic/direct
+traffic means the desktop-path question is real if the campaign ever scales.
+
+**Recommendation**: Re-run `eng/scripts/device_traffic.py` after the campaign
+is re-enabled (pending EXP-006 deploy) and 50+ paid clicks accumulate. The
+59% overall desktop share warrants checking again. Do NOT build the QR-code
+desktop path yet — wait for data that can actually support or refute the
+theory. If the paid desktop share comes in ≥15% AND desktop tap rate is <50%
+of mobile rate, the script will surface that recommendation automatically.
+
+**Blast radius note**: script is read-only (`eng/scripts/` path, GREEN per
+charter). No deploy required; no application code changed.
