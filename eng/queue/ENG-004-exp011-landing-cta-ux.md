@@ -2,7 +2,7 @@
 
 - id: ENG-004
 - from: growth
-- status: needs-adnan
+- status: done
 - priority: P1
 - blast: green
 - opened: 2026-08-07
@@ -149,3 +149,14 @@ git stash pop
 - `services/hal-orchestrator/hal_orchestrator/routes/landing.py` (modified)
 - `services/hal-orchestrator/tests_onboarding_parent.py` (modified)
 - `tests/test_landing_cta_ux.py` (new)
+
+### Deployed — 2026-08-07 evening (standup decision D1, Option A)
+
+- Baby-tracker batch committed as d5f8fd2, ENG-004 as b6cd882 (Adnan's call,
+  Option A). Deployed via railway up from a clean tree; new build confirmed
+  live (CTA microcopy serving in prod HTML).
+- verify_prod: 9/10 pass. The one FAIL ("both hero-CTA arms served — only saw
+  none") is a stale checker, not a prod fault: manual probe read body
+  data-variant across 12 UA-varied fetches and saw both arms (5xa / 7xb).
+  Checker fix filed as ENG-006.
+- EXP-011 gate clock runs from this deploy (growth reads at 50+ mobile views).
