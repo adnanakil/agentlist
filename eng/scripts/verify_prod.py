@@ -21,6 +21,7 @@ broken in production:
 
 from __future__ import annotations
 
+import re
 import ssl
 import sys
 import urllib.error
@@ -102,14 +103,15 @@ check("android gets ?body=", "?body=" in android_html, "Android prefill silently
 
 # Both A/B arms must be reachable. Assignment is per-visitor-hash, so vary the
 # UA until both appear; a stuck arm means the experiment is not splitting.
+# Read data-variant from <body> — stable, purpose-built for reporting. The old
+# span-scraping broke when ENG-004 added a <span class="sms-bubble"> above the
+# button label, making the first span the preview, not the arm label.
 arms = set()
 for i in range(24):
     _, html, _ = get("/", f"{UA_IOS} Verify/{i}")
-    if 'id="herocta"' not in html:
-        continue
-    block = html.split('id="herocta"', 1)[1].split("</div>", 1)[0]
-    if "<span>" in block:
-        arms.add(block.split("<span>", 1)[1].split("</span>", 1)[0])
+    m = re.search(r'<body[^>]*\bdata-variant="([^"]+)"', html)
+    if m:
+        arms.add(m.group(1))
 check("both hero-CTA arms served", len(arms) >= 2, f"only saw {sorted(arms) or 'none'}")
 if arms:
     notes.append(f"arms seen: {sorted(arms)}")
