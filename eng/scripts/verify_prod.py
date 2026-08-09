@@ -172,7 +172,7 @@ except Exception as e:
 # cannot run JS from here, so assert the two facts that together make it run:
 # the CSP explicitly permits same-origin scripts, and the page loads its JS
 # from a same-origin file that really serves.
-csp = headers.get("Content-Security-Policy", "")
+csp = next((v for k, v in headers.items() if k.lower() == "content-security-policy"), "")
 check("CSP permits same-origin scripts (script-src 'self')",
       "script-src 'self'" in csp, f"CSP={csp!r}")
 check("CSP permits beacon POSTs (connect-src 'self')",
