@@ -175,3 +175,13 @@ CSP/JS/hero assertions. Confirmed live in a real browser, desktop and mobile.
   bubble SVG removed, ↗ asserted-against in tests.
 - EXP-011 is closed by these changes (CTA altered mid-flight, and its 0-tap
   reading was measuring a blocked script anyway — see ledger).
+
+## Addendum (2026-08-09, adnan session)
+
+The cover-background implementation above collided with the headline at wide
+viewports (object-fit:cover slides the phone toward the text at aspect ratios
+other than 2:1 — Adnan hit it live at ~2000px). Reworked in commit f200ede:
+the phone is now a transparent `hero-phone.png` laid out as a second grid
+column, the pastel gradient is CSS, and `hero-media` is banned by tests and
+verify_prod. `hero-conversation.png` is still served for social/ads reuse but
+the page no longer loads it. `make_hero.py` renders both assets.
