@@ -1,8 +1,15 @@
-"""Tests for ENG-004: landing CTA UX — message icon, preview, and microcopy.
+"""Tests for the landing CTA and hero (ENG-004, revised by ENG-012/014/015).
 
-These tests guard against regressions on the three changes that replaced the
-↗ navigation arrow with an SMS-legible icon and made the two-step action
-explicit for mobile visitors.
+History matters here:
+- ENG-004 replaced a ↗ navigation arrow with a speech-bubble icon (↗ read as
+  "leaves the site" when the button opens Messages).
+- ENG-012 (Adnan, option A) removed the bubble again — the label itself now
+  reads "Text (number)", which carries the SMS signal — and added a TRAILING
+  plain right arrow (→) as a pressable-affordance cue. The diagonal ↗ stays
+  banned on SMS CTAs.
+- ENG-014 made the hero pastel/light with a rotating last word in the H1.
+- ENG-015 moved all landing JS to /static/landing.js because the CSP
+  (script-src 'self', no 'unsafe-inline') blocks inline scripts.
 """
 
 import sys
@@ -12,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "ha
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "packages", "ag-common"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "packages", "ag-db"))
 
-from hal_orchestrator.routes.landing import render_landing
+from hal_orchestrator.routes.landing import _LANDING_JS, render_landing
 
 NUMBER = "+15550001234"
 
@@ -26,24 +33,33 @@ def _sticky_block(html: str) -> str:
     return html.split('id="stickycta"')[1].split("</div>")[0]
 
 
-def test_message_icon_in_hero_cta():
-    """Hero CTA uses the speech-bubble SVG, not the ↗ navigation arrow."""
+def test_hero_cta_has_trailing_right_arrow():
+    """ENG-012 option A: plain → after the label; never the ↗ external-link glyph."""
     html = render_landing(NUMBER)
     block = _hero_block(html)
-    assert "<svg" in block, "message icon SVG missing from hero CTA"
-    assert "↗" not in block, "navigation arrow ↗ still present in hero CTA — replace with message icon"
+    assert "→" in block, "trailing right arrow missing from hero CTA"
+    assert "↗" not in block, "banned ↗ glyph present in hero CTA (reads as external link)"
+    assert 'aria-hidden="true"' in block, "arrow must be decorative (aria-hidden)"
 
 
-def test_message_icon_in_sticky_cta():
-    """Sticky mobile bar uses the speech-bubble SVG, not the ↗ navigation arrow."""
+def test_hero_cta_bubble_icon_removed():
+    """ENG-012 option A removed the speech-bubble SVG from the CTA pill itself."""
+    html = render_landing(NUMBER)
+    block = _hero_block(html)
+    assert "<svg" not in block, "icon SVG should be gone from the CTA pill (option A)"
+    assert "Text" in block, "CTA label must still carry the SMS verb"
+
+
+def test_sticky_cta_matches_hero_treatment():
     html = render_landing(NUMBER)
     block = _sticky_block(html)
-    assert "<svg" in block, "message icon SVG missing from sticky CTA"
-    assert "↗" not in block, "navigation arrow ↗ still present in sticky CTA — replace with message icon"
+    assert "→" in block, "trailing arrow missing from sticky CTA"
+    assert "↗" not in block, "banned ↗ glyph present in sticky CTA"
+    assert "<svg" not in block, "bubble SVG should be gone from sticky CTA (option A)"
 
 
 def test_sms_preview_present_in_hero():
-    """Hero CTA shows a speech-bubble preview of the pre-filled SMS text."""
+    """The SMS preview bubble (ENG-004) survives option A — only the icon went."""
     html = render_landing(NUMBER)
     block = _hero_block(html)
     assert "cta-preview" in block, "SMS preview div (cta-preview) missing from hero CTA"
@@ -51,36 +67,53 @@ def test_sms_preview_present_in_hero():
 
 
 def test_microcopy_present_in_hero():
-    """Hero CTA includes microcopy explaining that the button opens the Messages app."""
     html = render_landing(NUMBER)
-    assert "Opens your Messages app" in html, "microcopy 'Opens your Messages app' missing from landing page"
-    assert "cta-mob-hint" in html, "cta-mob-hint CSS class missing — microcopy won't display on mobile"
+    assert "Opens your Messages app" in html
+    assert "cta-mob-hint" in html
 
 
-def test_microcopy_mobile_only_css():
-    """cta-mob-hint and cta-preview start as display:none and become block at 820px."""
+def test_rotating_headline_word():
+    """ENG-014: H1 ends 'up with baby's <word>.' — server-renders a real word,
+    reserves width, and the JS cycles naps/poops/feeds."""
     html = render_landing(NUMBER)
-    assert ".cta-mob-hint { display:none;" in html or ".cta-mob-hint {display:none;" in html or "cta-mob-hint" in html
-    assert "max-width:820px" in html, "820px breakpoint missing — mobile styles not applied"
+    assert 'id="rotator"' in html, "rotator span missing from H1"
+    assert ">naps.<" in html, "server must render a complete word, not an empty span"
+    assert "min-width" in html and "rot-word" in html, "reserved width missing — line would reflow each tick"
+    assert "prefers-reduced-motion" in html, "reduced-motion handling missing"
+    for w in ("'naps.'", "'poops.'", "'feeds.'"):
+        assert w in _LANDING_JS, f"{w} missing from rotator word list"
+    assert "'milestones.'" not in _LANDING_JS, "milestones was dropped by Adnan — do not re-add"
 
 
-def test_tap_beacon_still_fires():
-    """The /tap fetch beacon is present and unchanged (conversion tracking must not break)."""
+def test_hero_uses_conversation_image():
+    """ENG-014: pastel conversation hero replaces the stock bottles photo."""
     html = render_landing(NUMBER)
-    assert "fetch('/tap'" in html, "/tap beacon missing — SMS tap events will not be recorded"
-    assert "keepalive:true" in html, "keepalive flag missing from tap beacon"
+    assert "/static/hero-conversation.png" in html, "hero image not swapped"
+    assert "donebottles" not in html.split('class="hero-media"')[1].split(">")[0]
+
+
+def test_landing_js_external_not_inline():
+    """ENG-015: CSP is script-src 'self' — the page must reference landing.js and
+    carry no executable inline script after </head> (JSON-LD in head is data)."""
+    html = render_landing(NUMBER)
+    assert '<script src="/static/landing.js">' in html
+    body = html.split("</head>")[1]
+    assert "<script>" not in body, "inline <script> in body will be CSP-blocked and silently dead"
+
+
+def test_tap_beacon_lives_in_landing_js():
+    assert "fetch('/tap'" in _LANDING_JS, "/tap beacon missing from landing.js"
+    assert "keepalive:true" in _LANDING_JS
 
 
 def test_no_preview_when_no_number():
-    """Coming-soon variant renders without the SMS-specific UX elements (elements, not CSS)."""
     html = render_landing("")
     assert "coming soon" in html
-    assert '<div class="cta-preview">' not in html, "SMS preview element should not appear in coming-soon variant"
-    assert 'class="cta-mob-hint"' not in html, "microcopy element should not appear in coming-soon variant"
+    assert '<div class="cta-preview">' not in html
+    assert 'class="cta-mob-hint"' not in html
 
 
 def test_sms_link_intact():
-    """The sms: href is still present and contains the pre-filled message."""
     html = render_landing(NUMBER)
     assert "sms:" in html, "sms: link missing"
     assert "new%20baby%20here" in html, "SMS prefill text missing from sms: link"

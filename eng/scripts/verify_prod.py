@@ -130,6 +130,74 @@ try:
 except Exception as e:
     check("tap beacon accepts events", False, str(e))
 
+# Desktop QR code block — should be present in any page load (CSS hides it on
+# mobile; JS reveals it on desktop). If qrcode is not deployed, this fails.
+_, desktop_html, _ = get("/", UA_IOS)  # UA doesn't affect QR presence (CSS-gated)
+if desktop_html:
+    has_qr = 'class="qr-desk-block"' in desktop_html
+    check("desktop QR block present in page", has_qr,
+          "QR block missing — qrcode dep not installed or qr_svg returned empty")
+    if has_qr:
+        _qr_section = desktop_html.split('class="qr-desk-block"')[1].split("</div></div>")[0]
+        check("QR data-qr-url encodes /go/ path (attribution-safe)",
+              'data-qr-url="/go/' in desktop_html,
+              "QR block present but data-qr-url missing /go/ path")
+        check("QR block SVG embedded inline", "<svg" in _qr_section)
+
+# /go/{code} — server-side tap recording for iOS. Sends utm_source=verify-test
+# so this probe is excluded from funnel dashboards.
+go_req = urllib.request.Request(
+    BASE + "/go/verify-test?utm_source=verify-test",
+    headers={"User-Agent": UA_IOS},
+)
+try:
+    with urllib.request.urlopen(go_req, timeout=TIMEOUT, context=SSL_CTX) as r:
+        go_html = r.read().decode("utf-8", "replace")
+        check("/go/{code} returns 200 (tap recorded server-side)", r.status == 200,
+              f"got {r.status}")
+        check("/go/{code} page contains sms: URI", "sms:" in go_html,
+              "redirect page missing sms: URI")
+        check("/go/{code} is no-store", "no-store" in dict(r.headers).get("Cache-Control", "").lower())
+except urllib.error.HTTPError as e:
+    check("/go/{code} returns 200 (tap recorded server-side)", False, f"HTTP {e.code}")
+    check("/go/{code} page contains sms: URI", False, "request failed")
+    check("/go/{code} is no-store", False, "request failed")
+except Exception as e:
+    check("/go/{code} returns 200 (tap recorded server-side)", False, str(e))
+    check("/go/{code} page contains sms: URI", False, "request failed")
+    check("/go/{code} is no-store", False, "request failed")
+
+# Landing JS must actually be EXECUTABLE, not merely present (ENG-015: the CSP
+# silently blocked every inline script for days and nothing caught it). We
+# cannot run JS from here, so assert the two facts that together make it run:
+# the CSP explicitly permits same-origin scripts, and the page loads its JS
+# from a same-origin file that really serves.
+csp = headers.get("Content-Security-Policy", "")
+check("CSP permits same-origin scripts (script-src 'self')",
+      "script-src 'self'" in csp, f"CSP={csp!r}")
+check("CSP permits beacon POSTs (connect-src 'self')",
+      "connect-src 'self'" in csp, f"CSP={csp!r}")
+check("landing references /static/landing.js",
+      '<script src="/static/landing.js">' in ios_html)
+check("no executable inline script in body (would be CSP-dead)",
+      "<script>" not in ios_html.split("</head>", 1)[-1],
+      "inline <script> found after </head> — it will never run under this CSP")
+js_status, js_body, js_headers = get("/static/landing.js")
+check("/static/landing.js serves 200", js_status == 200, f"got {js_status}")
+check("landing.js is javascript",
+      "javascript" in js_headers.get("Content-Type", ""),
+      f"Content-Type={js_headers.get('Content-Type')!r}")
+check("landing.js carries the desk gate + tap beacon + rotator",
+      "desk" in js_body and "fetch('/tap'" in js_body and "rotator" in js_body)
+
+# ENG-014 hero: conversation image + rotating headline word, server-rendered.
+check("hero uses the conversation image",
+      "/static/hero-conversation.png" in ios_html)
+hero_img_status, _, _ = get("/static/hero-conversation.png")
+check("hero image serves 200", hero_img_status == 200, f"got {hero_img_status}")
+check("H1 rotator span present with a real word",
+      'id="rotator"' in ios_html and ">naps.<" in ios_html)
+
 for n in notes:
     print(f"  note: {n}")
 

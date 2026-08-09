@@ -72,21 +72,31 @@ def sms_separator(user_agent: str | None) -> str:
 #      CSS shows the bar by default, so a JS failure leaves the CTA visible.
 #   4. Desktop has no working sms: handler on Windows/Linux, so the number
 #      becomes a copy-to-clipboard button there instead of a dead link.
-_TAP_BEACON_JS = """<script>
+# Served as /static/landing.js (NOT inlined): the CSP is default-src 'none'
+# with script-src 'self', so inline <script> blocks never execute (ENG-015 —
+# the beacon was silently dead for days because of exactly that).
+_LANDING_JS = """
 (function(){
   var links=document.querySelectorAll('a[href^="sms:"]');
   if(/android/i.test(navigator.userAgent||'')){
     links.forEach(function(a){a.href=a.href.replace('&body=','?body=');});
   }
-  function tap(){
+  var goLinks=document.querySelectorAll('a[href^="/go/"]');
+  if(goLinks.length){
+    var gp=new URLSearchParams(window.location.search),pts=[];
+    ['utm_source','utm_medium','utm_campaign'].forEach(function(k){var v=gp.get(k);if(v)pts.push(k+'='+encodeURIComponent(v));});
+    if(pts.length){var goQs='?'+pts.join('&');goLinks.forEach(function(a){a.href=a.href+goQs;});}
+  }
+  function tap(evType){
     var p=new URLSearchParams(window.location.search);
     fetch('/tap',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({code:p.get('c'),utm_source:p.get('utm_source'),
-        utm_medium:p.get('utm_medium'),utm_campaign:p.get('utm_campaign'),
+      body:JSON.stringify({event_type:evType||'sms_tap',code:p.get('c'),
+        utm_source:p.get('utm_source'),utm_medium:p.get('utm_medium'),
+        utm_campaign:p.get('utm_campaign'),
         variant:document.body.getAttribute('data-variant')}),
       keepalive:true}).catch(function(){});
   }
-  links.forEach(function(a){a.addEventListener('click',tap);});
+  links.forEach(function(a){a.addEventListener('click',function(){tap('sms_tap');});});
 
   var bar=document.getElementById('stickycta'), hero=document.getElementById('herocta');
   if(bar&&hero&&'IntersectionObserver' in window){
@@ -103,6 +113,7 @@ _TAP_BEACON_JS = """<script>
   document.querySelectorAll('.copy-num').forEach(function(b){
     b.addEventListener('click',function(){
       if(!document.documentElement.classList.contains('desk')) return;
+      tap('sms_copy');
       var n=b.getAttribute('data-num')||'', prev=b.textContent;
       if(!navigator.clipboard) return;
       navigator.clipboard.writeText(n).then(function(){
@@ -111,10 +122,25 @@ _TAP_BEACON_JS = """<script>
       }).catch(function(){});
     });
   });
+
+  var rw=document.getElementById('rotator');
+  if(rw){
+    var reduce=false;
+    try{reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
+    if(!reduce){
+      var words=['naps.','poops.','feeds.'], wi=0;
+      setInterval(function(){
+        wi=(wi+1)%words.length;
+        rw.classList.add('rot-out');
+        setTimeout(function(){rw.textContent=words[wi];rw.classList.remove('rot-out');},240);
+      },2200);
+    }
+  }
 })();
-</script>"""
+"""
 _CODE_RX = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
 _BOTTLES_IMAGE = Path(__file__).parent.parent / "static" / "donebottles.png"
+_HERO_IMAGE = Path(__file__).parent.parent / "static" / "hero-conversation.png"
 
 
 def _pretty_number(raw: str) -> str:
@@ -130,6 +156,39 @@ def _pretty_number(raw: str) -> str:
 def _cta_label(pretty: str, variant: str) -> str:
     """The A/B'd primary-CTA copy: brand name vs. the literal number."""
     return f"Text {pretty}" if variant == "b" else "Text HAL"
+
+
+def _qr_svg(data: str) -> str:
+    """Server-side QR code as an inline SVG string. Returns '' if qrcode is unavailable."""
+    try:
+        import qrcode  # type: ignore[import]
+    except ImportError:
+        return ""
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L, border=4)
+    qr.add_data(data)
+    qr.make(fit=True)
+    modules = qr.modules
+    n = len(modules)
+    rects: list[str] = []
+    for row_i, row in enumerate(modules):
+        c_start: int | None = None
+        for col_i, dark in enumerate(row):
+            if dark and c_start is None:
+                c_start = col_i
+            elif not dark and c_start is not None:
+                rects.append(
+                    f'<rect x="{c_start}" y="{row_i}" width="{col_i - c_start}" height="1"/>'
+                )
+                c_start = None
+        if c_start is not None:
+            rects.append(f'<rect x="{c_start}" y="{row_i}" width="{n - c_start}" height="1"/>')
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {n} {n}"'
+        f' role="img" aria-label="QR code — scan with your phone to open Messages">'
+        f'<rect width="{n}" height="{n}" fill="#fff"/>'
+        + "".join(rects)
+        + "</svg>"
+    )
 
 
 def render_landing(
@@ -148,8 +207,27 @@ def render_landing(
     pretty = _pretty_number(number)
     sms = re.sub(r"[^\d+]", "", number or "")
     body = SMS_PREFILL + (f" ({code})" if code else "")
-    sms_href = f"sms:{sms}{sms_separator(user_agent)}body={quote(body)}"
+    if code and sms:
+        sms_href = f"/go/{code}"
+    else:
+        sms_href = f"sms:{sms}{sms_separator(user_agent)}body={quote(body)}"
     label = _cta_label(pretty, variant)
+
+    # QR code for desktop visitors. The /go/ path records a server-side sms_tap
+    # on scan — same mechanism as the mobile CTA (ENG-010). A "qr" suffix on the
+    # attribution code makes QR-originated starts separable in the funnel from
+    # mobile taps that share the same campaign code.
+    qr_attr_code = (code[:30] + "qr") if code else "qr"
+    _qr_html = _qr_svg(f"https://www.texthal.com/go/{qr_attr_code}") if number and sms else ""
+    qr_block = (
+        f'<div class="qr-desk-block" data-qr-url="/go/{qr_attr_code}">'
+        f'<div class="qr-img">{_qr_html}</div>'
+        f'<div class="qr-copy">'
+        f'<p class="qr-label">Scan from your phone to open Messages</p>'
+        f'<p class="qr-num">{pretty}</p>'
+        f'</div></div>'
+    ) if _qr_html else ""
+
     # Three CTAs: hero (above the fold), sticky mobile bar, and the closing
     # section. Paid traffic lands on the hero and mostly never scrolls. The hero
     # and sticky bar carry the A/B copy and NO number line — a second line under
@@ -160,15 +238,16 @@ def render_landing(
         f'<div class="cta-block" id="herocta">'
         f'<div class="cta-preview"><span class="sms-bubble">"Hi HAL — new baby here 👶"</span><p class="sms-preview-hint">Tap to send · HAL replies instantly</p></div>'
         f'<a class="number primary-cta cta-lg" href="{sms_href}">'
-        f'<span>{label}</span><span class="cta-arrow" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/></svg></span></a>'
+        f'<span>{label}</span><span class="cta-arrow" aria-hidden="true">→</span></a>'
         f'<p class="cta-mob-hint">Opens your Messages app · one text to start.</p>'
+        f'{qr_block}'
         f'</div>'
         if number
         else '<p class="number soon">coming soon</p>'
     )
     cta = (
         f'<div class="cta-block"><a class="number primary-cta" href="{sms_href}">'
-        '<span>Text HAL</span><span class="cta-arrow" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/></svg></span></a>'
+        '<span>Text HAL</span><span class="cta-arrow" aria-hidden="true">→</span></a>'
         f'<p class="hint"><button type="button" class="copy-num" data-num="{sms}">{pretty}</button>'
         '<span class="hint-mob"> · no app, nothing to install</span>'
         '<span class="hint-desk"> · text from your phone (tap to copy)</span></p></div>'
@@ -177,7 +256,7 @@ def render_landing(
     )
     sticky_cta = (
         f'<div class="sticky-cta" id="stickycta"><a class="sticky-btn" href="{sms_href}">'
-        f'<span>{label}</span><span aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/></svg></span></a></div>'
+        f'<span>{label}</span><span aria-hidden="true">→</span></a></div>'
         if number
         else ""
     )
@@ -226,52 +305,62 @@ def render_landing(
   .site-nav {{
     height:76px; padding:0 clamp(20px, 4vw, 64px); display:flex;
     align-items:center; justify-content:space-between; position:absolute;
-    inset:0 0 auto; z-index:10; color:#fff;
+    inset:0 0 auto; z-index:10; color:var(--ink);
   }}
   .brand {{ display:flex; align-items:center; gap:11px; text-decoration:none;
     font-size:18px; font-weight:650; letter-spacing:-.02em; }}
   .brand img {{ width:36px; height:36px; border-radius:10px; display:block; }}
   .nav-links {{ display:flex; align-items:center; gap:34px; font-size:14px; font-weight:600; }}
-  .nav-links > a:not(.nav-cta) {{ color:#fff; text-decoration:none; opacity:.88; }}
+  .nav-links > a:not(.nav-cta) {{ color:var(--ink); text-decoration:none; opacity:.82; }}
   .nav-links > a:not(.nav-cta):hover {{ opacity:1; }}
-  .nav-cta {{ background:#fff; color:var(--ink); border-radius:999px;
+  .nav-cta {{ background:var(--green); color:#fff; border-radius:999px;
     padding:11px 17px; text-decoration:none; display:inline-flex; gap:9px; align-items:center; }}
 
   .hero {{
     min-height:920px; position:relative; display:grid; place-items:center;
-    color:#fff; background:var(--green); overflow:hidden; padding:130px 24px 90px;
+    color:var(--green); background:#ece4f0; overflow:hidden; padding:130px 24px 90px;
   }}
   .hero-media {{
     position:absolute; inset:0; z-index:0; width:100%; height:100%;
     object-fit:cover; object-position:center; display:block;
   }}
+  /* Light scrim over the pastel conversation image: near-opaque behind the
+     headline, fading out over the phone. Text on the hero is dark ink now —
+     every colour below was re-picked for AA on this background (ENG-014). */
   .hero::before {{
     content:""; position:absolute; inset:0; z-index:1;
-    background:linear-gradient(90deg, rgba(14,49,39,.94) 0%, rgba(14,49,39,.82) 34%,
-      rgba(14,49,39,.35) 59%, rgba(14,49,39,.08) 82%);
+    background:linear-gradient(90deg, rgba(249,245,248,.92) 0%, rgba(249,245,248,.80) 34%,
+      rgba(247,243,247,.30) 59%, rgba(247,243,247,.05) 82%);
   }}
   .hero::after {{
     content:""; position:absolute; inset:0; z-index:1;
-    background:linear-gradient(0deg, rgba(8,30,24,.34), transparent 30%);
+    background:linear-gradient(0deg, rgba(228,219,233,.45), transparent 30%);
   }}
   .hero-inner {{ width:min(1280px, 100%); position:relative; z-index:2; text-align:left; }}
   .eyebrow {{ font-size:13px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; }}
+  .hero .eyebrow {{ color:#48685a; }}
   .hero h1 {{
-    max-width:780px; margin:26px 0 28px; font-size:clamp(52px, 6.6vw, 96px);
-    line-height:.9; letter-spacing:-.025em; font-weight:500;
+    max-width:820px; margin:26px 0 28px; font-size:clamp(52px, 6.6vw, 96px);
+    line-height:.94; letter-spacing:-.025em; font-weight:500;
   }}
-  .hero h1 span {{ display:block; color:var(--green-bright); }}
+  .hero h1 .h1-l2 {{ display:block; }}
+  .nw {{ white-space:nowrap; }}
+  .rot-word {{ display:inline-block; min-width:5.6ch; text-align:left; color:#128a47;
+    transition:opacity .24s ease, transform .24s ease; }}
+  .rot-word.rot-out {{ opacity:0; transform:translateY(10px); }}
+  @media (prefers-reduced-motion:reduce) {{ .rot-word {{ transition:none; }} }}
   .hero-copy {{ max-width:590px; margin:0; font-size:clamp(18px, 2vw, 24px);
-    line-height:1.45; letter-spacing:-.015em; color:#e8f4ed; }}
+    line-height:1.45; letter-spacing:-.015em; color:#41584c; }}
   .hero .cta-block {{ margin-top:38px; }}
   .hero-chips {{ display:flex; flex-wrap:wrap; justify-content:flex-start; gap:10px; margin-top:30px; }}
-  .chip {{ padding:10px 15px; border-radius:999px; font-size:13px; font-weight:650; }}
+  .chip {{ padding:10px 15px; border-radius:999px; font-size:13px; font-weight:650;
+    border:1px solid rgba(32,33,36,.08); }}
   .chip:nth-child(1) {{ background:#e8fffc; color:#02756e; }}
   .chip:nth-child(2) {{ background:#f7e9ff; color:#5a2f90; }}
   .chip:nth-child(3) {{ background:#e5f6ff; color:#004f66; }}
   .scroll-cue {{ position:absolute; bottom:32px; left:clamp(20px, 4vw, 64px);
-    z-index:2; display:flex; gap:12px; align-items:center; font-size:13px; color:#d7ebe0; }}
-  .scroll-cue::before {{ content:"↓"; border:1px solid rgba(255,255,255,.45); width:35px;
+    z-index:2; display:flex; gap:12px; align-items:center; font-size:13px; color:#4d6c5d; }}
+  .scroll-cue::before {{ content:"↓"; border:1px solid rgba(21,63,50,.32); width:35px;
     height:35px; border-radius:50%; display:grid; place-items:center; }}
 
   .section {{ padding:clamp(80px, 11vw, 160px) clamp(20px, 4vw, 64px); }}
@@ -398,12 +487,13 @@ def render_landing(
   .number.soon {{ display:inline-block; font-size:24px; font-weight:650; border-radius:999px; background:rgba(255,255,255,.16); padding:18px 28px; }}
   .hint {{ color:rgba(255,255,255,.78); margin-top:15px; font-size:14px; }}
 
-  /* Hero CTA — mint on the dark hero; the ink pill would vanish into it. */
-  .hero .primary-cta {{ background:var(--green-bright); color:var(--green);
-    box-shadow:0 16px 38px rgba(6,26,20,.42); }}
-  .hero .primary-cta:hover {{ background:#cfffe2; }}
-  .hero .cta-arrow {{ background:var(--green); color:var(--green-bright); }}
-  .hero .hint {{ color:#cfe6da; }}
+  /* Hero CTA — solid brand green on the light hero. #178a4c on white text is
+     ~3.9:1, passing AA for this large bold label. */
+  .hero .primary-cta {{ background:#178a4c; color:#fff;
+    box-shadow:0 14px 34px rgba(86,60,102,.24); }}
+  .hero .primary-cta:hover {{ background:#0f7a3f; }}
+  .hero .cta-arrow {{ background:#fff; color:#128a47; }}
+  .hero .hint {{ color:#4c6b5c; }}
 
   .copy-num {{ background:none; border:0; padding:0; font:inherit; color:inherit; }}
   .hint-desk {{ display:none; }}
@@ -424,9 +514,9 @@ def render_landing(
     text-decoration:none; }}
 
   .cta-preview {{ display:none; margin-bottom:16px; }}
-  .sms-bubble {{ display:inline-block; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); border-radius:18px 18px 18px 5px; padding:9px 15px; font-size:14px; color:#d9ecdf; font-style:italic; }}
-  .sms-preview-hint {{ font-size:12px; color:#a8ccb8; margin-top:6px; }}
-  .cta-mob-hint {{ display:none; font-size:13px; color:#cfe6da; margin-top:10px; }}
+  .sms-bubble {{ display:inline-block; background:#fff; border:1px solid rgba(21,63,50,.16); border-radius:18px 18px 18px 5px; padding:9px 15px; font-size:14px; color:#2f4a3e; font-style:italic; box-shadow:0 4px 14px rgba(86,60,102,.10); }}
+  .sms-preview-hint {{ font-size:12px; color:#54725f; margin-top:6px; }}
+  .cta-mob-hint {{ display:none; font-size:13px; color:#4c6b5c; margin-top:10px; }}
 
   footer {{ background:#fff; padding:40px clamp(20px, 4vw, 64px); }}
   .footer-inner {{ width:min(1280px,100%); margin:0 auto; display:flex; align-items:center;
@@ -464,9 +554,9 @@ def render_landing(
     .cta-lg {{ font-size:19px; padding:18px 19px 18px 28px; gap:26px; }}
     .cta-lg .cta-arrow {{ width:36px; height:36px; font-size:17px; }}
     .hero-media {{ object-position:70% center; }}
-    .hero::before {{ background:rgba(14,49,39,.7); }}
-    .hero::after {{ background:linear-gradient(0deg, rgba(8,30,24,.42), transparent 45%); }}
-    .hero h1 {{ font-size:clamp(54px, 16vw, 82px); }}
+    .hero::before {{ background:rgba(249,245,248,.86); }}
+    .hero::after {{ background:linear-gradient(0deg, rgba(228,219,233,.5), transparent 45%); }}
+    .hero h1 {{ font-size:clamp(44px, 13vw, 82px); }}
     .scroll-cue {{ display:none; }}
     .intro-grid {{ gap:36px; }}
     .demo-header {{ margin-bottom:40px; }}
@@ -483,6 +573,36 @@ def render_landing(
   }}
   @media (prefers-reduced-motion:reduce) {{ html {{ scroll-behavior:auto; }}
     .primary-cta, .sticky-cta {{ transition:none; }} }}
+
+  /* Desktop QR block — hidden on mobile, shown when JS adds .desk to <html>. */
+  .qr-desk-block {{ display:none; }}
+  html.desk .qr-desk-block {{ display:flex; align-items:flex-start; gap:16px; margin-top:22px; }}
+  .qr-img svg {{ width:148px; height:148px; flex-shrink:0; border-radius:8px; display:block; }}
+  .qr-copy {{ display:flex; flex-direction:column; justify-content:center; }}
+  .qr-label {{ font-size:13px; color:#48685a; margin-bottom:8px; font-weight:500; line-height:1.4; }}
+  .qr-num {{ font-size:17px; font-weight:650; color:var(--green); letter-spacing:-.01em; }}
+
+  /* Trust badges under the hero CTA chips */
+  .hero-trust {{ display:flex; flex-wrap:wrap; gap:6px 20px; margin-top:16px; }}
+  .trust-badge {{ font-size:13px; color:#3f6553; font-weight:600; letter-spacing:-.01em; }}
+  .trust-badge::before {{ content:"✓\u00a0"; color:#128a47; }}
+
+  /* How it works — 3-step strip immediately below the hero */
+  .how-steps {{ background:#fff; padding:60px clamp(20px, 4vw, 64px); border-bottom:1px solid var(--line); }}
+  .how-steps-inner {{ width:min(1280px, 100%); margin:0 auto; }}
+  .how-steps-label {{ font-size:13px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:40px; }}
+  .steps-row {{ display:grid; grid-template-columns:repeat(3,1fr); gap:32px; }}
+  .step-item {{ display:flex; flex-direction:column; gap:14px; }}
+  .step-num {{ width:38px; height:38px; border-radius:50%; background:var(--green); color:var(--green-bright);
+    font-size:14px; font-weight:700; display:grid; place-items:center; flex-shrink:0; }}
+  .step-item h3 {{ font-size:clamp(19px, 2.1vw, 27px); font-weight:550; letter-spacing:-.035em;
+    line-height:1.1; }}
+  .step-item p {{ font-size:15px; color:var(--muted); line-height:1.55; max-width:380px; }}
+  @media (max-width:680px) {{
+    .steps-row {{ grid-template-columns:1fr; gap:28px; }}
+    .how-steps {{ padding:48px clamp(20px, 4vw, 64px); }}
+  }}
 </style></head>
 <body{body_class}>
   <nav class="site-nav" aria-label="Main navigation">
@@ -494,22 +614,49 @@ def render_landing(
 
   <main id="top">
     <section class="hero">
-      <img class="hero-media" src="/static/donebottles.png" alt="" fetchpriority="high">
+      <img class="hero-media" src="/static/hero-conversation.png" alt="" fetchpriority="high">
       <div class="hero-inner">
         <p class="eyebrow">HAL — the baby log that lives in your group chat.</p>
-        <h1>A calmer way to <span>keep up with baby.</span></h1>
+        <h1>A calmer way to keep <span class="h1-l2">up with <span class="nw">baby's <span id="rotator" class="rot-word">naps.</span></span></span></h1>
         <p class="hero-copy">HAL turns the family group chat into one reliable baby schedule—without asking anyone to learn another app.</p>
         {hero_cta}
-        <div class="hero-chips" aria-label="Highlights">
-          <span class="chip">One shared record</span><span class="chip">Helpful forecasts</span><span class="chip">No app to manage</span>
+        <div class="hero-chips" aria-label="Trust highlights">
+          <span class="chip">No account</span><span class="chip">No password</span><span class="chip">No app to install</span>
+        </div>
+        <div class="hero-trust" aria-label="Privacy assurance">
+          <span class="trust-badge">Your number is never sold or shared</span>
+          <span class="trust-badge">Delete everything with one text</span>
         </div>
       </div>
       <div class="scroll-cue" aria-hidden="true">See how HAL helps</div>
     </section>
 
-    <section class="section intro" id="how">
+    <section class="how-steps" id="how" aria-labelledby="how-steps-label">
+      <div class="how-steps-inner">
+        <p class="how-steps-label" id="how-steps-label">How it works</p>
+        <div class="steps-row">
+          <div class="step-item">
+            <div class="step-num" aria-hidden="true">1</div>
+            <h3>Add HAL to the family thread</h3>
+            <p>One text to start — no sign-up form, no download, no new accounts for anyone.</p>
+          </div>
+          <div class="step-item">
+            <div class="step-num" aria-hidden="true">2</div>
+            <h3>Everyone texts in naturally</h3>
+            <p>Feeds, naps, notes — HAL understands plain language and keeps one shared record the whole household can trust.</p>
+          </div>
+          <div class="step-item">
+            <div class="step-num" aria-hidden="true">3</div>
+            <h3>Ask back any time</h3>
+            <p>"What's the schedule today?" HAL has the full picture and tells you what is likely next from your baby's own rhythm.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section intro" aria-labelledby="intro-title">
       <div class="section-inner intro-grid">
-        <div><p class="kicker">Made for real households</p><h2 class="display">Everyone texts. HAL remembers.</h2></div>
+        <div><p class="kicker">Made for real households</p><h2 class="display" id="intro-title">Everyone texts. HAL remembers.</h2></div>
         <p class="intro-copy">Parents, nanny, grandma—everyone logs feeds and naps the way they already talk. <strong>HAL keeps one record straight</strong>, quietly does the schedule math, and tells the family what is likely next.</p>
       </div>
     </section>
@@ -612,7 +759,7 @@ def render_landing(
 
   <footer><div class="footer-inner"><span class="footer-brand">HAL</span><span>© 2026 HAL</span><div class="footer-links"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div></div></footer>
   {sticky_cta}
-{_TAP_BEACON_JS}
+<script src="/static/landing.js"></script>
 </body></html>"""
 
 
@@ -623,6 +770,9 @@ def _client_id(request: Request) -> tuple[str, str]:
     return ip, request.headers.get("user-agent", "")
 
 
+_ALLOWED_EVENT_TYPES = {"sms_tap", "sms_copy"}
+
+
 async def _record_tap(
     code: str | None,
     utm_source: str | None,
@@ -630,17 +780,18 @@ async def _record_tap(
     utm_campaign: str | None,
     visitor_hash: str,
     variant: str | None = None,
+    event_type: str = "sms_tap",
 ) -> None:
     factory = db_session._session_factory
     if factory is None:
         return
     try:
         async with factory() as session:
-            # Dedup: skip if this visitor already tapped in the last 60 seconds.
+            # Dedup: skip if this visitor already fired this event in the last 60 seconds.
             cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
             recent = await session.scalar(
                 select(func.count()).where(
-                    HalFunnelEvent.event_type == "sms_tap",
+                    HalFunnelEvent.event_type == event_type,
                     HalFunnelEvent.visitor_hash == visitor_hash,
                     HalFunnelEvent.created_at > cutoff,
                 )
@@ -649,7 +800,7 @@ async def _record_tap(
                 return
             session.add(
                 HalFunnelEvent(
-                    event_type="sms_tap",
+                    event_type=event_type,
                     attribution_code=code,
                     utm_source=utm_source,
                     utm_medium=utm_medium,
@@ -660,7 +811,7 @@ async def _record_tap(
             )
             await session.commit()
     except Exception:
-        log.exception("funnel_event.record_failed", event_type="sms_tap")
+        log.exception("funnel_event.record_failed", event_type=event_type)
 
 
 def build_landing_router() -> APIRouter:
@@ -703,6 +854,10 @@ def build_landing_router() -> APIRouter:
         variant = _str_field("variant", 8)
         if variant not in LANDING_VARIANTS:
             variant = None
+        # Validate event_type against the whitelist so hand-crafted POSTs
+        # can't invent new buckets.
+        raw_event_type = _str_field("event_type", 32)
+        event_type = raw_event_type if raw_event_type in _ALLOWED_EVENT_TYPES else "sms_tap"
         asyncio.get_running_loop().create_task(
             _record_tap(
                 code=code,
@@ -711,17 +866,72 @@ def build_landing_router() -> APIRouter:
                 utm_campaign=_str_field("utm_campaign", 255),
                 visitor_hash=visitor_hash(ip, ua),
                 variant=variant,
+                event_type=event_type,
             )
         )
         return Response(status_code=204)
 
-    # Print-friendly attribution: texthal.com/go/<code> reads cleanly in an
-    # ad or flyer and redirects to /?c=<code>, which seeds the sms prefill
-    # with the acquisition code. Unknown/malformed codes fall back to plain /.
+    # Attribution tap recording: texthal.com/go/<code> records a server-side
+    # sms_tap before opening Messages, bypassing iOS Safari's keepalive drop.
+    # HTTP 302 redirects to sms: are blocked by iOS since iOS 8; this page
+    # uses meta-refresh + a visible button (inline JS is CSP-blocked, ENG-015).
     @router.get("/go/{code}", include_in_schema=False)
-    async def go(code: str) -> RedirectResponse:
-        target = f"/?c={code}" if _CODE_RX.match(code) else "/"
-        return RedirectResponse(target, status_code=302)
+    async def go(
+        code: str,
+        request: Request,
+        utm_source: str | None = None,
+        utm_medium: str | None = None,
+        utm_campaign: str | None = None,
+    ) -> Response:
+        if not _CODE_RX.match(code):
+            return RedirectResponse("/", status_code=302)
+
+        ip, ua = _client_id(request)
+        vh = visitor_hash(ip, ua)
+
+        settings = get_settings()
+        raw_number = settings.hal_public_number
+        sms_raw = re.sub(r"[^\d+]", "", raw_number or "")
+        sms_uri: str | None = None
+        if sms_raw:
+            body_text = SMS_PREFILL + f" ({code})"
+            sms_uri = f"sms:{sms_raw}{sms_separator(ua)}body={quote(body_text)}"
+
+        asyncio.get_running_loop().create_task(
+            _record_tap(
+                code=code,
+                utm_source=utm_source,
+                utm_medium=utm_medium,
+                utm_campaign=utm_campaign,
+                visitor_hash=vh,
+                variant=None,
+                event_type="sms_tap",
+            )
+        )
+
+        if not sms_uri:
+            return RedirectResponse("/", status_code=302)
+
+        esc = sms_uri.replace("&", "&amp;").replace('"', "%22")
+        page = (
+            "<!doctype html><html><head>"
+            '<meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<meta http-equiv="refresh" content="0;url={esc}">'
+            "<title>Opening Messages\u2026</title>"
+            "<style>body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;"
+            "align-items:center;justify-content:center;min-height:100vh;margin:0;"
+            "background:#f6f5f1;color:#202124;text-align:center;padding:24px;}"
+            "</style></head><body>"
+            "<p style='font-size:18px;margin-bottom:20px'>Opening Messages\u2026</p>"
+            f'<a href="{esc}" style="display:inline-block;background:#153f32;color:#b9f8d3;'
+            "padding:16px 28px;border-radius:999px;text-decoration:none;font-size:17px;"
+            "font-weight:700\">Tap to open Messages</a>"
+            "<p style='margin-top:20px;font-size:14px;color:#5f6368'>"
+            '<a href="/" style="color:#1b6ef3">Back to HAL</a></p>'
+            "</body></html>"
+        )
+        return HTMLResponse(page, headers={"Cache-Control": "no-store"})
 
     @router.get("/static/donebottles.png", include_in_schema=False)
     async def bottles_image() -> FileResponse:
@@ -729,6 +939,24 @@ def build_landing_router() -> APIRouter:
             _BOTTLES_IMAGE,
             media_type="image/png",
             headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @router.get("/static/hero-conversation.png", include_in_schema=False)
+    async def hero_image() -> FileResponse:
+        return FileResponse(
+            _HERO_IMAGE,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @router.get("/static/landing.js", include_in_schema=False)
+    async def landing_js() -> PlainTextResponse:
+        # External file, not inline: the CSP is script-src 'self' with no
+        # 'unsafe-inline' (ENG-015). Short max-age so deploys propagate fast.
+        return PlainTextResponse(
+            _LANDING_JS,
+            media_type="application/javascript",
+            headers={"Cache-Control": "public, max-age=300"},
         )
 
     @router.get("/robots.txt", include_in_schema=False)

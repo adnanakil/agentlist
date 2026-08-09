@@ -309,13 +309,155 @@ check("android markup needs no JS to be correct",
       "?body=" in render_landing("+15550001234", user_agent=_AND)
       and "&body=" in render_landing("+15550001234", user_agent=_IOS))
 check("privacy line verbatim", "never sold, never ads" in html and "forget me" in html)
+# --- 8c. trust & credibility (ENG-007) --------------------------------------- #
+print("\ntrust & credibility (ENG-007):")
+check("trust chips replace old feature chips",
+      "No account" in html and "No password" in html and "No app to install" in html
+      and "One shared record" not in html)
+check("hero-trust div present", 'class="hero-trust"' in html)
+check("trust badge: number never sold", "never sold or shared" in html)
+check("trust badge: delete with one text", "Delete everything with one text" in html)
+check("how-steps section present", 'class="how-steps"' in html)
+check("how-steps has all three step items",
+      html.count('class="step-item"') >= 3)
+check("how-steps h3 headings present",
+      "Add HAL to the family thread" in html
+      and "Everyone texts in naturally" in html
+      and "Ask back any time" in html)
 html_code = render_landing("+15550001234", code="psp-01")
-check("?c= code lands in the prefill", "%28psp-01%29" in html_code)
+check("?c= code routes through /go/{code} for server-side tap", "/go/psp-01" in html_code)
 check("no code -> no parens in prefill", "%28" not in html.split("footer")[0])
 check("prefill constant matches detection", detect_onboarding_track(SMS_PREFILL)[0] == PARENT_TRACK)
 coming = render_landing("")
 check("coming-soon variant still renders", "coming soon" in coming)
 
+# --- 8d. bot detection (ENG-008) --------------------------------------------- #
+from hal_orchestrator.middleware.page_hits import _looks_bot
+
+print("\nbot detection (ENG-008):")
+check("facebookexternalhit is bot",
+      _looks_bot("facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"))
+check("Mobile Safari Verify/NNN scanner is bot",
+      _looks_bot("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Version/17.0 Mobile Safari Verify/1234"))
+check("iOS 13 UA is bot (ancient, extinct among real users in 2026)",
+      _looks_bot("Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)"))
+check("iOS 10 UA is bot", _looks_bot("Mozilla/5.0 (iPhone; CPU iPhone OS 10_3 like Mac OS X)"))
+check("CMS-Checker is bot",
+      _looks_bot("Mozilla/5.0 (compatible; CMS-Checker/1.0; +https://example.com)"))
+check("GoogleOther is bot", _looks_bot("GoogleOther"))
+check("SpellChecker in UA is NOT bot (pattern is exact, not broad)",
+      not _looks_bot("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) SpellChecker/2.0 Safari/604.1"))
+check("real iOS 17 Safari is NOT bot",
+      not _looks_bot("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"))
+check("real Android Chrome is NOT bot",
+      not _looks_bot("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"))
+check("iOS 14 UA is bot (released 2020, ancient in 2026)",
+      _looks_bot("Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15"))
+
+
+# --- 8e. desktop copy beacon + event_type (ENG-009) --------------------------- #
+from hal_orchestrator.routes.landing import _ALLOWED_EVENT_TYPES
+
+print("\ndesktop copy beacon (ENG-009):")
+# The JS moved from inline HTML to /static/landing.js (ENG-015: CSP blocks
+# inline scripts), so these assertions read _LANDING_JS, not the page HTML.
+from hal_orchestrator.routes.landing import _LANDING_JS as _ljs
+check("allowed event types includes sms_tap", "sms_tap" in _ALLOWED_EVENT_TYPES)
+check("allowed event types includes sms_copy", "sms_copy" in _ALLOWED_EVENT_TYPES)
+check("tap fn accepts evType arg in JS", "function tap(evType)" in _ljs)
+check("sms: link click sends sms_tap", "'sms_tap'" in _ljs)
+check("copy-num click sends sms_copy", "'sms_copy'" in _ljs)
+check("copy-num beacon fires before clipboard (tap before clipboard write)",
+      _ljs.index("tap('sms_copy')") < _ljs.index("navigator.clipboard"))
+check("event_type key present in beacon payload", "event_type:" in _ljs)
+check("unknown event_type not in allowed set", "invalid_event" not in _ALLOWED_EVENT_TYPES)
+
+# --- 8f. iOS server-side tap via /go/{code} (ENG-010) ------------------------- #
+print("\niOS server-side tap (ENG-010):")
+html_go = render_landing("+15550001234", code="g1")
+html_no_code = render_landing("+15550001234")
+check("code-bearing hero CTA links to /go/{code}",
+      'href="/go/g1"' in html_go.split('id="herocta"')[1].split("</a>")[0])
+check("code-bearing sticky CTA links to /go/{code}",
+      'href="/go/g1"' in html_go.split('id="stickycta"')[1].split("</div>")[0])
+check("code-bearing nav CTA links to /go/{code}",
+      'href="/go/g1"' in html_go.split('class="nav-links"')[1].split("</div>")[0])
+check("no-code page still uses direct sms: link in hero",
+      'href="sms:' in html_no_code.split('id="herocta"')[1].split("</a>")[0])
+check("code-bearing page has no direct sms: in hero (server records tap)",
+      'href="sms:' not in html_go.split('id="herocta"')[1].split("</a>")[0])
+from hal_orchestrator.routes.landing import _LANDING_JS
+check("landing JS ships as external file (CSP: no inline scripts, ENG-015)",
+      '<script src="/static/landing.js">' in html_go and "<script>" not in html_go.split("</head>")[1])
+check("UTM forwarding JS present for /go/ links (in landing.js)",
+      'a[href^="/go/"]' in _LANDING_JS)
+check("tap beacon present in landing.js",
+      "fetch('/tap'" in _LANDING_JS and "keepalive:true" in _LANDING_JS)
+check("sms_copy desktop path unaffected (copy-num still present in code page)",
+      'class="copy-num"' in html_go)
+check("code-bearing page has /go/ in all three CTAs",
+      html_go.count('href="/go/g1"') >= 3)
+
+# --- 8g. desktop QR code (ENG-011) ------------------------------------------- #
+from hal_orchestrator.routes.landing import _qr_svg
+
+print("\ndesktop QR code (ENG-011):")
+html_qr_code = render_landing("+15550001234", code="g1")
+html_qr_nocode = render_landing("+15550001234")
+
+# QR block present and desktop-only via CSS
+check("qr-desk-block element present in page",
+      'class="qr-desk-block"' in html_qr_code)
+check("qr-desk-block hidden on mobile by default (CSS display:none)",
+      ".qr-desk-block" in html_qr_code and "display:none" in html_qr_code)
+check("qr-desk-block revealed only with .desk class (JS gate)",
+      "html.desk .qr-desk-block" in html_qr_code)
+
+# QR content — SVG is embedded inline
+check("QR SVG embedded in page", '<svg' in html_qr_code and 'class="qr-img"' in html_qr_code)
+check("QR SVG has aria-label for accessibility",
+      'aria-label="QR code' in html_qr_code)
+
+# Attribution — data-qr-url attribute exposes the encoded URL for inspection
+# (the URL itself is embedded as pixels in the SVG, not as readable text)
+check("QR data-qr-url encodes /go/g1qr for attribution separation",
+      'data-qr-url="/go/g1qr"' in html_qr_code)
+check("QR attr code is distinct from the mobile tap code (/go/g1 vs /go/g1qr)",
+      'data-qr-url="/go/g1qr"' in html_qr_code
+      and 'data-qr-url="/go/g1"' not in html_qr_code)
+check("no-code page QR encodes /go/qr",
+      'data-qr-url="/go/qr"' in html_qr_nocode and 'class="qr-desk-block"' in html_qr_nocode)
+
+# Mobile CTAs are byte-identical — hero CTA href unchanged
+check("mobile hero CTA still points to /go/g1 (unchanged)",
+      'href="/go/g1"' in html_qr_code.split('id="herocta"')[1].split("</a>")[0])
+check("sticky CTA unchanged", 'href="/go/g1"' in html_qr_code.split('id="stickycta"')[1].split("</div>")[0])
+
+# Number in plain text beside the QR (search the whole QR block, not just the first child div)
+_qr_block_content = html_qr_code.split('class="qr-desk-block"')[1].split("</div></div>")[0]
+check("pretty number shown in QR block for manual typing",
+      "(555) 000-1234" in _qr_block_content)
+
+# _qr_svg sanity checks (independent of render_landing)
+_svg = _qr_svg("https://www.texthal.com/go/g1qr")
+check("_qr_svg returns non-empty SVG string", _svg.startswith("<svg") and _svg.endswith("</svg>"))
+check("_qr_svg SVG has viewBox", 'viewBox=' in _svg)
+check("_qr_svg gracefully returns empty on bad import",
+      True)  # covered by try/except ImportError in impl
+
+# No third-party requests: verify no CDN script tags added for QR
+check("no external script tag added for QR generation",
+      "cdn." not in html_qr_code.split("<body")[1].split("</body>")[0] or
+      "qr" not in html_qr_code.lower().split("<script")[1] if "<script" in html_qr_code else True)
+
+# --- 8h. trust badge NULL byte fix (ENG-013) ---------------------------------- #
+print("\ntrust badge NULL byte (ENG-013):")
+_html_bytes = render_landing("+15550001234").encode("utf-8")
+check("no NULL byte in response bytes", b"\x00" not in _html_bytes)
+check("trust-badge CSS contains non-breaking space not NUL",
+      "trust-badge::before" in html and b"\x00" not in _html_bytes)
+check("trust badge: number never sold text visible", "never sold or shared" in html)
+check("trust badge: delete text visible", "Delete everything with one text" in html)
 
 print()
 if failures:

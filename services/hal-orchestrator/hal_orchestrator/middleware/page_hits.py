@@ -29,14 +29,15 @@ TRACKED_PATHS = {"/", "/privacy", "/terms"}
 _BOT_RE = re.compile(
     r"bot|crawl|spider|slurp|preview|scan|monitor|probe|curl|wget|python|httpx|"
     r"go-http|java|scrapy|measurement|inspection|lighthouse|headless|phantom|"
-    r"selenium|censys|zgrab|nuclei|expanse|dataprovider",
+    r"selenium|censys|zgrab|nuclei|expanse|dataprovider|"
+    r"facebookexternalhit|googleother|verify/\d|cms-checker|sitechecker|siteinspector|gofastsitechecker",
     re.I,
 )
 
 # Scanners love stale browser UAs; versions this old are extinct among real
 # users in 2026, and NT 6.x (Win 7/8) / 32-bit Linux desktops likewise.
 _UA_VERSION_RE = re.compile(r"(?:Chrome|Firefox)/(\d+)")
-_ANCIENT_PLATFORM_RE = re.compile(r"Windows NT [56]\.|Linux i686")
+_ANCIENT_PLATFORM_RE = re.compile(r"Windows NT [56]\.|Linux i686|CPU iPhone OS 1[0-4]_")
 
 
 def _looks_bot(user_agent: str) -> bool:
