@@ -61,6 +61,35 @@ def build_card_data(forecast: dict, last_feed, last_nap_end, baby: str, tz, now:
     }
 
 
+def build_example_card_data(baby: str, tz, now: datetime) -> dict:
+    """A representative status card for a brand-new family with no events yet —
+    the once-only "here's what you'll get" preview attached at baby setup.
+    Times derive from `now` so the card reads live-ish, and `_example` flags
+    the renderer to badge it honestly. Pure — no Pillow."""
+    from hal_orchestrator.services.baby import fmt_time
+
+    def t(minutes: int) -> str:
+        return fmt_time(now + timedelta(minutes=minutes), tz)
+
+    return {
+        "baby": baby,
+        "now": fmt_time(now, tz),
+        "state": "napping",
+        "asleep_since": t(-25),
+        "last_feed": t(-95),
+        "next_feed": t(55),
+        "expected_wake": t(20),
+        "next_nap": None,
+        "last_nap_end": None,
+        "expected_bedtime": "7:30 PM",
+        "_example": True,
+    }
+
+
+def render_example_card(baby: str, tz, now: datetime) -> bytes:
+    return render_card_png(build_example_card_data(baby, tz, now))
+
+
 def _parse(s: str | None):
     try:
         return datetime.strptime(s, "%I:%M %p")
@@ -137,6 +166,8 @@ def render_card_png(data: dict) -> bytes:
 
     # Quiet product label, then the baby's name and timestamp.
     d.text((x0, 58), "HAL · BABY STATUS", font=fnt(_BOLD, 18), fill=ACCENT)
+    if data.get("_example"):
+        d.text((x1, 58), "EXAMPLE", font=fnt(_BOLD, 18), fill=ACCENT, anchor="ra")
     d.text((x0, 91), data["baby"], font=fnt(_BOLD, 50), fill=INK)
     d.text(
         (x1, 111), f"AS OF {data['now']}",
@@ -194,10 +225,12 @@ def render_card_png(data: dict) -> bytes:
     metric(x0, grid_y + 102, sleep_label, sleep_value)
     metric(mid + 28, grid_y + 102, "BEDTIME", data.get("expected_bedtime"))
 
-    d.text(
-        (x0, H - 64), f"Based on {data['baby']}’s recent rhythm",
-        font=fnt(_REG, 18), fill=SUB,
+    footer = (
+        f"Example — updates live once {data['baby']}’s feeds and naps are logged"
+        if data.get("_example")
+        else f"Based on {data['baby']}’s recent rhythm"
     )
+    d.text((x0, H - 64), footer, font=fnt(_REG, 18), fill=SUB)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")

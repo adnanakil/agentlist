@@ -53,7 +53,6 @@ _HANDLERS = {
     "trip": "hal_orchestrator.tools.trips:tool_trip",
     "google_auth": "hal_orchestrator.tools.google:tool_google_auth",
     "google_calendar": "hal_orchestrator.tools.google:tool_google_calendar",
-    "google_gmail": "hal_orchestrator.tools.google:tool_google_gmail",
     "resy": "hal_orchestrator.tools.resy:tool_resy",
     "skill": "hal_orchestrator.tools.skill:tool_skill",
 }
@@ -64,7 +63,6 @@ _DM_ONLY = {
     "helpful_mode",
     "google_auth",
     "google_calendar",
-    "google_gmail",
 }
 _WRITE = {
     "memory",

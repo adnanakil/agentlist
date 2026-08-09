@@ -17,9 +17,37 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import ag_db.session as db_session
-from ag_db.models import HalOutboxMessage
+from ag_db.models import HalOutboxMessage, HalSiloChannel
 
 log = structlog.get_logger()
+
+# "test" is the admin test console (routes/testconsole.py): simulated silos
+# record it as their transport so every outbox row addressed to them — proactive
+# sends included — is claimed by the console, never by a real bridge.
+KNOWN_CHANNELS = ("imessage", "whatsapp", "test")
+
+
+async def channel_of(session: AsyncSession, silo: str) -> str:
+    """Transport the silo last spoke on; imessage until proven otherwise."""
+    row = await session.get(HalSiloChannel, silo)
+    return row.channel if row is not None else "imessage"
+
+
+async def record_silo_channel(
+    session: AsyncSession, silo: str, channel: str
+) -> None:
+    """Upsert silo -> channel on an inbound user message (last channel wins)."""
+    if channel not in KNOWN_CHANNELS or not silo:
+        return
+    stmt = (
+        insert(HalSiloChannel)
+        .values(silo=silo, channel=channel)
+        .on_conflict_do_update(
+            index_elements=["silo"],
+            set_={"channel": channel, "updated_at": datetime.now(timezone.utc)},
+        )
+    )
+    await session.execute(stmt)
 
 
 async def enqueue(
@@ -29,11 +57,13 @@ async def enqueue(
     text: str,
     idempotency_key: str | None = None,
     images: list[dict] | None = None,
+    channel: str | None = None,
 ) -> uuid.UUID | None:
     """Add one delivery to the caller's transaction.
 
     ``images`` is an optional list of {mime_type, data(base64), ext} the bridge
-    sends as file attachments after the text.
+    sends as file attachments after the text. ``channel`` picks the delivering
+    bridge; None resolves from the destination silo's last-seen transport.
     """
     if not to or not text:
         return None
@@ -51,12 +81,15 @@ async def enqueue(
             }
         )
         return None
+    if channel is None:
+        channel = await channel_of(session, to)
     message_id = uuid.uuid4()
     stmt = (
         insert(HalOutboxMessage)
         .values(
             id=message_id,
             destination=to,
+            channel=channel,
             text=text,
             images=images or None,
             idempotency_key=idempotency_key,
@@ -75,11 +108,13 @@ async def claim(
     limit: int = 100,
     auto_ack: bool = True,
     lease_seconds: int = 90,
+    channel: str = "imessage",
 ) -> list[dict]:
     """Claim pending deliveries with row locks safe across bridge/API replicas.
 
     ``auto_ack`` preserves the current bridge's drain-on-read protocol. A newer
     bridge can request leases and acknowledge only after AppleScript succeeds.
+    Each bridge claims only its own ``channel``.
     """
     now = datetime.now(timezone.utc)
     rows = (
@@ -87,6 +122,7 @@ async def claim(
             await session.execute(
                 select(HalOutboxMessage)
                 .where(
+                    HalOutboxMessage.channel == channel,
                     HalOutboxMessage.available_at <= now,
                     or_(
                         HalOutboxMessage.status == "pending",
@@ -166,6 +202,7 @@ class DurableOutbox:
                 text=str(item.get("text") or ""),
                 idempotency_key=item.get("idempotency_key"),
                 images=item.get("images") or None,
+                channel=item.get("channel"),
             )
             await session.commit()
 

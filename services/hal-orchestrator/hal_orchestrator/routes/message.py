@@ -472,7 +472,7 @@ _ACTION_CLAIMS: list[tuple[re.Pattern, frozenset, str]] = [
             r"email (is )?(sent|on its way))\b",
             re.I,
         ),
-        frozenset({"google_gmail", "delegate"}),
+        frozenset({"delegate"}),
         "email",
     ),
 ]
@@ -844,6 +844,12 @@ class CurrentLocationData(BaseModel):
 
 class MessageRequest(BaseModel):
     message_id: str | None = Field(default=None, min_length=1, max_length=255)
+    # Transport this message arrived on. Default keeps the pre-channel Mac
+    # bridge working unchanged; the WhatsApp bridge sends "whatsapp"; the admin
+    # test console sends "test" so simulated silos never route to a real
+    # bridge. Recorded per silo so proactive outbox sends route back to the
+    # same transport.
+    channel: str = Field(default="imessage", pattern=r"^(imessage|whatsapp|test)$")
     phone: str = Field(min_length=1, max_length=255)
     text: str = Field(max_length=12000)
     sender_name: str | None = Field(default=None, max_length=200)
@@ -896,6 +902,14 @@ class MessageResponse(BaseModel):
 class OutboxAckRequest(BaseModel):
     message_ids: list[str] = Field(min_length=1, max_length=200)
     delivered: bool = True
+
+
+class OutboxEnqueueRequest(BaseModel):
+    # Trusted local jobs (e.g. the Mac TikTok scroller) hand HAL a text to
+    # deliver to the user over a bridge channel.
+    phone: str = Field(min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=4096)
+    channel: str = "whatsapp"
 
 
 def _stable_message_payload(body: MessageRequest) -> dict:
@@ -1078,6 +1092,16 @@ def build_message_router() -> APIRouter:
                 chat_id = body.phone
                 sender_phone = None
         silo = (chat_id or body.phone) if is_group else (sender_phone or body.phone)
+
+        # Remember which transport this silo speaks on (skip synthetic internal
+        # turns — they say nothing about where the user actually is).
+        if not body.internal:
+            from hal_orchestrator.services.delivery import record_silo_channel
+
+            try:
+                await record_silo_channel(session, silo, body.channel)
+            except Exception:
+                log.exception("message.channel_record_failed", silo=silo)
 
         # Claim the bridge event before any model call or side effect. Older
         # bridge payloads without message_id remain accepted for a staged rollout.
@@ -1598,12 +1622,11 @@ def build_message_router() -> APIRouter:
                 except Exception:
                     log.exception("message.track_select_failed", silo=silo)
 
-        # Parent-track derived fact: "baby" is satisfied by the silo's
-        # HalFamily. Injected here (a derived field, never persisted on the
-        # profile) so the pure step machine can see it.
-        if profile.get("onboarding_track") == PARENT_TRACK and not profile.get(
-            "onboarded"
-        ):
+        # Derived onboarding fact: the silo's HalFamily satisfies the parent
+        # track's "baby" step AND the generic track's "little_one" probe.
+        # Injected here (a derived field, never persisted on the profile) so
+        # the pure step machine can see it.
+        if not is_group and not profile.get("onboarded"):
             try:
                 from hal_orchestrator.services.baby import get_family_for_silo
 
@@ -2359,26 +2382,27 @@ def build_message_router() -> APIRouter:
             # post-hooks, so a failure here can never break the reply).
             if not is_group and not body.internal:
                 fresh = await get_profile(session, silo)
-                # Parent track: re-derive the "baby" fact (a HalFamily may have
-                # been created THIS turn) and, once the city answer landed a
-                # timezone, sync it onto the family so the log's clock is right
-                # even if the model forgot the baby(configure, timezone=...) leg.
-                if fresh.get("onboarding_track") == PARENT_TRACK:
-                    from hal_orchestrator.services.baby import get_family_for_silo
+                # Re-derive the baby fact (a HalFamily may have been created
+                # THIS turn — parent track's "baby" step or the generic
+                # track's "little_one" probe) and, once the city answer landed
+                # a timezone, sync it onto the family so the log's clock is
+                # right even if the model forgot the baby(configure,
+                # timezone=...) leg.
+                from hal_orchestrator.services.baby import get_family_for_silo
 
-                    fam = await get_family_for_silo(session, silo)
-                    if fam is not None:
-                        fresh["baby_name"] = fam.baby_name
-                        fam_settings = dict(fam.settings or {})
-                        if fresh.get("timezone") and not fam_settings.get("tz_set"):
-                            fam.timezone = fresh["timezone"]
-                            fam_settings["tz_set"] = True
-                            fam.settings = fam_settings
-                            log.info(
-                                "baby.family_tz_synced",
-                                silo=silo,
-                                timezone=fresh["timezone"],
-                            )
+                fam = await get_family_for_silo(session, silo)
+                if fam is not None:
+                    fresh["baby_name"] = fam.baby_name
+                    fam_settings = dict(fam.settings or {})
+                    if fresh.get("timezone") and not fam_settings.get("tz_set"):
+                        fam.timezone = fresh["timezone"]
+                        fam_settings["tz_set"] = True
+                        fam.settings = fam_settings
+                        log.info(
+                            "baby.family_tz_synced",
+                            silo=silo,
+                            timezone=fresh["timezone"],
+                        )
                 onb_updates, onb_events = compute_onboarding_progress(profile, fresh)
                 for ev in onb_events:
                     log.info("onboarding.step", silo=silo, **ev)
@@ -2465,17 +2489,26 @@ def build_message_router() -> APIRouter:
     async def drain_outbox(
         ack: bool = True,
         limit: int = 100,
+        channel: str = "imessage",
         session: AsyncSession = Depends(get_session),
     ) -> dict:
-        """Claim durable deliveries.
+        """Claim durable deliveries for one bridge channel.
 
         ``ack=true`` preserves the legacy drain-on-read bridge. New bridges use
         ``ack=false`` and POST /api/outbox/ack after AppleScript succeeds.
+        ``channel`` defaults to imessage so the pre-channel Mac bridge keeps
+        draining only its own deliveries.
         """
         import hal_orchestrator.state as state
-        from hal_orchestrator.services.delivery import DurableOutbox, claim
+        from hal_orchestrator.services.delivery import (
+            KNOWN_CHANNELS,
+            DurableOutbox,
+            claim,
+        )
 
-        messages = await claim(session, limit=limit, auto_ack=ack)
+        if channel not in KNOWN_CHANNELS:
+            raise HTTPException(status_code=400, detail="unknown channel")
+        messages = await claim(session, limit=limit, auto_ack=ack, channel=channel)
         await session.commit()
         # Preserve startup/test queue compatibility.
         if isinstance(state.outbox, DurableOutbox):
@@ -2502,5 +2535,33 @@ def build_message_router() -> APIRouter:
         count = await acknowledge(session, message_ids, delivered=body.delivered)
         await session.commit()
         return {"acknowledged": count}
+
+    @router.post(
+        "/api/outbox/enqueue",
+        dependencies=[Depends(verify_bridge_auth)],
+    )
+    async def enqueue_outbox(
+        body: OutboxEnqueueRequest,
+        session: AsyncSession = Depends(get_session),
+    ) -> dict:
+        """Enqueue one outbound text for a bridge to deliver.
+
+        Lets trusted local jobs (anything holding the bridge secret, e.g. the
+        Mac TikTok scroller) text the user without going through the agent
+        loop. Uses the same durable outbox the rest of the service produces
+        into, so delivery/lease semantics are identical.
+        """
+        from hal_orchestrator.services.delivery import KNOWN_CHANNELS, enqueue
+
+        if body.channel not in KNOWN_CHANNELS:
+            raise HTTPException(status_code=400, detail="unknown channel")
+        message_id = await enqueue(
+            session,
+            to=body.phone,
+            text=body.text,
+            channel=body.channel,
+        )
+        await session.commit()
+        return {"id": str(message_id) if message_id else None}
 
     return router

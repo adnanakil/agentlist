@@ -20,17 +20,21 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_ as sa_or, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.models import (
     HalConversation,
+    HalFunnelEvent,
     HalLearningCandidate,
     HalMessage,
+    HalPageHit,
+    HalTurn,
     HalUserProfile,
 )
 from ag_db.session import get_session
 from hal_orchestrator.prompts.system import USER_TZ
+from hal_orchestrator.routes.landing import _pretty_number
 from hal_orchestrator.services.identity import is_group_id
 from hal_orchestrator.state import get_settings
 
@@ -326,5 +330,311 @@ def build_admin_router() -> APIRouter:
         await reject(session, candidate, note)
         await session.commit()
         return JSONResponse({"ok": True})
+
+    @router.get("/admin/traffic", response_class=HTMLResponse)
+    async def site_traffic(
+        token: str = Query(""),
+        format: str = Query("html"),
+        authorization: str = Header(""),
+        session: AsyncSession = Depends(get_session),
+    ):
+        bearer = ""
+        if authorization.startswith("Bearer "):
+            bearer = authorization[len("Bearer ") :].strip()
+        _check_token(bearer or token)
+        now = datetime.now(timezone.utc)
+        since_30d = now - timedelta(days=30)
+        since_14d = now - timedelta(days=14)
+
+        day = func.date_trunc("day", HalPageHit.created_at).label("day")
+        daily = (
+            await session.execute(
+                select(
+                    day,
+                    func.count().filter(HalPageHit.is_bot.is_(False)).label("views"),
+                    func.count(func.distinct(HalPageHit.visitor_hash))
+                    .filter(HalPageHit.is_bot.is_(False))
+                    .label("uniques"),
+                    func.count().filter(HalPageHit.is_bot.is_(True)).label("bots"),
+                )
+                .where(HalPageHit.created_at >= since_30d)
+                .group_by(day)
+                .order_by(day.desc())
+            )
+        ).all()
+        referrers = (
+            await session.execute(
+                select(HalPageHit.referrer, func.count().label("n"))
+                .where(
+                    HalPageHit.created_at >= since_14d,
+                    HalPageHit.is_bot.is_(False),
+                    HalPageHit.referrer.is_not(None),
+                )
+                .group_by(HalPageHit.referrer)
+                .order_by(func.count().desc())
+                .limit(15)
+            )
+        ).all()
+        paths = (
+            await session.execute(
+                select(HalPageHit.path, func.count().label("n"))
+                .where(HalPageHit.created_at >= since_14d, HalPageHit.is_bot.is_(False))
+                .group_by(HalPageHit.path)
+                .order_by(func.count().desc())
+            )
+        ).all()
+
+        # Funnel: landing views -> sms taps -> first texts to HAL (attributed
+        # via the "(code)" sms prefill -> profile acquisition_source). Test taps
+        # (utm_source=verify-test) are excluded.
+        code_to_source = {"g1": "google", "r1": "reddit", "p1": "pinterest", "m1": "meta"}
+        tap_day = func.date_trunc("day", HalFunnelEvent.created_at).label("day")
+        not_test = sa_or(
+            HalFunnelEvent.utm_source.is_(None),
+            HalFunnelEvent.utm_source != "verify-test",
+        )
+        taps_daily = (
+            await session.execute(
+                select(tap_day, func.count().label("n"))
+                .where(
+                    HalFunnelEvent.event_type == "sms_tap",
+                    HalFunnelEvent.created_at >= since_14d,
+                    not_test,
+                )
+                .group_by(tap_day)
+            )
+        ).all()
+        tap_src = func.coalesce(HalFunnelEvent.utm_source, "(direct)").label("src")
+        taps_by_source = (
+            await session.execute(
+                select(tap_src, func.count().label("n"))
+                .where(
+                    HalFunnelEvent.event_type == "sms_tap",
+                    HalFunnelEvent.created_at >= since_14d,
+                    not_test,
+                )
+                .group_by(tap_src)
+            )
+        ).all()
+        view_src = func.coalesce(HalPageHit.utm_source, "(direct)").label("src")
+        views_by_source = (
+            await session.execute(
+                select(view_src, func.count().label("n"))
+                .where(
+                    HalPageHit.created_at >= since_14d,
+                    HalPageHit.is_bot.is_(False),
+                    HalPageHit.path == "/",
+                )
+                .group_by(view_src)
+            )
+        ).all()
+        # Hero-CTA A/B (landing.py). Rows predating the experiment have a NULL
+        # variant and are excluded from both arms rather than silently pooled.
+        views_by_variant = (
+            await session.execute(
+                select(HalPageHit.variant, func.count().label("n"))
+                .where(
+                    HalPageHit.created_at >= since_14d,
+                    HalPageHit.is_bot.is_(False),
+                    HalPageHit.path == "/",
+                    HalPageHit.variant.is_not(None),
+                )
+                .group_by(HalPageHit.variant)
+            )
+        ).all()
+        taps_by_variant = (
+            await session.execute(
+                select(HalFunnelEvent.variant, func.count().label("n"))
+                .where(
+                    HalFunnelEvent.event_type == "sms_tap",
+                    HalFunnelEvent.created_at >= since_14d,
+                    HalFunnelEvent.variant.is_not(None),
+                    not_test,
+                )
+                .group_by(HalFunnelEvent.variant)
+            )
+        ).all()
+
+        first_seen = (
+            select(
+                HalTurn.phone.label("phone"),
+                func.min(HalTurn.created_at).label("first_at"),
+            )
+            .where(HalTurn.phone.not_like("%1555555%"))
+            .group_by(HalTurn.phone)
+            .subquery()
+        )
+        new_households = (
+            await session.execute(
+                select(
+                    first_seen.c.first_at,
+                    func.jsonb_extract_path_text(
+                        HalUserProfile.extra_data, "acquisition_source"
+                    ).label("code"),
+                )
+                .select_from(
+                    first_seen.outerjoin(
+                        HalUserProfile, HalUserProfile.phone == first_seen.c.phone
+                    )
+                )
+                .where(first_seen.c.first_at >= since_14d)
+            )
+        ).all()
+
+        taps_day_map = {r.day.strftime("%Y-%m-%d"): r.n for r in taps_daily}
+        hh_day_map: dict[str, int] = {}
+        hh_src_map: dict[str, int] = {}
+        for r in new_households:
+            d_key = r.first_at.strftime("%Y-%m-%d")
+            hh_day_map[d_key] = hh_day_map.get(d_key, 0) + 1
+            src = code_to_source.get(r.code or "", r.code) or "(organic/unknown)"
+            hh_src_map[src] = hh_src_map.get(src, 0) + 1
+        src_views = {r.src: r.n for r in views_by_source}
+        src_taps = {r.src: r.n for r in taps_by_source}
+        all_sources = sorted(
+            set(src_views) | set(src_taps) | set(hh_src_map),
+            key=lambda s: -(src_views.get(s, 0)),
+        )
+        var_views = {r.variant: r.n for r in views_by_variant}
+        var_taps = {r.variant: r.n for r in taps_by_variant}
+        var_labels = {
+            "a": "Text HAL",
+            "b": f"Text {_pretty_number(get_settings().hal_public_number)}",
+        }
+        funnel_days = sorted(set(taps_day_map) | set(hh_day_map), reverse=True)
+        total_views_14d = sum(src_views.values())
+        total_taps_14d = sum(src_taps.values())
+        total_hh_14d = sum(hh_day_map.values())
+
+        data = {
+            "daily": [
+                {
+                    "day": r.day.strftime("%Y-%m-%d"),
+                    "views": r.views,
+                    "uniques": r.uniques,
+                    "bots": r.bots,
+                }
+                for r in daily
+            ],
+            "referrers_14d": [{"referrer": r.referrer, "hits": r.n} for r in referrers],
+            "paths_14d": [{"path": r.path, "hits": r.n} for r in paths],
+            "funnel_14d": {
+                "totals": {
+                    "landing_views": total_views_14d,
+                    "sms_taps": total_taps_14d,
+                    "tap_rate": round(total_taps_14d / total_views_14d, 4)
+                    if total_views_14d
+                    else None,
+                    "new_households": total_hh_14d,
+                },
+                "by_source": [
+                    {
+                        "source": s,
+                        "views": src_views.get(s, 0),
+                        "taps": src_taps.get(s, 0),
+                        "new_households": hh_src_map.get(s, 0),
+                    }
+                    for s in all_sources
+                ],
+                "daily": [
+                    {
+                        "day": d,
+                        "taps": taps_day_map.get(d, 0),
+                        "new_households": hh_day_map.get(d, 0),
+                    }
+                    for d in funnel_days
+                ],
+            },
+            "cta_experiment_14d": [
+                {
+                    "variant": v,
+                    "cta_copy": var_labels.get(v, v),
+                    "views": var_views.get(v, 0),
+                    "taps": var_taps.get(v, 0),
+                    "tap_rate": round(var_taps.get(v, 0) / var_views[v], 4)
+                    if var_views.get(v)
+                    else None,
+                }
+                for v in sorted(set(var_views) | set(var_taps))
+            ],
+        }
+        if format == "json":
+            return JSONResponse(data)
+
+        esc = html.escape
+        day_rows = "".join(
+            f"<tr><td>{d['day']}</td><td>{d['views']}</td>"
+            f"<td>{d['uniques']}</td><td class='dim'>{d['bots']}</td></tr>"
+            for d in data["daily"]
+        ) or "<tr><td colspan=4>No hits recorded yet</td></tr>"
+        ref_rows = "".join(
+            f"<tr><td>{esc(r['referrer'] or '')}</td><td>{r['hits']}</td></tr>"
+            for r in data["referrers_14d"]
+        ) or "<tr><td colspan=2>No referrers yet (direct visits only)</td></tr>"
+        path_rows = "".join(
+            f"<tr><td>{esc(p['path'])}</td><td>{p['hits']}</td></tr>"
+            for p in data["paths_14d"]
+        )
+        fn = data["funnel_14d"]
+        tap_rate = fn["totals"]["tap_rate"]
+        funnel_totals = (
+            f"{fn['totals']['landing_views']} landing views → "
+            f"{fn['totals']['sms_taps']} sms taps"
+            + (f" ({tap_rate:.2%})" if tap_rate is not None else "")
+            + f" → {fn['totals']['new_households']} new households"
+        )
+        src_rows = "".join(
+            f"<tr><td>{esc(s['source'])}</td><td>{s['views']}</td>"
+            f"<td>{s['taps']}</td><td>{s['new_households']}</td></tr>"
+            for s in fn["by_source"]
+        ) or "<tr><td colspan=4>No funnel data yet</td></tr>"
+        funnel_day_rows = "".join(
+            f"<tr><td>{d['day']}</td><td>{d['taps']}</td>"
+            f"<td>{d['new_households']}</td></tr>"
+            for d in fn["daily"]
+        ) or "<tr><td colspan=3>No taps or new households in window</td></tr>"
+        # NB: the route's `format` query param shadows the builtin, so the rate
+        # is formatted here rather than with format() inside the row template.
+        ab_rates = [
+            "—" if v["tap_rate"] is None else f"{v['tap_rate']:.2%}"
+            for v in data["cta_experiment_14d"]
+        ]
+        ab_rows = "".join(
+            f"<tr><td>{esc(v['variant'])}</td><td>{esc(v['cta_copy'])}</td>"
+            f"<td>{v['views']}</td><td>{v['taps']}</td><td>{rate}</td></tr>"
+            for v, rate in zip(data["cta_experiment_14d"], ab_rates)
+        ) or "<tr><td colspan=5>No variant-tagged traffic yet</td></tr>"
+        return HTMLResponse(f"""<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site traffic — HAL admin</title><style>
+body {{ background:#111; color:#ddd; font-family:-apple-system, system-ui, sans-serif;
+       max-width:720px; margin:0 auto; padding:32px 16px; }}
+h1 {{ font-size:20px; margin-bottom:4px; }} h2 {{ font-size:15px; margin:26px 0 8px; }}
+p.sub {{ color:#888; font-size:13px; }}
+table {{ border-collapse:collapse; width:100%; font-size:14px; }}
+td, th {{ text-align:left; padding:5px 10px 5px 0; border-bottom:1px solid #2a2a2a; }}
+th {{ color:#888; font-weight:600; font-size:12px; }} .dim {{ color:#666; }}
+</style></head><body>
+<h1>Site traffic</h1>
+<p class="sub">Server-side counts for texthal.com — no client tracker. Uniques are
+day-salted visitor hashes (no IPs stored). Bots counted separately.</p>
+<h2>Daily (last 30 days)</h2>
+<table><tr><th>Day (UTC)</th><th>Views</th><th>Uniques</th><th>Bot hits</th></tr>{day_rows}</table>
+<h2>Funnel (14 days)</h2>
+<p class="sub">{funnel_totals}. Households attribute via the "(code)" sms
+prefill — users can delete it, so paid counts are a floor. g1=google ads.</p>
+<table><tr><th>Source</th><th>Views (/)</th><th>SMS taps</th><th>New households</th></tr>{src_rows}</table>
+<h2>Funnel by day (14 days)</h2>
+<table><tr><th>Day (UTC)</th><th>SMS taps</th><th>New households</th></tr>{funnel_day_rows}</table>
+<h2>Hero CTA A/B (14 days)</h2>
+<p class="sub">Coin flip on the hero + sticky-bar button copy, sticky per visitor
+per day. Views count only "/" (non-bot); rows from before the experiment have no
+variant and are excluded from both arms.</p>
+<table><tr><th>Arm</th><th>CTA copy</th><th>Views</th><th>SMS taps</th><th>Tap rate</th></tr>{ab_rows}</table>
+<h2>Top referrers (14 days)</h2>
+<table><tr><th>Referrer</th><th>Hits</th></tr>{ref_rows}</table>
+<h2>Pages (14 days)</h2>
+<table><tr><th>Path</th><th>Hits</th></tr>{path_rows}</table>
+</body></html>""")
 
     return router

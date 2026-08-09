@@ -1,9 +1,15 @@
 """Security response headers on every HTTP response.
 
 Added ahead of the CASA AL1 assessment: a DAST baseline (ZAP) flags their
-absence. The CSP is deliberately tight — the only HTML this service serves
-(landing, legal, connect interstitials) uses inline <style> blocks and
-data:/self images, and there is no first-party JavaScript anywhere.
+absence. The CSP is deliberately tight. History: it originally had no
+script-src at all ("there is no first-party JavaScript anywhere"), which was
+true when written — then the tap beacon (ENG-004/010) and desktop QR (ENG-011)
+added landing-page JS, and default-src 'none' silently blocked every byte of
+it for days (ENG-015). The landing JS now ships as a same-origin static file
+(/static/landing.js) so `script-src 'self'` covers it without 'unsafe-inline'
+or nonces; `connect-src 'self'` lets the beacon POST /tap. Inline <script>
+blocks remain blocked ON PURPOSE — do not add one to a template and expect it
+to run.
 """
 
 from __future__ import annotations
@@ -17,7 +23,8 @@ _HEADERS: list[tuple[bytes, bytes]] = [
     (b"referrer-policy", b"no-referrer"),
     (
         b"content-security-policy",
-        b"default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; "
+        b"default-src 'none'; script-src 'self'; connect-src 'self'; "
+        b"img-src 'self' data:; style-src 'unsafe-inline'; "
         b"form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
     ),
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),

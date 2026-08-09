@@ -76,10 +76,7 @@ for the first nap window), THEN weather in one line. Skip news unless notable; \
 keep it 3–5 lines. Never state a baby time you didn't just pull from the tool.
 
 Never invent: no weather if you couldn't get it, no event/headline web_search \
-didn't actually return. Before citing a specific email, read its FULL body \
-(google_gmail action=read_email with its id) and state the concrete cause/fix \
-it actually contains — never characterize an email from its subject alone. \
-Warm, concise, specific."""
+didn't actually return. Warm, concise, specific."""
 
 PING_PROMPT = """\
 [HELPFUL MODE — same-day check. The user opted into occasional proactive pings. \
@@ -87,17 +84,15 @@ They did NOT text you. The bar is HIGH: send ONLY if something has CHANGED since
 this morning that's genuinely worth interrupting them for RIGHT NOW — otherwise \
 stay silent. Most checks MUST be silent.]
 
-You've been handed the current time, latest weather, calendar, and recent unread \
-email below. Is there a NEW, time-sensitive, useful thing vs a normal day? \
+You've been handed the current time, latest weather, and calendar below. Is \
+there a NEW, time-sensitive, useful thing vs a normal day? \
 Examples worth a ping: rain/a storm moving in within a few hours when they may \
 be out; a standout local event happening TONIGHT they'd want to catch; a notable \
-local or topic news development; a genuinely time-sensitive email. Use web_search \
+local or topic news development. Use web_search \
 only to confirm a specific live thing. TAILOR to their situation + location.
 
 If something clears that bar: ONE short message, lead with the thing, no \
-question. Before pinging about a specific email, read its FULL body \
-(google_gmail action=read_email) and lead with the concrete cause and fix it \
-actually states — never a vague "action needed on your account". Do NOT repeat \
+question. Do NOT repeat \
 the morning brief or anything you already sent today (check your recent \
 messages). If nothing clears it — and usually nothing does — reply with \
 EXACTLY "..." and nothing else. Never ping to check in or make small talk."""
@@ -189,11 +184,6 @@ async def _gather(
         )
     plan += [
         ("Today's calendar", "google_calendar", {"action": "list_events"}),
-        (
-            "Recent unread email",
-            "google_gmail",
-            {"action": "list_emails", "query": "is:unread newer_than:1d", "max_results": 6},
-        ),
     ]
     async for session in db_session.get_session():
         ctx = ToolContext(phone=silo, session=session, settings=settings, http_client=http)

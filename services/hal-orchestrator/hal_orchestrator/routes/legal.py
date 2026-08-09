@@ -1,3 +1,4 @@
+# ruff: noqa: E501 -- embedded policy HTML stays readable as authored markup.
 """GET /privacy and /terms — hosted legal pages on the app domain.
 
 Google OAuth verification requires a publicly reachable privacy policy on a
@@ -22,9 +23,9 @@ from hal_orchestrator.state import get_settings
 # TODO(owner): replace with your legal name or LLC once formed, a working
 # contact inbox, and your governing-law state.
 OPERATOR = "HAL"
-CONTACT_EMAIL = "privacy@tryhal.xyz"
+CONTACT_EMAIL = "privacy@texthal.com"
 GOVERNING_LAW = "the United States"
-LAST_UPDATED = "July 3, 2026"
+LAST_UPDATED = "July 30, 2026"
 
 # The exact affirmation Google's verification looks for.
 LIMITED_USE = (
@@ -86,7 +87,6 @@ choices you have. By texting HAL or connecting an account, you agree to this pol
 <p>Connecting Google is optional and done from your own chat with HAL. If you connect, HAL requests only the access needed for the features you use:</p>
 <ul>
 <li><b>Google Calendar</b> (read and create events) — to check your schedule and add events when you ask.</li>
-<li><b>Gmail</b> (read messages, create drafts, send on your request) — to summarize or surface relevant email, draft replies, and send email only when you explicitly confirm.</li>
 </ul>
 <p>HAL uses this data solely to provide these features to you, in response to your requests. We do <b>not</b> sell Google user data, use it for advertising, or use it to train generalized AI/ML models.</p>
 <p>{LIMITED_USE}</p>
@@ -146,7 +146,7 @@ def _terms_html() -> str:
 <h2>The service</h2>
 <p>HAL is a personal assistant you interact with over text message. It can answer
 questions, run tasks, set reminders, and — if you connect Google — help with your
-calendar and email. HAL is an automated assistant and can make mistakes; use
+calendar. HAL is an automated assistant and can make mistakes; use
 judgment before relying on its output for anything important.</p>
 
 <h2>Eligibility</h2>

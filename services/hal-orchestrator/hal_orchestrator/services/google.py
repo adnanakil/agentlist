@@ -42,15 +42,17 @@ log = structlog.get_logger()
 
 # Calendar read+write + Gmail READ-ONLY, plus openid+email to show WHICH account
 # is connected. Email send/draft scopes were intentionally dropped for the
-# verified launch: gmail.readonly is the only restricted scope (still requires
-# the CASA security assessment), and calendar.events keeps calendar write.
-# Changing this list requires users to reconnect.
+# verified launch, and gmail.readonly (the last restricted scope) was dropped
+# 2026-07-27 so the app requests no restricted scopes at all — that removes
+# Google's annual ADA-CASA security-assessment requirement. calendar.events
+# keeps calendar write; both calendar scopes are "sensitive", not restricted.
+# Re-adding any Gmail scope brings CASA back. Changing this list requires
+# users to reconnect.
 SCOPES = [
     "openid",
     "email",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/calendar.events",
-    "https://www.googleapis.com/auth/gmail.readonly",
 ]
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"

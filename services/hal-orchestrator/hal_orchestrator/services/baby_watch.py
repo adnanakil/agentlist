@@ -1,8 +1,9 @@
 """Nap-cap watcher — unprompted nudge when a logged nap runs long.
 
-Every check interval: for each family, if the most recent sleep-relevant event
-is a daytime nap_start older than the family's nap cap (default 2h) with no
-wake logged, queue one nudge to the silo that logged it. One nudge per nap
+Every check interval: for each family, if the most recent state-relevant event
+(sleep events plus awake-implying ones like feeds) is a daytime nap_start older
+than the family's nap cap (default 2h), queue one nudge to the silo that
+logged it. One nudge per nap
 (tracked in family.state), daytime hours only, and never for night sleep.
 """
 
@@ -20,7 +21,7 @@ from ag_common.config import HalOrchestratorConfig
 from ag_db.models import HalBabyEvent, HalFamily
 from ag_db.session import get_session
 
-from hal_orchestrator.services.baby import DEFAULT_SETTINGS, fmt_duration
+from hal_orchestrator.services.baby import AWAKE_KINDS, DEFAULT_SETTINGS, fmt_duration
 
 log = structlog.get_logger()
 
@@ -59,12 +60,17 @@ async def _check_naps() -> None:
             if not (NUDGE_HOURS[0] <= local_hour < NUDGE_HOURS[1]):
                 continue
 
-            # Most recent sleep-relevant event decides the current state.
+            # Most recent state-relevant event decides the current state.
+            # Awake-implying kinds (feed/diaper/tummy time) count: one logged
+            # after nap_start means the baby is up even if the wake itself was
+            # never recorded, so the nudge must not fire.
             stmt = (
                 select(HalBabyEvent)
                 .where(
                     HalBabyEvent.family_id == family.id,
-                    HalBabyEvent.kind.in_(["nap_start", "bedtime", "wake"]),
+                    HalBabyEvent.kind.in_(
+                        ["nap_start", "bedtime", "wake", *sorted(AWAKE_KINDS)]
+                    ),
                 )
                 .order_by(HalBabyEvent.event_at.desc())
                 .limit(1)

@@ -103,7 +103,7 @@ For anything beyond a trivial one-line fact, operate as an autonomous agent. Run
    - get_weather for anything weather-dependent (outings, what to wear, stroller walks) — use it instead of web_search for weather
    - travel_time for how long it takes to get anywhere and when to leave (drive is live-traffic-aware; transit has real schedules) — use it instead of web_search or guessing for any travel leg
    - current_time before anything date-related; google_calendar to check the user's ACTUAL schedule; events/resy for things to do and reservations
-   - VERIFY WHEN, don't assume "today": for any question about a scheduled event — a trip, an Airbnb, a flight, a reservation, an appointment ("what time should we leave for our airbnb?") — first confirm the event's ACTUAL date. Call current_time, then check google_calendar and search google_gmail (the booking/confirmation email, e.g. "airbnb", "reservation", the place name). Never build a "leave now / today" plan for an event that's actually days away — find the real date first.
+   - VERIFY WHEN, don't assume "today": for any question about a scheduled event — a trip, an Airbnb, a flight, a reservation, an appointment ("what time should we leave for our airbnb?") — first confirm the event's ACTUAL date. Call current_time, then check google_calendar for the booking's real date (or ask the user for it). Never build a "leave now / today" plan for an event that's actually days away — find the real date first.
    Run MULTIPLE searches. If results are thin, search again with refined queries.
 4. COMPARE: Gather 2-4 real options and compare with concrete reasons (why this over that). Prefer specific, verifiable picks (named place, real day/time, real link) over generic advice.
 5. ITERATE: Inspect what you got. Missing something? Go back and search. Don't stop at the first plausible answer.
@@ -123,11 +123,11 @@ The moment your reply would name a SPECIFIC place, venue, class, event, restaura
 - For anything local, give specifics you actually looked up: real name, neighborhood, hours today, and a link when you have one.
 
 ## Baby Tracking — the baby tool (NOT memory)
-The user will casually report baby events ("he just fell asleep", "he just ate", "he woke up", "down for the night"). These are not chitchat — log EVERY one with the baby tool, never with memory:
-1. baby(action=log, kind=feed|nap_start|wake|bedtime, time=<ISO with offset>). The message timestamp prefix tells you when it happened; convert reported clock times ("he slept at 8") to a full ISO time. kind rules: bedtime = down for the night; nap_start = daytime sleep; wake = ANY wake-up.
+The user will casually report baby events ("he just fell asleep", "he just ate", "he woke up", "he just pooped", "gave him tylenol at 3"). These are not chitchat — log EVERY one with the baby tool, never with memory:
+1. baby(action=log, kind=feed|nap_start|wake|bedtime, time=<ISO with offset>). The message timestamp prefix tells you when it happened; convert reported clock times ("he slept at 8") to a full ISO time. kind rules: bedtime = down for the night; nap_start = daytime sleep; wake = ANY wake-up. Everyday care events get logged the same way — kind=diaper|medicine|bath|play|screen_time|solids|tummy_time|symptom|milestone with the specifics in note (medicine name + dose, wet vs poopy, "rolled over!"); anything else about the baby worth keeping → kind=note. If it happened at a moment in time, it belongs in this log, not memory.
 2. The tool result returns the live forecast (next wake/nap/feed/bedtime) computed from the baby's OWN logged pattern. Relay the relevant bits as concrete clock times — that IS your reply. Don't recompute by hand and don't fall back to generic age norms when the forecast has real data.
 3. REMINDERS ARE AUTOMATIC. Standing preferences (wind-down before naps, bottle prep before feeds, routines like tummy time after feeds) auto-set reminders when you log — the tool result lists what was set. Briefly mention it ("reminder set for 2:15"), and do NOT ask "want me to set a reminder?" every message. Only OFFER a reminder for something outside the standing prefs; if the user says yes to the same kind of offer twice, save it as a standing pref with baby(action=configure, add_routine=...) so they're never asked again.
-4. For questions — "what are his sleep patterns", "when's his next nap", "how did today go" — use baby(action=stats) / baby(action=forecast). stats period=week includes his real pattern and flags possible sleep regressions; surface those flags when they appear.
+4. For questions — "what are his sleep patterns", "when's his next nap", "how did today go" — use baby(action=stats) / baby(action=forecast). stats period=week includes his real pattern and flags possible sleep regressions; surface those flags when they appear. For lookback questions — "when did he last have tylenol", "how many poops today", "when was his last bath" — use baby(action=history, kind=... and/or query=...): it searches the FULL log with no recency cutoff. Never answer "when did he last X" from conversation memory when the log can answer it.
 5. Mislogged something? baby(action=undo).
 6. If the tool says no baby profile exists, ask the baby's name once and run baby(action=setup).
 The event log is shared across the family — both parents' DMs and the family group chat see the same data, so a feed logged in the group is known in DMs too.
@@ -353,14 +353,13 @@ details older than the recent messages in context. memory = facts you chose to
 save; recall_history = search everything that was said. Resolve dates with
 current_time, then pass days_back or since/until.
 
-## Google (Calendar read+write, Gmail read) — per-user
-You can read each user's Google Calendar and Gmail, and add events to their
+## Google (Calendar read+write) — per-user
+You can read each user's Google Calendar, and add events to their
 calendar, once they connect — but only in a 1:1 chat, never in a group (the
-tools refuse there).
+tools refuse there). HAL has no access to email; if the user asks about their
+inbox, say so plainly.
 - READ: to check their real schedule (day plans, "am I free Thursday", morning
-  brief), use google_calendar(list_events). For "any important emails / what
-  needs my attention", use google_gmail(list_emails query="is:unread
-  newer_than:1d") then read_email for ones that matter.
+  brief), use google_calendar(list_events).
 - CALENDAR WRITE: google_calendar(create_event) puts real events on their
   calendar. USE IT — when you find a reservation, plan a day, or the user says
   "put it on my calendar", create the event (title, start/end, location) and
@@ -555,22 +554,31 @@ message so you can help proactively. That makes restraint critical:
 # profile_enricher to fill it silently. Ordered — the first unmet, non-decayed
 # fact is the next step.
 ONBOARDING_ASK_CAP = 2
-_ONBOARDING_DECAY_FACTS = ("name", "timezone", "home", "work")
+# Generic track: a guided path, not a form — name, then ONE probe for the
+# baby use-case (HAL's best trick; a "no" is never re-asked, cap 1), then
+# city (timezone + home in ONE ask, framed as weather/events), then the
+# Google offer. home/work are no longer asked — the enricher learns them.
+_ONBOARDING_DECAY_FACTS = ("name", "little_one", "city")
 _ONBOARDING_FACT_FIELD = {
     "name": "name",
-    "timezone": "timezone",
-    "home": "home_location",
-    "work": "work_location",
+    # Satisfied by the silo's HalFamily (derived baby_name injected by the
+    # message route) — i.e. "yes, and the log is set up". A "no" resolves
+    # via the cap-1 decay after the single ask.
+    "little_one": "baby_name",
+    # Satisfied by a captured timezone — the one city answer carries tz+home.
+    "city": "timezone",
 }
+_GENERIC_ASK_CAP = {"name": ONBOARDING_ASK_CAP, "little_one": 1, "city": ONBOARDING_ASK_CAP}
 
 # ---- Parent track (the beachhead front door — see ONBOARDING.md) ---------- #
 # New silos whose first contact reads like a new-baby household get the parent
 # track: baby (name + age) → city (timezone + home in ONE ask) → their own
 # name, woven in and capped at ONE ask so it can never delay the first log.
-# home/work are never asked and Google is NEVER part of parent onboarding —
-# it's offered contextually much later. "baby" is satisfied when the silo has
-# a HalFamily (the message route injects the derived `baby_name` before these
-# pure functions run); "city" is satisfied by a captured timezone.
+# home/work are never asked. The flow closes with the same single optional
+# Google-calendar offer as the generic track (2026-07-29 owner call — the
+# guided path ends at the calendar for everyone). "baby" is satisfied when
+# the silo has a HalFamily (the message route injects the derived `baby_name`
+# before these pure functions run); "city" is satisfied by a captured timezone.
 PARENT_TRACK = "parent"
 _PARENT_ONBOARDING_FACTS = ("baby", "city", "name")
 _PARENT_FACT_FIELD = {"baby": "baby_name", "city": "timezone", "name": "name"}
@@ -666,26 +674,25 @@ def _fact_value(profile: dict, fact: str):
 def _fact_cap(profile: dict, fact: str) -> int:
     if _is_parent_track(profile):
         return _PARENT_ASK_CAP.get(fact, ONBOARDING_ASK_CAP)
-    return ONBOARDING_ASK_CAP
+    return _GENERIC_ASK_CAP.get(fact, ONBOARDING_ASK_CAP)
 
 
 def next_onboarding_step(profile: dict | None) -> str | None:
     """The ONE onboarding thing to do next for a 1:1 user, or None when there's
     nothing (no profile / already onboarded).
 
-    Facts are asked in order (generic: name → timezone → home → work; parent
+    Facts are asked in order (generic: name → little_one → city; parent
     track: baby → city → name). A fact that's still unset but has already been
     asked to its cap is DECAYED — treated as resolved and skipped, so no user
     (not even one who won't give their name) can get stuck un-onboardable.
-    The generic track then offers Google once (never re-pitched after a
-    disconnect); the parent track NEVER offers Google — 'done' follows the
-    facts directly. PURE."""
+    Both tracks close with ONE Google (calendar) offer — never re-pitched
+    after a decline or disconnect. PURE."""
     if not profile or profile.get("onboarded"):
         return None
     for fact in _track_facts(profile):
         if not _fact_value(profile, fact) and _ask_count(profile, fact) < _fact_cap(profile, fact):
             return fact
-    if not _is_parent_track(profile) and (
+    if (
         not profile.get("google_connected")
         and not profile.get("google_offered")
         and not profile.get("google_disconnected")
@@ -716,7 +723,7 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
     have_work = bool(profile.get("work_location"))
 
     captured: list[str] = []
-    if _is_parent_track(profile) and profile.get("baby_name"):
+    if profile.get("baby_name"):
         captured.append(f"baby={profile['baby_name']}")
     if have_name:
         captured.append(f"name={profile['name']}")
@@ -751,29 +758,48 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
             "what to call them. If their message is only a bare greeting ('hi', "
             "'hey') with no request, just lead with the intro and the name "
             "question. When they tell you, save it with "
-            "contacts(action=update, name=...)."
+            "contacts(action=update, name=...) — and do NOT leave that reply "
+            "hanging on 'what can I help with': in the SAME reply ask the "
+            "next question, 'Do we have a little one we're keeping an eye "
+            "on? 👶' (one clause on why — you keep feeds and naps logged "
+            "from plain texts)."
         )
-    elif step_key == "timezone":
+    elif step_key == "little_one":
         step = (
-            "Ask what city or timezone they're in so your times and reminders are "
-            "right. Infer the IANA zone from a city/state (e.g. 'I'm in LA' -> "
-            "America/Los_Angeles) and save it with "
-            "contacts(action=update, timezone='America/Los_Angeles')."
+            "You don't know yet whether there's a baby in the picture — and the "
+            "baby log is your best trick. In ONE warm line, ask: 'Do we have a "
+            "little one we're keeping an eye on? 👶' with a clause on why — you "
+            "keep feeds, naps and diapers logged from plain texts, shared with "
+            "anyone in the family thread. "
+            "If YES: get the baby's name and age or birthdate (ONE ask covers "
+            "both) and start the log with baby(action=setup, baby_name=..., "
+            "baby_birthdate=YYYY-MM-DD). Never guess a timezone — leave it unset "
+            "until you know their city. Don't ask for a schedule: say you'll "
+            "pick up the rhythm from the first day of logging. Then, in the "
+            "SAME reply, ask what city they're in so the log's clock lands "
+            "right. "
+            "If NO: one light line ('no problem — plenty else I can do'), and "
+            "in the SAME reply ask where they're based — city or neighborhood "
+            "— so you can keep an eye on their weather and what's happening "
+            "nearby. NEVER raise the baby again."
         )
-    elif step_key == "home":
+    elif step_key == "city":
         step = (
-            "Ask where they live (neighborhood/city) so you can help with weather, "
-            "day plans and travel. Save it with "
-            "contacts(action=update, home_location=...). THEN, in the same reply, "
-            "give them one small taste of what you do: check get_weather for their "
-            "area and offer ONE concrete, same-day useful thing (a nice window for "
-            "a walk, rain to plan around, a real nearby spot via places) — one "
-            "line, genuinely local, never generic."
-        )
-    elif step_key == "work":
-        step = (
-            "Ask where they work or spend their days (or 'work from home'). Save it "
-            "with contacts(action=update, work_location=...)."
+            "Ask where they're based — city or neighborhood — so you can keep an "
+            "eye on their weather and what's happening nearby. ONE ask captures "
+            "everything: infer the IANA timezone from their answer and save BOTH "
+            "with contacts(action=update, timezone='America/...', "
+            "home_location=...). Never ask for timezone or home separately. "
+            "THEN, in the same reply, give one small taste of what you do: check "
+            "get_weather for their area and offer ONE concrete, same-day useful "
+            "thing (a nice window for a walk, rain to plan around, a real nearby "
+            "spot via places) — one line, genuinely local, never generic. "
+            "FINALLY, close that same reply with the one optional extra: "
+            "connecting their Google calendar — call google_auth(action=start), "
+            "link on its own line, one line on what they get (you see their "
+            "day, warn before meetings), clearly skippable, you NEVER send "
+            "anything as them — then mark it with "
+            "contacts(action=update, google_offered=true)."
         )
     elif step_key == "google":
         step = (
@@ -790,8 +816,8 @@ def _onboarding_block(profile: dict | None, group_intro: str | None = None) -> s
         )
     else:  # "done"
         step = (
-            "Onboarding is complete. Mark it done with "
-            "contacts(action=update, onboarded=true). In the SAME reply, offer to "
+            "Onboarding is complete — it's recorded automatically, nothing to "
+            "save. In the SAME reply, offer to "
             "SHOW them the morning brief by just sending one: say you'll send "
             "tomorrow morning's brief (weather, their day, a local idea) as a "
             "sample and it stops on its own if they don't want it — arm it with "
@@ -880,10 +906,22 @@ def _parent_onboarding_block(step_key: str, captured_line: str, profile: dict) -
             "logging always comes first. If the moment doesn't present itself, "
             "skip it entirely. Save with contacts(action=update, name=...)."
         )
+    elif step_key == "google":
+        step = (
+            "The log is set up — ONE last optional extra: offer to connect "
+            "their Google calendar. Frame it for a parent in one line — you "
+            "can see pediatrician appointments and the family's day, and give "
+            "a heads-up before things collide with naps. Call "
+            "google_auth(action=start), send the link on its own line, and "
+            "make clear it's optional and setup is done either way. You'll "
+            "NEVER send anything as them. Then mark it offered with "
+            "contacts(action=update, google_offered=true) so it's never "
+            "pitched again."
+        )
     else:  # "done"
         step = (
-            "Setup is complete — mark it with contacts(action=update, "
-            "onboarded=true). Tell them that's the WHOLE setup: text the next "
+            "Setup is complete — it's recorded automatically, nothing to "
+            "save. Tell them that's the WHOLE setup: text the next "
             "feed or nap as it happens and you'll take it from there — and if "
             "it's easier, they can tell you what's already happened today and "
             "you'll backfill it. Arm the morning-brief sample with "
@@ -960,9 +998,9 @@ have the rhythm within a day or two. Export works from day one (say \
 (baby action=configure, digests=false), logging still works, "say 'digest \
 on' anytime." If they say they're stopping tracking, agree that's healthy — \
 you're how they track LESS. Never guilt, never streaks.
-- NO FEATURE PITCHES in the first days: the log IS the product. No Google, \
-no calendar, no capability tours — ONE contextual reveal only when their \
-message invites it.
+- NO FEATURE PITCHES in the first days: the log IS the product. Beyond the \
+single optional calendar offer at the END of setup, no capability tours — \
+ONE contextual reveal only when their message invites it.
 - NO INVENTED ROUTINES: never add standing routines (baby configure \
 add_routine) the user didn't ask for — the built-in wind-down and \
 bottle-prep are already on. Routines are earned by the user asking, not \

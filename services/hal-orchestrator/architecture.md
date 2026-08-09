@@ -608,7 +608,7 @@ Free tier = `FREE_MESSAGE_LIMIT` (40) user-initiated msgs/month per 1:1 silo
 (`usage.py`; groups/heartbeats/admin exempt). Over the cap → a funding message
 with a static Stripe Payment Link + `?client_reference_id=<ref>` (signed with
 `ENCRYPTION_KEY`, binds the payment to the silo). Stripe webhook
-(`www.tryhal.xyz/api/stripe/webhook`, secret `STRIPE_WEBHOOK_SECRET`, no
+(`www.texthal.com/api/stripe/webhook`, secret `STRIPE_WEBHOOK_SECRET`, no
 `STRIPE_SECRET_KEY` needed) → verify sig → resolve ref → `usage.set_plan(unlimited)`
 + queue the confirmation text. **Safety net:** an unmatchable payment
 (`client_reference_id` null/invalid) texts `ADMIN_PHONE` instead of silently

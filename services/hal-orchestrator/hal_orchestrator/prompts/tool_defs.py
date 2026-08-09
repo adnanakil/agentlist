@@ -69,8 +69,9 @@ MAIN_TOOLS: list[dict] = [
                 "description": (
                     "Structured baby tracking — THE tool for all baby care events "
                     "and questions. Actions: log (record feed/nap_start/wake/"
-                    "bedtime/tummy_time/diaper — returns the updated forecast and "
-                    "auto-sets standing-preference reminders), forecast (next "
+                    "bedtime plus everyday care: diaper, medicine, bath, play, "
+                    "screen_time, solids, tummy_time, symptom, milestone, note — "
+                    "returns the updated forecast and "
                     "wake/nap/feed/bedtime predicted from the baby's OWN recent "
                     "pattern), stats (today/yesterday/week summary + patterns + "
                     "regression flags), card (render a VISUAL status-card IMAGE — "
@@ -82,7 +83,11 @@ MAIN_TOOLS: list[dict] = [
                     "sent as an iMessage picture; use when the user asks how the "
                     "day went, for a daily summary/recap card, or an end-of-day "
                     "review; card is the CURRENT-status monitor, day_card is the "
-                    "whole day), recent (raw recent events), undo (remove "
+                    "whole day), recent (raw events from the last 3 days), "
+                    "history (SEARCH the FULL log by kind and/or free text — "
+                    "THE action for lookback questions: 'when did he last have "
+                    "tylenol', 'how many poops today', 'when was his last "
+                    "bath'; recent/stats only cover a few days), undo (remove "
                     "a mislogged event), setup (first-time: create the baby "
                     "profile for this chat — pass baby_birthdate and timezone "
                     "when known so forecasts and clock times are right), "
@@ -100,16 +105,41 @@ MAIN_TOOLS: list[dict] = [
                             "type": "string",
                             "enum": [
                                 "log", "forecast", "stats", "card", "day_card",
-                                "recent", "undo", "setup", "configure", "export",
+                                "recent", "history", "undo", "setup",
+                                "configure", "export",
                             ],
                         },
                         "kind": {
                             "type": "string",
                             "description": (
-                                "For log: feed, nap_start, wake, bedtime, "
-                                "tummy_time, diaper, or note. Use bedtime for "
-                                "down-for-the-night, nap_start for daytime sleep, "
-                                "wake for ANY wake-up."
+                                "For log or history: feed, nap_start, wake, "
+                                "bedtime, tummy_time, diaper, medicine, bath, "
+                                "play, screen_time, solids, symptom, milestone, "
+                                "or note. Use bedtime for down-for-the-night, "
+                                "nap_start for daytime sleep, wake for ANY "
+                                "wake-up. Put the specifics in note — medicine: "
+                                "name + dose ('Tylenol 2.5ml'); diaper: wet/"
+                                "poopy when stated; symptom: what was observed "
+                                "('fever 100.8'). Anything else worth keeping "
+                                "about the baby → kind=note with the detail in "
+                                "note (an unrecognized kind is auto-filed as a "
+                                "note keeping the word, so logging never fails "
+                                "on vocabulary)."
+                            ),
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": (
+                                "For history: free-text search matched against "
+                                "event notes and kind names (e.g. 'tylenol', "
+                                "'poop', 'bath'). Combine with kind to narrow."
+                            ),
+                        },
+                        "days": {
+                            "type": "integer",
+                            "description": (
+                                "For history: only look back this many days. "
+                                "Omit to search the entire log."
                             ),
                         },
                         "time": {
@@ -477,7 +507,7 @@ MAIN_TOOLS: list[dict] = [
                 "description": (
                     "Manage the current user's contact profile. "
                     "Actions: get (read profile), update (set fields like name, "
-                    "timezone, home_location, work_location, onboarded, "
+                    "timezone, home_location, work_location, "
                     "google_connected, google_offered, email, notes), "
                     "add_contact (save a person's number under a name — 'wife', "
                     "'Mom', 'Seth' — so send_message works by name; when the "
@@ -525,10 +555,6 @@ MAIN_TOOLS: list[dict] = [
                         "work_location": {
                             "type": "string",
                             "description": "Where the user works or spends their days.",
-                        },
-                        "onboarded": {
-                            "type": "boolean",
-                            "description": "Set to true after onboarding is complete",
                         },
                         "google_connected": {
                             "type": "boolean",
@@ -992,12 +1018,12 @@ MAIN_TOOLS: list[dict] = [
             {
                 "name": "google_auth",
                 "description": (
-                    "Manage the user's Google connection (Calendar read & write, "
-                    "Gmail read), scoped to this 1:1 chat. Actions: status (is it "
+                    "Manage the user's Google connection (Calendar read & write), "
+                    "scoped to this 1:1 chat. Actions: status (is it "
                     "connected, and as which account), start (returns a one-tap consent "
                     "LINK — send it to the user verbatim on its own line and ask them to "
                     "tap it, approve, and text back), disconnect (revoke + forget). If "
-                    "google_calendar or google_gmail says it's not connected, call "
+                    "google_calendar says it's not connected, call "
                     "start. Personal — refuses in group chats."
                 ),
                 "parameters": {
@@ -1041,32 +1067,6 @@ MAIN_TOOLS: list[dict] = [
                         "description": {"type": "string", "description": "Event notes/description (for create_event)"},
                         "location": {"type": "string", "description": "Event location (for create_event)"},
                         "attendees": {"type": "array", "items": {"type": "string"}, "description": "Attendee email addresses to invite (for create_event)"},
-                    },
-                    "required": ["action"],
-                },
-            },
-            {
-                "name": "google_gmail",
-                "description": (
-                    "Read the user's Gmail (READ-ONLY — HAL cannot send or draft "
-                    "email). Actions: list_emails (query defaults to 'is:unread'; "
-                    "supports Gmail search like 'is:unread newer_than:1d', returns "
-                    "ids + sender + subject + snippet), read_email (full body by "
-                    "message_id). Requires the user to have connected Google "
-                    "(google_auth). If the user asks you to send or reply to an "
-                    "email, say you can pull up the thread but they'll need to send "
-                    "from their own Mail app. Personal — refuses in group chats."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {
-                            "type": "string",
-                            "enum": ["list_emails", "read_email"],
-                        },
-                        "query": {"type": "string", "description": "Gmail search query, e.g. 'is:unread newer_than:1d'"},
-                        "max_results": {"type": "integer", "description": "Default 10"},
-                        "message_id": {"type": "string", "description": "Message id (for read_email)"},
                     },
                     "required": ["action"],
                 },

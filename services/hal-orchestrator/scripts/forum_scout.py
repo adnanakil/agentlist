@@ -30,7 +30,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
-UA = "hal-forum-scout/0.1 (read-only thread discovery; contact: hello@tryhal.xyz)"
+UA = "hal-forum-scout/0.1 (read-only thread discovery; contact: hello@texthal.com)"
 ATOM = "{http://www.w3.org/2005/Atom}"
 
 # ONE OR-query per sub — Reddit's unauthenticated RSS rate limit is roughly

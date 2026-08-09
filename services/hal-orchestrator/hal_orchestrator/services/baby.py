@@ -10,11 +10,14 @@ Event kinds:
   nap_start  — daytime sleep started
   bedtime    — night sleep started
   wake       — woke up (closes the most recent open nap/night sleep)
-  tummy_time | diaper | note — auxiliary, logged but not paired
+  tummy_time | diaper | medicine | bath | play | screen_time | solids |
+  symptom | milestone | note — auxiliary, logged but not paired. Specifics
+  (drug + dose, wet/poopy, what milestone) live in the event note.
 """
 
 from __future__ import annotations
 
+import re
 import statistics
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -22,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 import structlog
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.models import HalBabyEvent, HalFamily, HalFamilyMember, HalReminder
@@ -30,7 +33,21 @@ from ag_db.models import HalBabyEvent, HalFamily, HalFamilyMember, HalReminder
 log = structlog.get_logger()
 
 SLEEP_STARTS = {"nap_start", "bedtime"}
-EVENT_KINDS = {"feed", "nap_start", "bedtime", "wake", "tummy_time", "diaper", "note"}
+# Kind strings must fit HalBabyEvent.kind (String(16)).
+EVENT_KINDS = {
+    "feed", "nap_start", "bedtime", "wake",
+    "tummy_time", "diaper", "medicine", "bath", "play", "screen_time",
+    "solids", "symptom", "milestone", "note",
+}
+# Auxiliary kinds: logged and searchable but not part of sleep/feed pairing.
+AUX_KINDS = EVENT_KINDS - {"feed", "nap_start", "bedtime", "wake"}
+# Events that mean the baby is up. Logged during an open NAP they imply the
+# wake just wasn't recorded. Night sleep is exempt — dream feeds and overnight
+# changes don't mean the baby is up for the day.
+AWAKE_KINDS = {
+    "feed", "tummy_time", "diaper", "medicine", "bath", "play",
+    "screen_time", "solids",
+}
 
 # A "nap" longer than this is assumed to be a missed wake log, not real sleep.
 MAX_NAP_HOURS = 4
@@ -248,6 +265,43 @@ async def add_event(
     return event
 
 
+async def infer_wake_if_napping(
+    session: AsyncSession,
+    family: HalFamily,
+    kind: str,
+    event_at: datetime,
+    logged_by: str | None,
+    silo: str,
+) -> HalBabyEvent | None:
+    """Close an open nap when an awake-implying event lands inside it.
+
+    "Ate 2:10" during a nap that started 12:37 means the baby woke and the wake
+    wasn't logged — insert the wake at the event's time so the card, forecast,
+    and nap-cap watcher all see him up. Naps only: a feed during night sleep
+    (bedtime) is a dream feed, not a wake-up.
+    """
+    if kind not in AWAKE_KINDS:
+        return None
+    stmt = (
+        select(HalBabyEvent)
+        .where(
+            HalBabyEvent.family_id == family.id,
+            HalBabyEvent.kind.in_(list(SLEEP_STARTS | {"wake"})),
+            HalBabyEvent.event_at < event_at,
+        )
+        .order_by(HalBabyEvent.event_at.desc())
+        .limit(1)
+    )
+    last = (await session.execute(stmt)).scalar_one_or_none()
+    if last is None or last.kind != "nap_start":
+        return None
+    return await add_event(
+        session, family, "wake", event_at,
+        logged_by=logged_by, silo=silo,
+        note=f"Inferred — {kind} logged while the nap was still open.",
+    )
+
+
 async def load_events(
     session: AsyncSession, family_id, since: datetime | None = None
 ) -> list[HalBabyEvent]:
@@ -256,6 +310,45 @@ async def load_events(
         stmt = stmt.where(HalBabyEvent.event_at >= since)
     stmt = stmt.order_by(HalBabyEvent.event_at.asc())
     return list((await session.execute(stmt)).scalars().all())
+
+
+async def search_events(
+    session: AsyncSession,
+    family_id,
+    kind: str | None = None,
+    query: str | None = None,
+    since: datetime | None = None,
+    limit: int = 200,
+) -> tuple[list[HalBabyEvent], int]:
+    """Full-history lookup for "when did he last …" questions — the whole log,
+    not a recency window. Filters: exact kind, and/or case-insensitive text
+    matched against the note OR the kind name (so query='bath' hits bare bath
+    events and query='tylenol' hits medicine notes). Returns (the most recent
+    `limit` matches in ascending time order, total match count)."""
+    where = [HalBabyEvent.family_id == family_id]
+    if kind:
+        where.append(HalBabyEvent.kind == kind)
+    if query:
+        pattern = f"%{query.strip()}%"
+        where.append(
+            or_(HalBabyEvent.note.ilike(pattern), HalBabyEvent.kind.ilike(pattern))
+        )
+    if since is not None:
+        where.append(HalBabyEvent.event_at >= since)
+    total = (
+        await session.execute(
+            select(func.count()).select_from(HalBabyEvent).where(*where)
+        )
+    ).scalar_one()
+    stmt = (
+        select(HalBabyEvent)
+        .where(*where)
+        .order_by(HalBabyEvent.event_at.desc())
+        .limit(limit)
+    )
+    rows = list((await session.execute(stmt)).scalars().all())
+    rows.reverse()
+    return rows, int(total or 0)
 
 
 async def delete_last_event(session: AsyncSession, family_id) -> HalBabyEvent | None:
@@ -663,6 +756,53 @@ async def apply_auto_reminders(
 
 def as_pairs(events: list[HalBabyEvent]) -> list[tuple[str, datetime]]:
     return [(e.kind, e.event_at) for e in events]
+
+
+def as_triples(events: list[HalBabyEvent]) -> list[tuple[str, datetime, str]]:
+    """(kind, at, note) — for aux-event summaries, where the note carries the
+    substance (drug + dose, wet/poopy, which milestone)."""
+    return [(e.kind, e.event_at, e.note or "") for e in events]
+
+
+# "Was it a poop?" is answered from the diaper note's own words.
+_POOPY = re.compile(r"poop|dirty|stool|bm\b|#\s?2|💩", re.I)
+
+
+def day_aux(
+    events: list[tuple[str, datetime, str]], tz: ZoneInfo, d: date
+) -> list[tuple[str, datetime, str]]:
+    """Auxiliary events (diaper, medicine, bath, …) on local day `d`,
+    time-ordered. PURE — takes as_triples output."""
+    return sorted(
+        (
+            (kind, at, note)
+            for kind, at, note in events
+            if kind in AUX_KINDS and _local_date(at, tz) == d
+        ),
+        key=lambda e: e[1],
+    )
+
+
+def format_day_aux(aux: list[tuple[str, datetime, str]], tz: ZoneInfo) -> str:
+    """Aux lines for a day summary: diapers aggregated to a count (+ poopy
+    count), everything else listed with its time and note. '' when empty."""
+    diapers = [(at, note) for kind, at, note in aux if kind == "diaper"]
+    others = [(kind, at, note) for kind, at, note in aux if kind != "diaper"]
+    lines: list[str] = []
+    if diapers:
+        poopy = sum(1 for _, note in diapers if _POOPY.search(note))
+        line = f"Diapers: {len(diapers)}"
+        if poopy:
+            line += f" ({poopy} poopy)"
+        lines.append(line)
+    if others:
+        bits = [
+            f"{kind.replace('_', ' ')} {fmt_time(at, tz)}"
+            + (f" ({note})" if note else "")
+            for kind, at, note in others
+        ]
+        lines.append("Also: " + "; ".join(bits))
+    return "\n".join(lines)
 
 
 def fmt_time(at: datetime | None, tz: ZoneInfo) -> str:

@@ -9,18 +9,22 @@ forecast so the model can answer with real, data-grounded predictions.
 from __future__ import annotations
 
 import base64
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import structlog
 
 from hal_orchestrator.services.baby import (
+    AUX_KINDS,
     EVENT_KINDS,
     add_event,
     apply_auto_reminders,
     as_pairs,
+    as_triples,
     compute_patterns,
     create_family,
+    day_aux,
     delete_last_event,
     detect_regression,
     ensure_family_member,
@@ -28,10 +32,13 @@ from hal_orchestrator.services.baby import (
     fmt_duration,
     fmt_time,
     forecast_next,
+    format_day_aux,
     format_day_summary,
     format_forecast,
     get_family_for_silo,
+    infer_wake_if_napping,
     load_events,
+    search_events,
     summarize_day,
 )
 from hal_orchestrator.tools.registry import ToolContext
@@ -44,6 +51,7 @@ CONFIG_BOOL_KEYS = {"auto_reminders", "auto_wind_down", "auto_feed_prep", "diges
 CARD_KINDS = {"feed", "nap_start", "wake", "bedtime"}
 _CARD_IMAGE_SOURCE = "baby_status_card"
 _DAY_CARD_IMAGE_SOURCE = "baby_day_card"
+_EXAMPLE_CARD_IMAGE_SOURCE = "baby_example_card"
 
 
 async def _attach_card(ctx: ToolContext, render, source: str) -> bool:
@@ -192,6 +200,23 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             timezone_name=tz_name,
             baby_birthdate=birthdate,
         )
+
+        # Show, don't tell: attach an EXAMPLE status card so the parent sees
+        # the nap/feed monitor they're getting before a single event exists.
+        # A real event logged later this same turn replaces it (see the log
+        # action's supersede below).
+        async def _render_example() -> bytes:
+            from hal_orchestrator.services.baby_card import render_example_card
+
+            return render_example_card(
+                family.baby_name,
+                ZoneInfo(family.timezone),
+                datetime.now(UTC),
+            )
+
+        example_attached = await _attach_card(
+            ctx, _render_example, _EXAMPLE_CARD_IMAGE_SOURCE
+        )
         return (
             f"Set up tracking for {baby_name}"
             + (f" (born {birthdate})" if birthdate else "")
@@ -204,6 +229,15 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
                 if tz_name
                 else " NOTE: timezone not set yet — when you learn their city, "
                 "call baby(action=configure, timezone=<IANA zone>)."
+            )
+            + (
+                " [An EXAMPLE status card image is attached — the live "
+                f"baby-monitor view they'll get for {baby_name}: nap state, "
+                "expected wake, next feed, bedtime. Point at it in ONE short "
+                "line — it fills itself in as they text feeds and naps. Do "
+                "NOT re-list the times on the card.]"
+                if example_attached
+                else ""
             )
         )
 
@@ -218,6 +252,15 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
 
     if action == "log":
         kind = (args.get("kind") or "").strip()
+        note = (args.get("note") or "").strip()[:500]
+        filed_kind: str | None = None
+        if kind and kind not in EVENT_KINDS:
+            # People log things no taxonomy predicts ("haircut", "vaccine",
+            # "grandma visited"). Never bounce a real event over vocabulary —
+            # file it as a note carrying the original word so history finds it.
+            filed_kind = kind
+            note = f"{kind} — {note}"[:500] if note else kind[:500]
+            kind = "note"
         if kind not in EVENT_KINDS:
             return f"Error: kind must be one of {sorted(EVENT_KINDS)}."
         event_at = _parse_time(args.get("time"), now)
@@ -239,10 +282,16 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             ctx.session, family.id
         )
 
+        # Infer the missed wake BEFORE inserting this event, so the lookback
+        # query sees only prior state.
+        inferred_wake = await infer_wake_if_napping(
+            ctx.session, family, kind, event_at,
+            logged_by=logger_id, silo=ctx.phone,
+        )
         await add_event(
             ctx.session, family, kind, event_at,
             logged_by=logger_id, silo=ctx.phone,
-            note=(args.get("note") or "")[:500],
+            note=note,
         )
 
         # A caregiver logging from a group thread gets their own 1:1 silo on
@@ -265,6 +314,10 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         auto_set = await apply_auto_reminders(
             ctx.session, family, kind, event_at, ctx.phone, forecast, now
         )
+        if inferred_wake is not None:
+            auto_set += await apply_auto_reminders(
+                ctx.session, family, "wake", event_at, ctx.phone, forecast, now
+            )
 
         # Once-ever, code-triggered moments (never model-whim — ONBOARDING.md):
         # the Win-2 forecast reveal (first wake-after-nap OR 3 logged events)
@@ -325,20 +378,41 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         # update). Attach the rendered PNG directly so iMessage receives a real
         # image instead of a URL whose Open Graph metadata creates a link card.
         card_attached = kind in CARD_KINDS and await _attach_status_card(ctx)
+        if card_attached:
+            # A real card supersedes the setup-time EXAMPLE preview: when the
+            # first log lands in the same turn as setup, send only the truth.
+            ctx.result_images[:] = [
+                image
+                for image in ctx.result_images
+                if image.get("_source") != _EXAMPLE_CARD_IMAGE_SOURCE
+            ]
 
+        label = filed_kind or kind.replace("_", " ")
         if card_attached:
             lines = [
-                f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
+                f"Logged: {baby} {label} at {fmt_time(event_at, tz)}.",
                 "[The updated status card is attached as an image. Reply with just "
                 "ONE short, warm line (e.g. \"Down he goes 💤\" / \"logged ✅\"); "
                 "do NOT re-list the times, the card has them.]",
             ]
         else:
             lines = [
-                f"Logged: {baby} {kind.replace('_', ' ')} at {fmt_time(event_at, tz)}.",
+                f"Logged: {baby} {label} at {fmt_time(event_at, tz)}.",
                 "",
                 format_forecast(forecast, tz, baby, now),
             ]
+        if filed_kind:
+            lines.append(
+                f"(No structured kind for '{filed_kind}' — stored as a note, "
+                "findable later with baby(action=history, query=...). If it "
+                "was really a feed/nap/wake/bedtime, undo and re-log.)"
+            )
+        if inferred_wake is not None:
+            lines.append(
+                f"Note: {baby} was still logged as napping, so this {kind.replace('_', ' ')} "
+                f"also closed the nap — wake recorded at {fmt_time(event_at, tz)}. Mention "
+                "this in one short clause so they can correct the wake time if it was earlier."
+            )
         if auto_set:
             lines.append("Auto-set reminders (standing preference): " + "; ".join(auto_set))
             lines.append(
@@ -439,6 +513,9 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             summary = summarize_day(events, tz, d)
             out = [f"{baby}{age_part} — {period} ({d.strftime('%a %b %-d')}):",
                    format_day_summary(summary, tz, baby)]
+            aux_lines = format_day_aux(day_aux(as_triples(events_raw), tz, d), tz)
+            if aux_lines:
+                out.append(aux_lines)
             if period == "today":
                 out += ["", format_forecast(
                     forecast_next(events, tz, now, birthdate=family.baby_birthdate),
@@ -504,6 +581,20 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
         if p["bedtime_minutes"] is not None:
             bm = int(p["bedtime_minutes"])
             out.append(f"Typical bedtime: {bm // 60 % 12 or 12}:{bm % 60:02d} PM")
+        week_cut = now - timedelta(days=7)
+        aux_counts = Counter(
+            kind
+            for kind, at, _ in as_triples(events_raw)
+            if kind in AUX_KINDS and at >= week_cut
+        )
+        if aux_counts:
+            out.append(
+                "Also this week: "
+                + ", ".join(
+                    f"{kind.replace('_', ' ')} ×{n}"
+                    for kind, n in aux_counts.most_common()
+                )
+            )
         flags = detect_regression(events, tz, now)
         if flags:
             out.append("⚠️ Possible sleep regression signals: " + "; ".join(flags))
@@ -526,6 +617,50 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
             lines.append(
                 f"- {local.strftime('%a %-I:%M %p')} ({fmt_ago(e.event_at, now)}): "
                 f"{e.kind.replace('_', ' ')}{note}"
+            )
+        return "\n".join(lines)
+
+    if action == "history":
+        # Full-log search — "when did he last have tylenol", "how many poops
+        # this week", "when was his last bath". recent/stats only cover a few
+        # days; this is the lookback path with no horizon.
+        kind = (args.get("kind") or "").strip() or None
+        query = (args.get("query") or "").strip() or None
+        if kind is not None and kind not in EVENT_KINDS:
+            # An unknown kind is a concept, not vocabulary ("haircut") — fold
+            # it into the text search so lookups never bounce either.
+            query = f"{query} {kind}".strip() if query else kind
+            kind = None
+        since = None
+        if args.get("days"):
+            try:
+                since = now - timedelta(days=max(1, min(int(args["days"]), 400)))
+            except (TypeError, ValueError):
+                return "Error: days must be a number."
+        matches, total = await search_events(
+            ctx.session, family.id, kind=kind, query=query, since=since
+        )
+        scope_bits = [b for b in (
+            kind and f"kind={kind}",
+            query and f"matching '{query}'",
+            args.get("days") and f"last {args['days']} days",
+        ) if b]
+        scope = f" ({', '.join(scope_bits)})" if scope_bits else ""
+        if not matches:
+            return f"No events found for {baby}{scope}."
+        from hal_orchestrator.services.baby import fmt_ago
+
+        shown = matches[-30:]
+        header = f"{baby} — {total} event{'s' if total != 1 else ''}{scope}"
+        if total > len(shown):
+            header += f", showing the {len(shown)} most recent"
+        lines = [header + ":"]
+        for e in shown:
+            local = e.event_at.astimezone(tz)
+            note = f" ({e.note})" if e.note else ""
+            lines.append(
+                f"- {local.strftime('%a %b %-d, %-I:%M %p')} "
+                f"({fmt_ago(e.event_at, now)}): {e.kind.replace('_', ' ')}{note}"
             )
         return "\n".join(lines)
 
@@ -618,6 +753,6 @@ async def tool_baby(args: dict, ctx: ToolContext) -> str:
 
     return (
         f"Unknown baby action: {action}. "
-        "Use: log, forecast, stats, card, day_card, recent, setup, configure, "
-        "undo, export."
+        "Use: log, forecast, stats, card, day_card, recent, history, setup, "
+        "configure, undo, export."
     )

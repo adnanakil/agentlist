@@ -60,6 +60,12 @@ class HalOrchestratorConfig(BaseConfig):
     # gpt-5.6-luna) to route it through the Responses-API shim
     # (services/openai_provider.py).
     openai_api_key: str = ""
+    # OpenRouter — set ANY task's model id to an OpenRouter "vendor/model" id
+    # (e.g. GEMINI_MODEL=moonshotai/kimi-k3) to route it through the
+    # chat-completions shim (services/openrouter_provider.py). Any model id
+    # containing "/" goes here; no native model id has one.
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
     # Reasoning depth for gpt-* models (none/low/medium/high/xhigh). Deliberately
     # NOT driven by gemini_thinking_level: pushing that global to MAX to get
     # frontier depth on OpenAI would also send thinkingLevel=MAX to the native
@@ -215,7 +221,7 @@ class HalOrchestratorConfig(BaseConfig):
     encryption_key: str = ""
     # Where the nightly self-improvement digest (feature proposals) is sent.
     admin_phone: str = ""
-    # HAL's public iMessage number, shown on the tryhal.com landing page ("/").
+    # HAL's public iMessage number, shown on the texthal.com landing page ("/").
     # Unset -> the page shows a coming-soon variant without a number.
     hal_public_number: str = ""
     # Separate purpose-bound key for public card links. Production refuses to

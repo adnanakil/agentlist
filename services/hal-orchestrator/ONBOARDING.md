@@ -36,6 +36,18 @@ around the first thing they text it.**
 
 ## What changes vs. onboarding v2
 
+> **2026-07-29 update:** the generic track is now a guided path too:
+> name → **little-one probe** ("do we have a little one we're keeping an
+> eye on? 👶", ONE ask, never re-raised after a no; a yes sets up the baby
+> log right there) → **city** (timezone + home in one ask, framed as
+> weather/events) → Google. home/work are no longer asked — the enricher
+> learns them. Each step is CHAINED into the previous reply (the name ack
+> asks the little-one question, the probe answer asks the city, the city
+> save closes with the calendar offer) so no reply dead-ends. Both tracks
+> now finish with the single optional Google-calendar offer — the parent
+> track included, superseding the "no Google in parent onboarding" row
+> below. The v2 column is kept for history.
+
 | v2 (generic) | Parent track |
 |---|---|
 | name → timezone → home → work → Google → trial brief | name → **baby (name + age)** → timezone-via-city → **first log** → *(earned)* family thread → trial brief |

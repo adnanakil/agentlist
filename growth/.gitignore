@@ -1,0 +1,6 @@
+# Live cycle data — hal-local, written by the always-on supervisor. Never
+# committed: cycles don't git-commit, and tracking these would leave hal's
+# tree permanently dirty. The laptop copies are stale mirrors at best.
+state/
+reports/
+__pycache__/

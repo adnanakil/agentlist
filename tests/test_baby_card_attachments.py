@@ -22,6 +22,7 @@ def _context(result_images: list[dict] | None = None) -> SimpleNamespace:
         session=object(),
         phone="+1555",
         sender_phone="+1555",
+        is_group=False,
         result_images=result_images or [],
     )
 
@@ -53,7 +54,13 @@ async def test_explicit_card_is_attached_as_png() -> None:
 
 async def test_log_attaches_latest_card_without_discarding_other_images() -> None:
     png = b"\x89PNG\r\n\x1a\nlatest"
-    family = SimpleNamespace(baby_name="Bazzy", timezone="America/New_York", id="family")
+    family = SimpleNamespace(
+        baby_name="Bazzy",
+        timezone="America/New_York",
+        id="family",
+        state={"forecast_revealed": "done"},
+        baby_birthdate=None,
+    )
     unrelated = {"mime_type": "image/jpeg", "data": "photo", "ext": "jpg"}
     stale_card = {
         "mime_type": "image/png",
@@ -67,6 +74,14 @@ async def test_log_attaches_latest_card_without_discarding_other_images() -> Non
         patch(
             "hal_orchestrator.tools.baby.get_family_for_silo",
             new=AsyncMock(return_value=family),
+        ),
+        patch(
+            "hal_orchestrator.tools.baby.event_trigger_stats",
+            new=AsyncMock(return_value=(5, {"+1555"})),
+        ),
+        patch(
+            "hal_orchestrator.tools.baby.infer_wake_if_napping",
+            new=AsyncMock(return_value=None),
         ),
         patch("hal_orchestrator.tools.baby.add_event", new=AsyncMock()),
         patch("hal_orchestrator.tools.baby.load_events", new=AsyncMock(return_value=[])),

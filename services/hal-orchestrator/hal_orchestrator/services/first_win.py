@@ -75,11 +75,6 @@ async def _gather(
         for label, name, args in (
             ("Current time", "current_time", {}),
             ("Upcoming calendar", "google_calendar", {"action": "list_events"}),
-            (
-                "Recent unread email",
-                "google_gmail",
-                {"action": "list_emails", "query": "is:unread newer_than:3d", "max_results": 10},
-            ),
         ):
             try:
                 lines.append(f"{label}:\n" + str(await execute_tool(name, args, ctx)))

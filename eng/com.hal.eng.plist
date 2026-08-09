@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- HAL eng team supervisor. Install on the Hal Mac only:
+       cp eng/com.hal.eng.plist ~/Library/LaunchAgents/
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hal.eng.plist
+     Never run this on the laptop while Hal's copy runs — two teams sharing one
+     working tree is the failure mode this team was created to prevent. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hal.eng</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>/Users/adnanakil/Project/agentlist/eng/scripts/supervisor.sh</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/adnanakil/Project/agentlist</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/adnanakil/Project/agentlist/eng/state/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/adnanakil/Project/agentlist/eng/state/launchd.log</string>
+</dict>
+</plist>

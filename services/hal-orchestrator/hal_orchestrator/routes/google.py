@@ -1,3 +1,4 @@
+# ruff: noqa: B008, E501 -- FastAPI dependency injection and embedded page HTML.
 """Google OAuth callback — the public landing point users hit after consenting.
 
 Verifies the signed state (which silo started the flow), exchanges the code for
@@ -15,7 +16,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ag_db.session import get_session
-
 from hal_orchestrator.services import google as gsvc
 from hal_orchestrator.services.first_win import run_first_win
 from hal_orchestrator.services.profiles import get_profile, update_profile
@@ -125,7 +125,7 @@ def build_google_router() -> APIRouter:
         return _page(
             "Connected",
             f'<div class="e">✅</div><h1>Google connected</h1>'
-            f"<p>HAL can now read your calendar and Gmail{who}. "
+            f"<p>HAL can now read and update your calendar{who}. "
             "Head back to iMessage — you’re all set.</p>",
         )
 

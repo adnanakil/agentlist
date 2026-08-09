@@ -50,11 +50,13 @@ def check(name, cond, detail=""):
 
 
 base = _empty("+15550009999")
+# A complete generic run: name given, little-one probed once (cap 1 -> a
+# "no" resolves it), the single city ask captured timezone + home.
 FACTS = {
     "name": "Al",
+    "asked_little_one": 1,
     "timezone": "America/Los_Angeles",
     "home_location": "Venice",
-    "work_location": "Santa Monica",
 }
 
 
@@ -76,9 +78,9 @@ check("group name-step is not a cold intro", bg and "HAL from the Mattituck crew
 # on the FIRST onboarding turn only.
 prefilled = {**base, "name": "Al"}
 bw = _onboarding_block(prefilled, group_intro="Book Club")
-check("pre-filled name skips to timezone", bw and "timezone" in bw.lower())
+check("pre-filled name skips to the little-one probe", bw and "little one" in bw.lower())
 check("warm-start header shown on first turn", bw and "Book Club" in bw)
-after_turn = {**prefilled, "onboarding_events": [{"step": "timezone", "event": "asked"}]}
+after_turn = {**prefilled, "onboarding_events": [{"step": "little_one", "event": "asked"}]}
 bw2 = _onboarding_block(after_turn, group_intro="Book Club")
 check("warm-start header NOT repeated after first turn", bw2 and "Book Club" not in bw2)
 
@@ -100,17 +102,16 @@ check(
     next_onboarding_step({**base, "asked_name": 1}) == "name",
 )
 check(
-    "name asked to cap -> skip to timezone",
-    next_onboarding_step({**base, "asked_name": ONBOARDING_ASK_CAP}) == "timezone",
+    "name asked to cap -> skip to little-one probe",
+    next_onboarding_step({**base, "asked_name": ONBOARDING_ASK_CAP}) == "little_one",
 )
 # A user who declines EVERY fact (each asked to the cap) + google offered still
 # reaches 'done' — never un-onboardable.
 declined = {
     **base,
     "asked_name": ONBOARDING_ASK_CAP,
-    "asked_timezone": ONBOARDING_ASK_CAP,
-    "asked_home": ONBOARDING_ASK_CAP,
-    "asked_work": ONBOARDING_ASK_CAP,
+    "asked_little_one": 1,
+    "asked_city": ONBOARDING_ASK_CAP,
     "google_offered": True,
 }
 check("fully-declined user -> done", next_onboarding_step(declined) == "done")
@@ -162,7 +163,8 @@ check("follow-up line asks about daily", "every morning" in TRIAL_FOLLOWUP)
 # done step arms the trial (change 5).
 done = _onboarding_block({**allfacts, "google_offered": True})
 check("done step arms the trial brief", done and "helpful_mode(action=trial)" in done)
-check("done step still flips onboarded", done and "onboarded=true" in done)
+check("done step leaves the flag to the code backstop",
+      done and "recorded automatically" in done and "onboarded=true" not in done)
 
 
 # --- helpful tool: trial arms; on/off commit/clear -------------------------- #
@@ -234,11 +236,11 @@ upd2, evs2 = compute_onboarding_progress(base, post_named)
 check("answered name -> no asked_name increment", "asked_name" not in upd2)
 check("answered name -> 'answered' event", any(e["kind"] == "answered" and e["step"] == "name" for e in evs2))
 
-# Skipped-by-decay: name decayed + unset, flow now on timezone.
+# Skipped-by-decay: name decayed + unset, flow now on the little-one probe.
 pre_decayed = {**base, "asked_name": ONBOARDING_ASK_CAP}
 upd3, evs3 = compute_onboarding_progress(pre_decayed, pre_decayed)
 check("decayed name -> 'skipped_decay' event", any(e["kind"] == "skipped_decay" and e["step"] == "name" for e in evs3))
-check("decayed name + unanswered tz -> asked_timezone incremented", upd3.get("asked_timezone") == 1)
+check("decayed name + unprobed little one -> asked_little_one incremented", upd3.get("asked_little_one") == 1)
 
 # Completion: terminal reached this turn.
 pre_terminal = {**base, **FACTS}  # google not yet offered -> step 'google'
@@ -253,7 +255,7 @@ check("already onboarded -> no updates/events", upd5 == {} and evs5 == [])
 
 # Don't double-log an event already in the timeline.
 pre_has_answered = {**base, "name": "Al", "onboarding_events": [{"step": "name", "event": "answered", "at": "x"}]}
-# name is set so flow is on timezone; feed an unanswered tz to make it a normal turn
+# name is set so flow is on the little-one probe; an unanswered turn is fine
 upd6, evs6 = compute_onboarding_progress(pre_has_answered, pre_has_answered)
 check("existing answered event not re-emitted", not any(e["kind"] == "answered" and e["step"] == "name" for e in evs6))
 

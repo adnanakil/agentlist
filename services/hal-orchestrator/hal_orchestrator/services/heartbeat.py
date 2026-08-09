@@ -47,16 +47,9 @@ HEARTBEAT_PROMPT = """\
 [HEARTBEAT — automated check-in. The user did NOT text you and will never see \
 this prompt; they only see your reply if you send one.]
 
-I've ALREADY pulled the current time, the user's upcoming calendar, AND their \
-recent unread email for you (see "Gathered for you" below). Reason over THAT \
-plus the recent conversation — don't re-list or re-query what's already there. \
-ONE exception: before you ALERT about a specific email, call \
-google_gmail(action=read_email, message_id=<its id>) and read the FULL body \
-first. A subject/snippet is not the story — characterize the email by what it \
-actually says and lead with the concrete cause and fix ("API disabled because \
-the org is out of usage credits — top up / enable auto-reload"), never a vague \
-"action-needed on your account, go check". If you can't read the body, say \
-only what the snippet supports.
+I've ALREADY pulled the current time and the user's upcoming calendar for you \
+(see "Gathered for you" below). Reason over THAT plus the recent conversation \
+— don't re-list or re-query what's already there.
 
 You have TWO independent checks — do BOTH every time:
 
@@ -356,20 +349,10 @@ async def _gather_context(
             lines.append("Upcoming calendar:\n" + cal)
         except Exception:
             log.exception("heartbeat.gather_cal_failed", silo=silo)
-        try:
-            # Recent UNREAD email — so the cheap model SEES new deliveries /
-            # replies / confirmations without having to decide to look (it won't
-            # for an old order not in recent chat — that's how the projector
-            # delivery slipped through). Unread+recent naturally dedups: once the
-            # user reads it, it stops resurfacing.
-            mail = str(await execute_tool(
-                "google_gmail",
-                {"action": "list_emails", "query": "is:unread newer_than:1d", "max_results": 8},
-                ctx,
-            ))
-            lines.append("Recent unread email:\n" + mail)
-        except Exception:
-            log.exception("heartbeat.gather_mail_failed", silo=silo)
+        # Unread-email gathering removed 2026-07-27 with the gmail.readonly
+        # scope drop (no restricted scopes -> no annual CASA assessment). The
+        # delivery-directive machinery below stays but never fires without
+        # mail; restore the scope in services/google.py to re-enable.
         break
     return "\n\n".join(lines)
 
