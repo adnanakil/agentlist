@@ -117,3 +117,42 @@ New: **"A calmer way to keep up with baby's ‹word›."** where ‹word› cycl
 - [ ] Headline cycles naps → feeds → poops → milestones, with no layout shift
 - [ ] `prefers-reduced-motion` disables the animation
 - [ ] Headline is complete and sensible with JS off
+
+## Revision 2 — 2026-08-08 (Adnan): supersedes the rotator spec above
+
+Two corrections. **These override the previous revision; build to these.**
+
+### 1. Line break — the rotating word stays on line 2
+
+    line 1:  A calmer way to keep
+    line 2:  up with baby's ‹word›.
+
+The rotating word must sit on the **same line** as "up with baby's", not wrap to
+a third line. Two lines total. The previous three-line composite is void.
+
+### 2. Word list — drop "milestones"
+
+    naps → poops → feeds
+
+"milestones" is removed. This is what keeps the headline inside its space: the
+remaining words are 4-5 characters, so the reserved slot is narrow and the line
+length barely moves. Do not re-add a long word later without rechecking the
+break.
+
+### What this simplifies
+
+Reserved width is now just the widest of `poops.` / `feeds.` — a small,
+predictable box (outlined in the approved composite). The earlier concern about
+the line reflowing on every tick largely goes away, but **still reserve the
+width**; do not let the period or the following whitespace jitter.
+
+Everything else from the previous revision stands unchanged: light scrim,
+dark ink text, green CTA, WCAG AA on every hero element, `prefers-reduced-motion`
+renders one word statically, and the headline must be complete with JS off.
+
+### Watch the narrow breakpoints
+
+Two lines at desktop will not stay two lines on mobile. Pick the mobile break
+deliberately and keep the rotating word adjacent to "baby's" — a word alone on
+its own line, cycling, will look like a bug rather than a flourish. If that
+cannot be achieved at some width, render the word statically there and say so.
