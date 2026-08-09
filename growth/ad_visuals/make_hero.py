@@ -171,6 +171,7 @@ def main() -> int:
 
     OUT.mkdir(parents=True, exist_ok=True)
     dest = OUT / "hero-conversation.png"
+    phone_dest = OUT / "hero-phone.png"
     with sync_playwright() as p:
         b = p.chromium.launch()
         page = b.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
@@ -180,11 +181,28 @@ def main() -> int:
             " return t.scrollHeight - t.clientHeight; }"
         )
         page.screenshot(path=str(dest))
+        # Phone-only cut with alpha: the landing hero now places the phone as a
+        # real <img> in a grid (background images collided with the headline at
+        # unpredictable aspect ratios), so it needs the device alone on
+        # transparency. Shadow comes from CSS drop-shadow on the page.
+        page.evaluate(
+            "() => { document.body.style.background='transparent';"
+            " const w=document.querySelector('.warm'); if(w) w.remove();"
+            " const f=document.querySelector('.floor'); if(f) f.remove();"
+            " const ph=document.querySelector('.phone'); ph.style.boxShadow='none'; }"
+        )
+        clip = page.evaluate(
+            "() => { const r=document.querySelector('.phone').getBoundingClientRect();"
+            " return {x:Math.floor(r.x)-2, y:Math.floor(r.y)-2,"
+            " width:Math.ceil(r.width)+4, height:Math.ceil(r.height)+4}; }"
+        )
+        page.screenshot(path=str(phone_dest), omit_background=True, clip=clip)
         page.close()
         b.close()
     if clipped > 1:
         print(f"WARNING: thread overflows by {clipped}px — top message is cut off")
     print(f"{dest.relative_to(ROOT)}  ({dest.stat().st_size // 1024} KB, {W}x{H})")
+    print(f"{phone_dest.relative_to(ROOT)}  ({phone_dest.stat().st_size // 1024} KB, alpha)")
     return 0
 
 

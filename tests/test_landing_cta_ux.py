@@ -85,11 +85,17 @@ def test_rotating_headline_word():
     assert "'milestones.'" not in _LANDING_JS, "milestones was dropped by Adnan — do not re-add"
 
 
-def test_hero_uses_conversation_image():
-    """ENG-014: pastel conversation hero replaces the stock bottles photo."""
+def test_hero_phone_is_grid_column_not_background():
+    """2026-08-09: the phone is a real <img> in the hero grid. The previous
+    object-fit:cover background slid the phone into the headline at aspect
+    ratios other than 2:1 (live collision, reported by Adnan). Reverting to a
+    cover background reintroduces that bug at some viewport."""
     html = render_landing(NUMBER)
-    assert "/static/hero-conversation.png" in html, "hero image not swapped"
-    assert "donebottles" not in html.split('class="hero-media"')[1].split(">")[0]
+    assert 'class="hero-phone"' in html, "hero phone <img> missing"
+    assert "/static/hero-phone.png" in html, "hero phone asset not referenced"
+    assert 'class="hero-media"' not in html, "cover-background hero is back (collides)"
+    hero = html.split('class="hero"')[1].split("</section>")[0]
+    assert "donebottles" not in hero, "stock bottles photo back in the hero"
 
 
 def test_landing_js_external_not_inline():

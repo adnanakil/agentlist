@@ -141,6 +141,7 @@ _LANDING_JS = """
 _CODE_RX = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
 _BOTTLES_IMAGE = Path(__file__).parent.parent / "static" / "donebottles.png"
 _HERO_IMAGE = Path(__file__).parent.parent / "static" / "hero-conversation.png"
+_HERO_PHONE_IMAGE = Path(__file__).parent.parent / "static" / "hero-phone.png"
 
 
 def _pretty_number(raw: str) -> str:
@@ -266,7 +267,7 @@ def render_landing(
         else f' data-variant="{variant}"'
     )
     nav_cta = (
-        f'<a class="nav-cta" href="{sms_href}">Text HAL <span aria-hidden="true">↗</span></a>'
+        f'<a class="nav-cta" href="{sms_href}">Text HAL <span aria-hidden="true">→</span></a>'
         if number
         else '<a class="nav-cta" href="#start">Coming soon</a>'
     )
@@ -316,31 +317,34 @@ def render_landing(
   .nav-cta {{ background:var(--green); color:#fff; border-radius:999px;
     padding:11px 17px; text-decoration:none; display:inline-flex; gap:9px; align-items:center; }}
 
+  /* Hero is a real two-column grid: text | phone <img>. It was previously a
+     full-bleed background image with the phone baked in at 69% across — at
+     aspect ratios other than 2:1, object-fit:cover slid the phone left into
+     the headline (Adnan hit the collision live on 2026-08-09). Layout in the
+     grid means overlap is impossible at any viewport. The pastel gradient the
+     image carried is now plain CSS; text colours keep their ENG-014 AA picks. */
   .hero {{
     min-height:920px; position:relative; display:grid; place-items:center;
-    color:var(--green); background:#ece4f0; overflow:hidden; padding:130px 24px 90px;
-  }}
-  .hero-media {{
-    position:absolute; inset:0; z-index:0; width:100%; height:100%;
-    object-fit:cover; object-position:center; display:block;
-  }}
-  /* Light scrim over the pastel conversation image: near-opaque behind the
-     headline, fading out over the phone. Text on the hero is dark ink now —
-     every colour below was re-picked for AA on this background (ENG-014). */
-  .hero::before {{
-    content:""; position:absolute; inset:0; z-index:1;
-    background:linear-gradient(90deg, rgba(249,245,248,.92) 0%, rgba(249,245,248,.80) 34%,
-      rgba(247,243,247,.30) 59%, rgba(247,243,247,.05) 82%);
+    color:var(--green); overflow:hidden; padding:130px 24px 90px;
+    background:
+      radial-gradient(70% 100% at 74% 42%, rgba(255,255,255,.55) 0%,
+        rgba(255,255,255,.18) 45%, rgba(255,255,255,0) 75%),
+      linear-gradient(105deg, #efe2ea 0%, #ece1ef 30%, #e4e6f5 62%, #dfe9f7 100%);
   }}
   .hero::after {{
-    content:""; position:absolute; inset:0; z-index:1;
-    background:linear-gradient(0deg, rgba(228,219,233,.45), transparent 30%);
+    content:""; position:absolute; left:0; right:0; bottom:0; height:38%; z-index:0;
+    background:linear-gradient(0deg, rgba(206,190,214,.30), rgba(206,190,214,0));
   }}
-  .hero-inner {{ width:min(1280px, 100%); position:relative; z-index:2; text-align:left; }}
+  .hero-inner {{ width:min(1280px, 100%); position:relative; z-index:1; text-align:left;
+    display:grid; grid-template-columns:minmax(0,1fr) clamp(280px, 26vw, 380px);
+    gap:clamp(32px, 4vw, 72px); align-items:center; }}
+  .hero-phone {{ max-width:100%; max-height:min(74vh, 690px); width:auto; height:auto;
+    justify-self:end;
+    filter:drop-shadow(0 34px 60px rgba(86,60,102,.30)) drop-shadow(0 8px 18px rgba(86,60,102,.16)); }}
   .eyebrow {{ font-size:13px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; }}
   .hero .eyebrow {{ color:#48685a; }}
   .hero h1 {{
-    max-width:980px; margin:26px 0 28px; font-size:clamp(52px, 6.4vw, 92px);
+    max-width:980px; margin:26px 0 28px; font-size:clamp(48px, 5.6vw, 80px);
     line-height:.96; letter-spacing:-.025em; font-weight:500;
   }}
   .hero h1 .h1-l2 {{ display:block; }}
@@ -528,7 +532,9 @@ def render_landing(
 
   @media (max-width:980px) {{
     .hero {{ min-height:800px; }}
-    .hero-media {{ object-position:66% center; }}
+    /* Stack: text (CTA stays above the fold), phone below at product-shot size. */
+    .hero-inner {{ grid-template-columns:1fr; gap:44px; }}
+    .hero-phone {{ justify-self:center; max-height:460px; }}
     .intro-grid, .value-head, .privacy-panel, .faq-grid {{ grid-template-columns:1fr; }}
     .phone-row {{ grid-template-columns:1fr; gap:54px; }}
     .phone-wrap {{ min-height:620px; }}
@@ -553,10 +559,9 @@ def render_landing(
     .hero-chips {{ margin-top:24px; }}
     .cta-lg {{ font-size:19px; padding:18px 19px 18px 28px; gap:26px; }}
     .cta-lg .cta-arrow {{ width:36px; height:36px; font-size:17px; }}
-    .hero-media {{ object-position:70% center; }}
-    .hero::before {{ background:rgba(249,245,248,.86); }}
-    .hero::after {{ background:linear-gradient(0deg, rgba(228,219,233,.5), transparent 45%); }}
-    .hero h1 {{ font-size:clamp(44px, 13vw, 82px); }}
+    .hero-inner {{ gap:36px; }}
+    .hero-phone {{ max-height:420px; }}
+    .hero h1 {{ font-size:clamp(44px, 13vw, 80px); }}
     .scroll-cue {{ display:none; }}
     .intro-grid {{ gap:36px; }}
     .demo-header {{ margin-bottom:40px; }}
@@ -614,19 +619,23 @@ def render_landing(
 
   <main id="top">
     <section class="hero">
-      <img class="hero-media" src="/static/hero-conversation.png" alt="" fetchpriority="high">
       <div class="hero-inner">
-        <p class="eyebrow">HAL — the baby log that lives in your group chat.</p>
-        <h1>A calmer way to keep <span class="h1-l2">up with <span class="nw">baby's <span id="rotator" class="rot-word">naps.</span></span></span></h1>
-        <p class="hero-copy">HAL turns the family group chat into one reliable baby schedule—without asking anyone to learn another app.</p>
-        {hero_cta}
-        <div class="hero-chips" aria-label="Trust highlights">
-          <span class="chip">No account</span><span class="chip">No password</span><span class="chip">No app to install</span>
+        <div class="hero-text">
+          <p class="eyebrow">HAL — the baby log that lives in your group chat.</p>
+          <h1>A calmer way to keep <span class="h1-l2">up with <span class="nw">baby's <span id="rotator" class="rot-word">naps.</span></span></span></h1>
+          <p class="hero-copy">HAL turns the family group chat into one reliable baby schedule—without asking anyone to learn another app.</p>
+          {hero_cta}
+          <div class="hero-chips" aria-label="Trust highlights">
+            <span class="chip">No account</span><span class="chip">No password</span><span class="chip">No app to install</span>
+          </div>
+          <div class="hero-trust" aria-label="Privacy assurance">
+            <span class="trust-badge">Your number is never sold or shared</span>
+            <span class="trust-badge">Delete everything with one text</span>
+          </div>
         </div>
-        <div class="hero-trust" aria-label="Privacy assurance">
-          <span class="trust-badge">Your number is never sold or shared</span>
-          <span class="trust-badge">Delete everything with one text</span>
-        </div>
+        <img class="hero-phone" src="/static/hero-phone.png"
+          alt="Family group chat where HAL logs a feed and a nap and answers Grandma"
+          fetchpriority="high">
       </div>
       <div class="scroll-cue" aria-hidden="true">See how HAL helps</div>
     </section>
@@ -945,6 +954,17 @@ def build_landing_router() -> APIRouter:
     async def hero_image() -> FileResponse:
         return FileResponse(
             _HERO_IMAGE,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @router.get("/static/hero-phone.png", include_in_schema=False)
+    async def hero_phone_image() -> FileResponse:
+        # Transparent phone-only cut (growth/ad_visuals/make_hero.py). The hero
+        # lays it out as a grid column; the full hero-conversation.png remains
+        # served above for social/ads reuse but the page no longer loads it.
+        return FileResponse(
+            _HERO_PHONE_IMAGE,
             media_type="image/png",
             headers={"Cache-Control": "public, max-age=86400"},
         )

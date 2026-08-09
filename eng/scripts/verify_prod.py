@@ -190,11 +190,16 @@ check("landing.js is javascript",
 check("landing.js carries the desk gate + tap beacon + rotator",
       "desk" in js_body and "fetch('/tap'" in js_body and "rotator" in js_body)
 
-# ENG-014 hero: conversation image + rotating headline word, server-rendered.
-check("hero uses the conversation image",
-      "/static/hero-conversation.png" in ios_html)
-hero_img_status, _, _ = get("/static/hero-conversation.png")
-check("hero image serves 200", hero_img_status == 200, f"got {hero_img_status}")
+# ENG-014 hero (revised 2026-08-09): the phone is a grid <img>, not a cover
+# background — the background version collided with the headline at some
+# aspect ratios. If this reverts to hero-conversation.png as the page image,
+# the collision is back.
+check("hero uses the phone grid image",
+      '/static/hero-phone.png' in ios_html and 'class="hero-phone"' in ios_html)
+check("hero is not the old cover background",
+      'class="hero-media"' not in ios_html)
+hero_img_status, _, _ = get("/static/hero-phone.png")
+check("hero phone image serves 200", hero_img_status == 200, f"got {hero_img_status}")
 check("H1 rotator span present with a real word",
       'id="rotator"' in ios_html and ">naps.<" in ios_html)
 
