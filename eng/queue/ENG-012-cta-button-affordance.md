@@ -90,3 +90,27 @@ silently losing the SMS signal without noticing the tradeoff.
   supported width, drop the arrow at that breakpoint rather than breaking the
   label.
 - Tap instrumentation must still fire from every CTA afterwards.
+
+## DECIDED 2026-08-08 (Adnan) — build option A. No choice remains.
+
+    [  Text (646) 513-1421   →  ]
+
+**Option A: phone number + trailing right arrow. The speech-bubble icon is
+removed from the CTA.** Do not build B. Do not re-open the comparison.
+
+Rationale, so this is not re-litigated later: the label already reads
+"Text (646) 513-1421" — the verb plus a real phone number carries the SMS
+signal that ENG-004's speech bubble was added to provide. The icon became
+redundant once the number itself appeared in the label. ENG-004's underlying
+finding is intact and unchallenged: **the diagonal `↗` stays banned**, because
+it read as "navigates off-site". A plain `→` is an affordance cue, not a
+destination cue.
+
+Everything in the revision above still applies: trailing position, decorative
+(hidden from assistive tech, accessible name stays the number), consistent
+across hero pill / sticky mobile bar / closing CTA, contrast checked per
+background, no wrapping — drop the arrow at any width where the label would
+break instead.
+
+Note in `## Result` that this change closes EXP-011, whose arms are ended by
+altering the CTA.
