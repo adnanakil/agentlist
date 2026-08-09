@@ -58,3 +58,62 @@ part eng owns.
 - `make_hero.py` regenerates the asset, but it needs Playwright browsers, which
   are not installed on the Hal Mac. Treat the committed PNG as the source of
   truth; if the image needs changing, that is a growth request, not an eng fix.
+
+## Revision 2026-08-08 (Adnan) — pastel, upright, and a rotating last word
+
+The asset has been **replaced in place** (same path, same filename). It is now:
+- Pastel, using the same palette as the Instagram creatives
+  (`#f5dfe6 / #dfe9f7 / #e6e0f2`, blended), so hero and paid social match
+- **Upright — no rotation.** Do not re-add a tilt
+- 927 KB, down from 1.2 MB
+
+### The overlay has to change with it, and that is the real work here
+
+A composite against the current `.hero::before` was checked before filing.
+**The pastel does not survive it.** The gradient is
+`rgba(14,49,39, .94 → .82 → .35 → .08)` — tuned for the dark photo it replaces.
+Over a pastel image the right side reads as muddy grey-lavender, nothing like
+the Instagram creatives, and the point of the change is lost.
+
+Getting the intended look means inverting the hero's treatment:
+- Scrim becomes light rather than dark green — roughly
+  `rgba(249,244,247, .86 → .72 → .28 → .04 → 0)`, same stop positions
+- Headline and subhead flip to dark ink (`#153f32`), rotating word in green
+- CTA pill becomes solid brand green with white text (it currently relies on
+  being light-on-dark)
+- Eyebrow, trust chips and the trust badges under the CTA all need their colours
+  rechecked — several are currently pale-on-dark and will vanish on light
+
+Eng picks the exact values; the two composites Adnan approved are the target.
+**Contrast is not optional**: every text element over the new scrim must still
+pass WCAG AA (4.5:1 for body, 3:1 for large text). If a colour cannot hit that,
+change the colour rather than shipping it.
+
+### Headline: rotate the last word
+
+Current: "A calmer way to keep up with baby."
+New: **"A calmer way to keep up with baby's ‹word›."** where ‹word› cycles:
+
+    naps → feeds → poops → milestones
+
+- Cycle on a timer (~2s per word reads well; eng may tune), looping
+- Animate the swap — a short fade or slide. It should feel calm, not flashy;
+  the whole brand promise is "calmer"
+- The rotating word takes the accent colour, the rest stays ink
+- **Reserve the width** of the longest word ("milestones") so the line does not
+  reflow and shove the subhead and CTA around on every tick. Layout shift here
+  would be worse than no animation at all
+- **Respect `prefers-reduced-motion`**: when set, do not animate — render one
+  word statically. This is non-negotiable, not a nice-to-have
+- Server-render a real word (not an empty span) so the headline is complete
+  with JS disabled and for crawlers
+- Keep it one `<h1>`; do not split into multiple headings
+
+### Acceptance additions
+
+- [ ] Pastel hero renders with a light scrim; the phone and its bubbles are
+      clearly legible, and the pastel actually reads as pastel
+- [ ] All hero text passes WCAG AA against the new background
+- [ ] Headline cycles naps → feeds → poops → milestones, with no layout shift
+- [ ] `prefers-reduced-motion` disables the animation
+- [ ] Headline is complete and sensible with JS off

@@ -65,35 +65,36 @@ def build_html() -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   html,body {{ width:{W}px; height:{H}px; overflow:hidden; }}
+  /* Pastel family from the Instagram creatives (BACKDROPS in make_ads.py):
+     #f5dfe6 pink, #dfe9f7 blue, #e6e0f2 lilac — blended so the hero reads as
+     the same campaign rather than a different brand. */
   body {{
     font-family:'SF Pro Text','Helvetica Neue',Helvetica,Arial,sans-serif;
     -webkit-font-smoothing:antialiased;
     background:
-      radial-gradient(120% 90% at 12% 45%, #2a4f42 0%, #22443a 40%, #1b3a31 100%);
+      linear-gradient(105deg, #efe2ea 0%, #ece1ef 30%, #e4e6f5 62%, #dfe9f7 100%);
     position:relative;
   }}
-  /* Warm light from the right so the phone reads against the green overlay,
-     echoing the daylight in the photo this replaces. */
   .warm {{
     position:absolute; inset:0;
     background:
-      radial-gradient(75% 105% at 78% 40%, rgba(232,205,168,.55) 0%,
-                      rgba(206,178,142,.26) 38%, rgba(20,52,42,0) 72%);
+      radial-gradient(70% 100% at 74% 42%, rgba(255,255,255,.55) 0%,
+                      rgba(255,255,255,.18) 45%, rgba(255,255,255,0) 75%);
   }}
   .floor {{
-    position:absolute; left:0; right:0; bottom:0; height:34%;
-    background:linear-gradient(0deg, rgba(10,32,26,.55), rgba(10,32,26,0));
+    position:absolute; left:0; right:0; bottom:0; height:38%;
+    background:linear-gradient(0deg, rgba(206,190,214,.30), rgba(206,190,214,0));
   }}
 
-  /* Subject sits right-of-centre: under object-position 66-70% and clear of
-     the gradient that covers the left 34%. */
+  /* Subject sits right-of-centre so it clears the page's gradient overlay,
+     which covers the left third. Upright — no rotation. */
   .stage {{
-    position:absolute; top:50%; left:69%; transform:translate(-50%,-50%) rotate(-3deg);
+    position:absolute; top:50%; left:69%; transform:translate(-50%,-50%);
   }}
   .phone {{
     background:#111; border-radius:{42*DEV:.0f}px; padding:{9*DEV:.0f}px;
-    box-shadow:0 {46*DEV:.0f}px {96*DEV:.0f}px rgba(6,22,18,.5),
-               0 {8*DEV:.0f}px {20*DEV:.0f}px rgba(6,22,18,.35);
+    box-shadow:0 {40*DEV:.0f}px {84*DEV:.0f}px rgba(86,60,102,.28),
+               0 {8*DEV:.0f}px {20*DEV:.0f}px rgba(86,60,102,.18);
   }}
   .screen {{
     background:#fff; border-radius:{33*DEV:.0f}px;
