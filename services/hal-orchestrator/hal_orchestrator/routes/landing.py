@@ -340,8 +340,8 @@ def render_landing(
   .eyebrow {{ font-size:13px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; }}
   .hero .eyebrow {{ color:#48685a; }}
   .hero h1 {{
-    max-width:820px; margin:26px 0 28px; font-size:clamp(52px, 6.6vw, 96px);
-    line-height:.94; letter-spacing:-.025em; font-weight:500;
+    max-width:980px; margin:26px 0 28px; font-size:clamp(52px, 6.4vw, 92px);
+    line-height:.96; letter-spacing:-.025em; font-weight:500;
   }}
   .hero h1 .h1-l2 {{ display:block; }}
   .nw {{ white-space:nowrap; }}
