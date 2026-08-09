@@ -2,7 +2,7 @@
 
 - id: ENG-011
 - from: adnan
-- status: open
+- status: done
 - priority: P1
 - blast: green  # dependency approved by Adnan 2026-08-08
 - opened: 2026-08-08
@@ -163,3 +163,12 @@ ENG-012 (CTA arrow, option A) and ENG-014 (pastel hero + light scrim + rotating
 headline) also touch `landing.py` and are queued. Whichever runs after this one
 rebases onto a changed hero. Do them one at a time, deploying and verifying
 between — do not batch all three into a single deploy.
+
+### CLOSED 2026-08-08 late — deployed and verified; do not re-run
+
+The "staged, not deployed" status above is stale: the eng cycle deployed this
+(QR live in prod, verify_prod QR checks pass, /go/{code}qr attribution
+recording) and then wedged in its verify-polling loop before it could update
+this ticket, and was killed. The QR was additionally confirmed rendering on
+desktop in a real browser after ENG-015 unblocked the JS desk-gate. Nothing
+left to do.
