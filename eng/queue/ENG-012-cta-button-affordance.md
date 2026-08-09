@@ -43,3 +43,50 @@ change so the ledger stays honest about why the arms stopped.
 - [ ] Sticky mobile bar and closing CTA stay visually consistent with the hero
 - [ ] Tap instrumentation still fires from every CTA after the change
 - [ ] `## Result` states that EXP-011 is closed by this change
+
+## Revision 2026-08-08 (Adnan) — arrow goes AFTER the number
+
+Adnan, looking at the new green CTA on the light hero:
+"put an arrow -> like that or something after the number"
+
+So: **a right-pointing arrow, trailing, after the phone number**, inside the
+pill. Not leading, not replacing the label.
+
+    [  Text (646) 513-1421   →  ]
+
+### The speech bubble — resolve this deliberately, do not just drop it
+
+The original ticket said keep the speech-bubble icon, because ENG-004 added it
+on purpose: a `↗` had been signalling "navigates off-site" when the button
+actually opens Messages.
+
+That reasoning is weaker now, and eng should decide with it stated out loud:
+the button label already reads **"Text (646) 513-1421"** — the verb *Text* plus
+a literal phone number is a stronger SMS cue than any icon. The bubble may now
+be redundant decoration.
+
+Two acceptable outcomes, both were shown to Adnan:
+- **A** — number + trailing arrow, no bubble. Cleanest; the label carries the
+  meaning.
+- **B** — bubble + number + trailing arrow. Retains ENG-004's explicit signal
+  at the cost of a busier pill.
+
+Pick one, state which and why in `## Result`. What is NOT acceptable is
+silently losing the SMS signal without noticing the tradeoff.
+
+### Constraints
+
+- Arrow is a plain right arrow (→). **Never `↗`** — that is the external-link
+  glyph ENG-004 removed, and re-adding it would repeat a known mistake.
+- The arrow is decorative: it must not be announced by screen readers, and the
+  accessible name of the button must remain the phone number / "Text HAL".
+- Applies to the hero pill, the sticky mobile bar and the closing CTA — keep
+  all three consistent.
+- Under the new light hero (ENG-014) the pill is solid green with white text;
+  the arrow is white. Check contrast on whatever background each instance sits
+  on, not just the hero.
+- Do not let the arrow wrap to its own line at narrow widths, and do not let it
+  push the number to two lines. If the pill cannot fit both on the smallest
+  supported width, drop the arrow at that breakpoint rather than breaking the
+  label.
+- Tap instrumentation must still fire from every CTA afterwards.
