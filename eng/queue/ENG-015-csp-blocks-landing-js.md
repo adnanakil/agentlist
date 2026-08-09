@@ -2,7 +2,7 @@
 
 - id: ENG-015
 - from: adnan
-- status: open
+- status: done
 - priority: P0
 - blast: unset
 - opened: 2026-08-08
@@ -87,3 +87,22 @@ trust.
 If this is confirmed, EXP-006 and EXP-011 tap-rate readings are void and must be
 re-run after the fix. Do not conclude anything about CTA copy from them. The
 paused Google campaign was paused on a broken metric.
+## Result (ENG-012, ENG-014, ENG-015 — closed together)
+
+**Built and deployed directly by Adnan's interactive session on 2026-08-08
+evening** after the scheduled eng cycle wedged in a verify-polling loop (its
+grep pattern never matched verify_prod's success line; process killed). Commits
+0b0b27f + 4568aa1 + 14566a2. verify_prod: ALL checks pass, including the new
+CSP/JS/hero assertions. Confirmed live in a real browser, desktop and mobile.
+
+- ENG-015 (CSP): script-src 'self' + connect-src 'self'; all landing JS moved
+  to /static/landing.js; /go/ interstitial's CSP-dead inline script removed
+  (meta refresh carries it). Rotator observed cycling in production = JS
+  provably executing for the first time.
+- ENG-014 (hero): pastel conversation image, light scrim, all hero text
+  re-picked for contrast on light; H1 rotates naps./poops./feeds. with width
+  reserved, reduced-motion static, naps. server-rendered.
+- ENG-012 (option A): label + trailing plain → on hero/sticky/closing CTAs,
+  bubble SVG removed, ↗ asserted-against in tests.
+- EXP-011 is closed by these changes (CTA altered mid-flight, and its 0-tap
+  reading was measuring a blocked script anyway — see ledger).
