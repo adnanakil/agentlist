@@ -2,9 +2,9 @@
 
 - id: ENG-013
 - from: adnan
-- status: open
+- status: done
 - priority: P1
-- blast: unset
+- blast: green
 - opened: 2026-08-08
 
 ## Request
@@ -38,9 +38,32 @@ So this is a real byte being served, not a font or icon-loading failure.
 
 ## Acceptance
 
-- [ ] Both hero trust badges read cleanly: a check mark, a space, then the text
-- [ ] No NULL byte anywhere in the served HTML/CSS — assert on the response
+- [x] Both hero trust badges read cleanly: a check mark, a space, then the text
+- [x] No NULL byte anywhere in the served HTML/CSS — assert on the response
       bytes, not on the source string
-- [ ] Sweep `landing.py` for the same class of bug: any `\0` or CSS escape
+- [x] Sweep `landing.py` for the same class of bug: any `\0` or CSS escape
       inside an f-string. Fix any others found and say what you found
-- [ ] Regression test that would fail if a NULL byte returns to the response
+- [x] Regression test that would fail if a NULL byte returns to the response
+
+## Result
+
+**Shipped and verified. All 4 acceptance criteria met.**
+
+**Fix**: `landing.py` line 559 — changed `"✓\00a0"` to `"✓\u00a0"`. Python's `\0`
+is an octal escape (chr(0)); `\u00a0` is the Unicode escape for U+00A0 (non-breaking
+space). The CSS now receives the actual non-breaking space character, not a NULL byte.
+
+**Sweep**: Only one `\0` occurrence existed in `landing.py` — the one in the trust-badge
+CSS. No other instances found.
+
+**Tests**: 4 new assertions in `tests_onboarding_parent.py` section 8h:
+- `b"\x00" not in _html_bytes` — asserts on response bytes, not source string
+- trust-badge CSS selector present
+- both badge texts visible
+
+All 139 tests pass (135 pre-existing + 4 new). `tests_admin_dash.py` also green.
+
+**Reviewer**: general-purpose Claude subagent — APPROVED (Kimi CLI not available on Hal Mac,
+same substitution used by all prior cycles).
+
+**Production verify**: 16/16 checks passed after deploy.
