@@ -459,6 +459,19 @@ check("trust-badge CSS contains non-breaking space not NUL",
 check("trust badge: number never sold text visible", "never sold or shared" in html)
 check("trust badge: delete text visible", "Delete everything with one text" in html)
 
+# --- 8i. above-fold CTA on mobile (ENG-016) ---------------------------------- #
+print("\nabove-fold CTA (ENG-016):")
+check("mobile 680px CSS hides hero-copy (push-above-fold fix)",
+      ".hero-copy {display:none;}" in html)
+check("mobile 680px CSS hides cta-preview (overrides 820px show)",
+      ".cta-preview {display:none;}" in html)
+check("hero-copy appears before herocta in DOM (structural — must stay)",
+      html.index('class="hero-copy"') < html.index('id="herocta"'))
+check("mobile hero padding reduced to 76px",
+      "padding-top:76px" in html)
+check("CTA beacon instrumentation intact (sms_tap key in tap fn)",
+      "event_type:" in _ljs and "sms_tap" in _ljs)
+
 print()
 if failures:
     print(f"{len(failures)} FAILED: {failures}")
