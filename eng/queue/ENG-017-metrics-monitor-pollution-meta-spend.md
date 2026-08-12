@@ -1,11 +1,12 @@
-# ENG-016 — metrics.py: monitoring probes inflate landing views; Meta spend always $0.00
+# ENG-017 — metrics.py: monitoring probes inflate landing views; Meta spend always $0.00
 
-- id: ENG-016
+- id: ENG-017
 - from: adnan
 - status: open
 - priority: P1
 - blast: unset
 - opened: 2026-08-11
+- note: filed as ENG-016; renumbered — id collided with eng's own ENG-016 (shorter-landing-above-fold), third id race
 
 ## Request
 
