@@ -136,6 +136,22 @@ _LANDING_JS = """
       },2200);
     }
   }
+
+  // Scroll-depth beacons (2026-08-11): answers "do visitors scroll at all?".
+  // Quartiles fire once per pageload; event types are whitelisted server-side.
+  var sSent={};
+  function sDepth(){
+    var h=document.documentElement;
+    var total=h.scrollHeight-window.innerHeight;
+    if(total<=0) return 1;
+    return (window.pageYOffset||h.scrollTop||0)/total;
+  }
+  window.addEventListener('scroll',function(){
+    var d=sDepth();
+    [[.25,'scroll_25'],[.5,'scroll_50'],[.75,'scroll_75'],[.97,'scroll_100']].forEach(function(q){
+      if(d>=q[0]&&!sSent[q[1]]){sSent[q[1]]=1;tap(q[1]);}
+    });
+  },{passive:true});
 })();
 """
 _CODE_RX = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
@@ -238,10 +254,12 @@ def render_landing(
     hero_cta = (
         f'<div class="cta-block" id="herocta">'
         f'<div class="cta-preview"><span class="sms-bubble">"Hi HAL — new baby here 👶"</span><p class="sms-preview-hint">Tap to send · HAL replies instantly</p></div>'
+        f'<div class="cta-row">'
         f'<a class="number primary-cta cta-lg" href="{sms_href}">'
         f'<span>{label}</span><span class="cta-arrow" aria-hidden="true">→</span></a>'
-        f'<p class="cta-mob-hint">Opens your Messages app · one text to start.</p>'
         f'{qr_block}'
+        f'</div>'
+        f'<p class="cta-mob-hint">Opens your Messages app · one text to start.</p>'
         f'</div>'
         if number
         else '<p class="number soon">coming soon</p>'
@@ -579,13 +597,16 @@ def render_landing(
   @media (prefers-reduced-motion:reduce) {{ html {{ scroll-behavior:auto; }}
     .primary-cta, .sticky-cta {{ transition:none; }} }}
 
-  /* Desktop QR block — hidden on mobile, shown when JS adds .desk to <html>. */
+  /* Desktop QR block — hidden on mobile, shown when JS adds .desk to <html>.
+     Sits to the RIGHT of the CTA button (Adnan, 2026-08-11), sized down so the
+     button stays the loudest thing in the row. */
+  .cta-row {{ display:flex; align-items:center; gap:34px; flex-wrap:wrap; }}
   .qr-desk-block {{ display:none; }}
-  html.desk .qr-desk-block {{ display:flex; align-items:flex-start; gap:16px; margin-top:22px; }}
-  .qr-img svg {{ width:148px; height:148px; flex-shrink:0; border-radius:8px; display:block; }}
-  .qr-copy {{ display:flex; flex-direction:column; justify-content:center; }}
-  .qr-label {{ font-size:13px; color:#48685a; margin-bottom:8px; font-weight:500; line-height:1.4; }}
-  .qr-num {{ font-size:17px; font-weight:650; color:var(--green); letter-spacing:-.01em; }}
+  html.desk .qr-desk-block {{ display:flex; align-items:center; gap:13px; }}
+  .qr-img svg {{ width:104px; height:104px; flex-shrink:0; border-radius:8px; display:block; }}
+  .qr-copy {{ display:flex; flex-direction:column; justify-content:center; max-width:190px; }}
+  .qr-label {{ font-size:12px; color:#48685a; margin-bottom:6px; font-weight:500; line-height:1.35; }}
+  .qr-num {{ font-size:15px; font-weight:650; color:var(--green); letter-spacing:-.01em; }}
 
   /* Trust badges under the hero CTA chips */
   .hero-trust {{ display:flex; flex-wrap:wrap; gap:6px 20px; margin-top:16px; }}
@@ -779,7 +800,8 @@ def _client_id(request: Request) -> tuple[str, str]:
     return ip, request.headers.get("user-agent", "")
 
 
-_ALLOWED_EVENT_TYPES = {"sms_tap", "sms_copy"}
+_SCROLL_EVENTS = {"scroll_25", "scroll_50", "scroll_75", "scroll_100"}
+_ALLOWED_EVENT_TYPES = {"sms_tap", "sms_copy"} | _SCROLL_EVENTS
 
 
 async def _record_tap(

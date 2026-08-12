@@ -112,6 +112,24 @@ def test_tap_beacon_lives_in_landing_js():
     assert "keepalive:true" in _LANDING_JS
 
 
+def test_scroll_depth_beacons():
+    """2026-08-11: quartile scroll events, sent once each, whitelisted server-side."""
+    from hal_orchestrator.routes.landing import _ALLOWED_EVENT_TYPES
+
+    for ev in ("scroll_25", "scroll_50", "scroll_75", "scroll_100"):
+        assert f"'{ev}'" in _LANDING_JS, f"{ev} missing from landing.js"
+        assert ev in _ALLOWED_EVENT_TYPES, f"{ev} not whitelisted — would record as sms_tap"
+
+
+def test_qr_sits_beside_cta_button():
+    """2026-08-11: QR moved into the cta-row, right of the button, smaller."""
+    html = render_landing(NUMBER)
+    row = html.split('class="cta-row"')[1].split("</div></div>")[0]
+    assert "primary-cta" in row, "CTA button not inside cta-row"
+    assert "qr-desk-block" in html.split('class="cta-row"')[1].split('cta-mob-hint')[0], \
+        "QR block is not in the cta-row beside the button"
+
+
 def test_no_preview_when_no_number():
     html = render_landing("")
     assert "coming soon" in html
