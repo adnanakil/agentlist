@@ -25,6 +25,56 @@ META_AD_ACCOUNT = "act_40885463"
 META_API_VERSION = "v21.0"
 META_API_BASE = f"https://graph.facebook.com/{META_API_VERSION}"
 
+# Monitoring/verify probe UAs that produce is_bot=False and must be excluded
+# from landing-view counts. Add new probe UAs here; they are SQL literals (not
+# user input) so embedding them directly in the query is safe.
+_PROBE_UA_EXACT: tuple[str, ...] = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Version/17.0 Mobile Safari",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/120 Mobile",
+)
+_PROBE_UA_ILIKE: tuple[str, ...] = (
+    "%Verify/%",
+    "%facebookexternalhit%",
+    "%eng-verify-bot%",
+)
+
+
+def _load_growth_env() -> None:
+    """Load ~/.growth-env into os.environ when running outside supervisor context.
+
+    No-ops immediately if META_ACCESS_TOKEN is already set (supervisor already
+    sourced the file).  Otherwise reads ~/.growth-env line by line, strips an
+    optional leading ``export `` prefix, parses ``KEY=VALUE`` pairs (ignoring
+    blank lines and comments), and sets each key in os.environ only if it is not
+    already present.  Simple quoted values (matching outer ``"…"`` or ``'…'``)
+    are unquoted before storing.
+    """
+    if os.environ.get("META_ACCESS_TOKEN"):
+        return  # already available — supervisor sourced ~/.growth-env
+
+    env_path = pathlib.Path.home() / ".growth-env"
+    if not env_path.exists():
+        return
+
+    with env_path.open() as fh:
+        for raw_line in fh:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Strip optional leading "export "
+            if line.startswith("export "):
+                line = line[len("export "):]
+            if "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            # Strip matching outer quotes
+            if len(value) >= 2 and value[0] in ('"', "'") and value[-1] == value[0]:
+                value = value[1:-1]
+            if key and key not in os.environ:
+                os.environ[key] = value
+
 
 def db_url() -> str:
     out = subprocess.run(
@@ -69,11 +119,22 @@ async def households() -> tuple[int, dict[str, int], dict[str, int], dict[str, i
             GROUP BY 1 ORDER BY n DESC""",
             DAYS,
         )
+        # Build probe-UA exclusion clause from module-level constants.
+        # Exact-match literals joined with OR; ILIKE patterns likewise.
+        # Null user_agent rows are always counted (user_agent IS NULL short-circuits).
+        _exact_sql = " OR ".join(
+            f"user_agent = $${ua}$$" for ua in _PROBE_UA_EXACT
+        )
+        _ilike_sql = " OR ".join(
+            f"user_agent ILIKE $${pat}$$" for pat in _PROBE_UA_ILIKE
+        )
+        _probe_clause = f"({_exact_sql} OR {_ilike_sql})"
         view_rows = await conn.fetch(
-            """
+            f"""
             SELECT date(created_at) AS day, COUNT(*) AS n FROM hal_page_hits
             WHERE path = '/' AND NOT is_bot
               AND (utm_source IS NULL OR utm_source != 'verify-test')
+              AND (user_agent IS NULL OR NOT {_probe_clause})
               AND created_at > now() - make_interval(days => $1)
             GROUP BY 1 ORDER BY 1""",
             DAYS,
@@ -179,10 +240,9 @@ def ad_spend() -> dict[str, dict]:
     """
     g_spend = google_spend()
 
+    _load_growth_env()  # no-op if already set; guards direct callers that bypass main()
     meta_token = os.environ.get("META_ACCESS_TOKEN")
     m_spend = meta_spend(meta_token, DAYS) if meta_token else {}
-    if not meta_token:
-        print("WARNING: META_ACCESS_TOKEN not set — Meta spend data unavailable")
 
     # Collect all dates from either source
     all_dates = set(g_spend.keys()) | set(m_spend.keys())
@@ -199,6 +259,7 @@ def ad_spend() -> dict[str, dict]:
 
 
 def main():
+    _load_growth_env()
     total_households, new_by_day, new_by_source, views_by_day, tap_total = asyncio.run(households())
     spend_by_day = ad_spend()
     today = dt.date.today()
