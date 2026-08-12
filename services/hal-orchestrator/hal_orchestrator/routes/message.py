@@ -1373,11 +1373,22 @@ def build_message_router() -> APIRouter:
             return await finish(MessageResponse(reply="Conversation cleared."))
 
         # C3 forget-me: full silo deletion, code-level and deterministic —
-        # never model-mediated. Two-step: "forget me" arms it (marker on the
-        # profile), the exact phrase "delete everything" within 48h executes.
+        # never model-mediated. Two-step: "forget me" (or "delete me" and
+        # friends — FORGET_PHRASES) arms it (marker on the profile), the exact
+        # phrase "delete everything" within 48h executes.
         # 1:1 only — a group member can't erase another member's data.
-        _lower = user_text.strip().lower().rstrip(".!")
-        if not is_group and not body.internal and _lower in ("forget me", "/forget"):
+        from hal_orchestrator.services.optout import (
+            FORGET_PHRASES,
+            START_PHRASES,
+            STOP_PHRASES,
+            clear_stopped,
+            is_stopped,
+            mark_stopped,
+            normalize,
+        )
+
+        _lower = normalize(user_text)
+        if not is_group and not body.internal and _lower in FORGET_PHRASES:
             await update_profile(
                 session, silo,
                 forget_pending=datetime.now(UTC).isoformat(),
@@ -1427,12 +1438,46 @@ def build_message_router() -> APIRouter:
             return await finish(
                 MessageResponse(
                     reply=(
-                        "To erase everything, first text \"forget me\" so I "
-                        "know it's really you asking — then confirm with "
-                        "\"delete everything\"."
+                        "To erase everything, first text \"delete me\" (or "
+                        "\"forget me\") so I know it's really you asking — "
+                        "then confirm with \"delete everything\"."
                     )
                 )
             )
+
+        # STOP opt-out: carrier-style keywords, deterministic and 1:1 only —
+        # never model-mediated (services/optout.py). One confirmation reply,
+        # then total silence: the route answers nothing but START or the
+        # forget/delete flow above (which is why those blocks come first),
+        # and delivery.enqueue drops every proactive send to this silo.
+        if not is_group and not body.internal:
+            if _lower in STOP_PHRASES:
+                await mark_stopped(session, silo)
+                await session.commit()
+                return await finish(
+                    MessageResponse(
+                        reply=(
+                            "Understood — I'll stop texting you. This is the "
+                            "last message from me unless you reply START to "
+                            "resume. If you also want everything I have "
+                            "erased, text \"delete me\"."
+                        )
+                    )
+                )
+            if await is_stopped(session, silo):
+                if _lower in START_PHRASES:
+                    await clear_stopped(session, silo)
+                    await session.commit()
+                    return await finish(
+                        MessageResponse(
+                            reply=(
+                                "Welcome back 👋 You're opted back in — "
+                                "what can I help with?"
+                            )
+                        )
+                    )
+                log.info("optout.inbound_suppressed", silo=silo)
+                return await finish(MessageResponse(reply=""))
 
         # Echo guard: one of HAL's own canned failure replies arriving as an
         # inbound message means the bridge bounced our send back. Drop it —

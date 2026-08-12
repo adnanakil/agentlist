@@ -81,6 +81,15 @@ async def enqueue(
             }
         )
         return None
+    # STOP opt-out: a silo that texted STOP gets no outbound messages of any
+    # kind. Enforced here — the one choke point every proactive producer
+    # (reminders, cron, heartbeat, follow-ups, first-win, billing, growth,
+    # watches) shares — so no producer can forget to check.
+    from hal_orchestrator.services.optout import is_stopped
+
+    if await is_stopped(session, to):
+        log.info("outbox.suppressed_stopped", to=to)
+        return None
     if channel is None:
         channel = await channel_of(session, to)
     message_id = uuid.uuid4()

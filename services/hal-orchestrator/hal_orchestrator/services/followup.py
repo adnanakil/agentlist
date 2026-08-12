@@ -412,9 +412,17 @@ async def sweep_silo(
 
     now = datetime.now(timezone.utc)
 
-    # Respect a butt-out absolutely: a muted group gets no proactive anything.
+    # Respect a butt-out absolutely: a muted group gets no proactive anything,
+    # and a 1:1 user who texted STOP gets no follow-up scan at all (the outbox
+    # gate in delivery.enqueue would drop the send anyway — this skips the
+    # model work too).
     if is_group_id(silo) and await is_muted(session, silo):
         return 0
+    if not is_group_id(silo):
+        from hal_orchestrator.services.optout import is_stopped
+
+        if await is_stopped(session, silo):
+            return 0
     if await _recently_followed_up(session, silo):
         return 0
     # Cross-daemon courtesy: if anything (heartbeat/reminder/cron/brief) just

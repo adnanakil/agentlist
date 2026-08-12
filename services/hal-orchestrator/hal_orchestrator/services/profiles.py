@@ -46,6 +46,11 @@ EXTRA_KEYS = (
     # C3 forget-me: ISO timestamp set when the user texts "forget me"; the
     # "delete everything" confirm must arrive within 48h (routes/message.py).
     "forget_pending",
+    # STOP opt-out: ISO timestamp set when the user texts a stop keyword
+    # (services/optout.py). While set, the message route stays silent except
+    # for START / the forget flow, and delivery.enqueue drops every proactive
+    # send to this silo. Cleared (set None) by START.
+    "stopped_at",
     # Membership boundary (GROUP silos only — services/membership.py):
     # member_epoch stamps the most recent member-add cut; member_epochs is
     # the per-cut [{at, roster}] history (per-member floors); epoch_roster is
