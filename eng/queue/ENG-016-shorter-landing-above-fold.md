@@ -89,3 +89,14 @@ Combined effect: CTA button now sits ~290px from the top on a 375px-wide phone, 
 - `services/hal-orchestrator/tests_onboarding_parent.py`
 - `eng/queue/ENG-016-shorter-landing-above-fold.md`
 - `eng/reports/2026-08-09-ENG-016.md`
+
+## Addendum (2026-08-11 ~23:00, adnan session)
+
+Deploy-collision disclosure: this ticket's fix went live from the eng cycle's
+own deploy, then Adnan's laptop session deployed unrelated landing work at
+~22:05 from a tree that did not yet contain the (uncommitted, hal-only) fix —
+silently reverting it in prod for roughly 50 minutes. Caught during a routine
+sync, merged (a0737a1), redeployed; both changes now live together and the
+work is committed on all machines. Root cause is the known gap: cycles do not
+commit, and `railway up` ships whatever tree it runs from. Countermeasure
+applied tonight: sweep-commit eng's tree before any cross-machine deploy.
