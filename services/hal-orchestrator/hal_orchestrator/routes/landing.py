@@ -570,10 +570,15 @@ def render_landing(
   @media (max-width:680px) {{
     .site-nav {{ height:68px; }} .nav-links > a:not(.nav-cta) {{ display:none; }}
     .nav-cta {{ padding:9px 14px; }}
-    .hero {{ min-height:750px; padding-top:104px; }}
-    /* Tighter hero rhythm so the CTA clears the fold on a 667px-tall phone. */
-    .hero h1 {{ margin:20px 0 20px; }}
-    .hero .cta-block {{ margin-top:26px; }}
+    /* ENG-016: strip elements above the CTA so the button lands above the fold on
+       iPhone SE (375×667) without scrolling. hero-copy (~100px) and cta-preview
+       (~74px, shown at 820px) are the main offenders; hiding them + tightening
+       the hero brings the CTA to ~280px from top on a 375px screen. */
+    .hero {{ min-height:auto; padding-top:76px; }}
+    .hero-copy {{display:none;}}
+    .cta-preview {{display:none;}}
+    .hero h1 {{ margin:14px 0 16px; }}
+    .hero .cta-block {{ margin-top:16px; }}
     .hero-chips {{ margin-top:24px; }}
     .cta-lg {{ font-size:19px; padding:18px 19px 18px 28px; gap:26px; }}
     .cta-lg .cta-arrow {{ width:36px; height:36px; font-size:17px; }}
