@@ -1,0 +1,225 @@
+# Count-accuracy scenarios. The partner tracked against "8 to 12 feedings per
+# day"; a log that drops or double-counts feeds is worse than no log. Includes
+# the real speech-to-text noise ("How many feet have I done today").
+- id: prod-count-missed-1am-recount
+  category: baby-logging
+  description: '"You missed the one at 1am" — accept, add, restate the corrected total (real prod exchange)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-09T13:57:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: feed
+      at: '2026-08-09T01:24:00-07:00'
+      note: nursing
+    - kind: feed
+      at: '2026-08-09T13:52:00-07:00'
+      note: nursing both sides 20 min
+    history:
+    - role: user
+      text: '[+15550200002]: How many feeds so far?'
+    - role: model
+      text: 'Two feeds today: 1:24 AM and 1:52 PM.'
+    - role: user
+      text: '[+15550200002]: Because I fed in the early am '
+  message: '[+15550200002]: You missed the one at 1am'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: 'Adds the 1:00 AM feed as a separate entry (trace shows the write)
+      and restates the corrected total of three: 1:00 AM, 1:24 AM, 1:52 PM. Arguing
+      that 1:24 already covers it, or apologizing without writing the entry, is a
+      fail.'
+- id: prod-count-target-remaining
+  category: baby-logging
+  description: '"I need 8 to 12 feedings per day — how many more do I have left and what times" (real prod ask: arithmetic plus a schedule sketch)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-07T12:03:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: feed
+      at: '2026-08-07T00:43:00-07:00'
+      note: 15 min each side
+    - kind: feed
+      at: '2026-08-07T04:25:00-07:00'
+      note: nursing
+    - kind: feed
+      at: '2026-08-07T08:20:00-07:00'
+      note: 15 min each side
+    - kind: feed
+      at: '2026-08-07T11:55:00-07:00'
+      note: 25 minutes between both breasts
+  message: '[+15550200002]: I need about 8 to 12 feedings per day for him, how many
+    more do I have left for today and what times'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Counts four feeds so far (Pacific day), says 4-8 more to hit 8-12,
+      and sketches plausible times spaced ~2-3h through the Pacific evening. A wrong
+      current count, or times that ignore the family clock, fails. Medical advice
+      beyond simple arithmetic is not wanted.
+- id: prod-count-stt-garble-feet
+  category: baby-logging
+  description: 'Speech-to-text noise: "How many feet have I done today and how many diaper?" must be read as feeds/diapers, not corrected pedantically'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-08T19:11:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: feed
+      at: '2026-08-08T07:26:00-07:00'
+      note: 30 min session
+    - kind: feed
+      at: '2026-08-08T11:06:00-07:00'
+      note: both breasts 20 minutes each
+    - kind: diaper
+      at: '2026-08-08T07:26:00-07:00'
+      note: poop
+    - kind: feed
+      at: '2026-08-08T14:55:00-07:00'
+      note: 10 min right side
+  message: '[+15550200002]: How many feet have I done today and how many diaper?'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Answers the intended question directly — three feeds and one diaper
+      today — without teasing or correcting the transcription. Answering about
+      "feet" literally, or asking what they meant, is a fail.
+- id: prod-count-garbled-duration-clarify
+  category: baby-logging
+  description: '"Started feeding at 4:45 minutes each side" is ambiguous (4:45pm? 45 min?) — log what is safe, ask one tight question, do not guess silently'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-09T17:20:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+  message: '[+15550200002]: Started feeding at 4:45 minutes each side, and he had a
+    poo and pee diaper'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Logs the diaper unconditionally, logs the feed, and resolves the
+      garbled "4:45 minutes each side" either by asking one short clarifying question
+      or by stating explicitly which reading it logged so it can be corrected.
+      Silently picking an interpretation without flagging it is the failure mode.
+- id: prod-count-wet-diapers-only
+  category: baby-logging
+  description: '"How many wet diapers today?" filters by diaper contents, not total diaper count (real prod ask)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-07T16:40:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: diaper
+      at: '2026-08-07T03:05:00-07:00'
+      note: wet
+    - kind: diaper
+      at: '2026-08-07T07:30:00-07:00'
+      note: dirty
+    - kind: diaper
+      at: '2026-08-07T10:57:00-07:00'
+      note: wet and dirty
+    - kind: diaper
+      at: '2026-08-07T14:12:00-07:00'
+      note: wet
+  message: '[+15550200002]: How many wet diapers?'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: 'Answers three wet diapers (3:05 AM, 10:57 AM wet+dirty counts,
+      2:12 PM) — not four (total diapers) and not two (excluding the mixed one
+      without saying so). Stating the counting rule for the mixed diaper is a plus.'
+- id: prod-count-false-start-erase
+  category: baby-logging
+  description: '"He didn''t sleep at 545 btw, he ended up waking right after" — remove the false nap, keep the record clean (real founder exchange)'
+  silo: chat555000700600500400
+  is_group: true
+  sender: '+15550400001'
+  group_name: Baby log
+  now: '2026-06-28T19:40:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    baby:
+      name: Bazzy
+      birthdate: '2026-01-04'
+    baby_events:
+    - kind: nap_start
+      at: '2026-06-28T17:45:00-04:00'
+      note: went down for evening nap
+    - kind: wake
+      at: '2026-06-28T18:02:00-04:00'
+      note: woke
+  message: '[+15550400001]: He didn''t sleep at 545 btw, he ended up waking up right
+    after'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Erases or voids the 5:45 PM false-start nap (trace shows the
+      correction) and confirms plainly what remains. Keeping the phantom nap while
+      verbally agreeing, or deleting the wrong entry, is a fail.

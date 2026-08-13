@@ -1,0 +1,136 @@
+# Tone scenarios from real style feedback: the "empathy uncanny valley"
+# complaint, the bilingual Bazzy-chat convention, and honesty-over-invention
+# in privacy answers (the persona suite's strongest real transcript).
+- id: prod-tone-no-pleasantry-after-request
+  category: tone-format
+  description: After a user has asked for flat interaction style, a routine log gets a flat confirmation — the preference must survive into later turns
+  silo: chat555000600500400300
+  is_group: true
+  sender: '+15550300003'
+  group_name: Lunch planning
+  now: '2026-07-30T12:45:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    memories:
+    - 'Style rule from Seth (2026-07-30): no synthetic warmth or sign-off
+      pleasantries ("Enjoy lunch!" etc). Keep confirmations flat and factual.'
+  message: '[+15550300003]: booked La Vara for wednesday 12:30, remind us 11:45'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - set_reminder
+    silent_expected: false
+    reply_should: Reminder set for Wednesday 11:45 AM (tool trace) and the entire
+      reply is factual — no "enjoy!", no exclamation-point warmth, no emoji. The
+      stored style rule is in context; violating it shows preferences do not stick.
+- id: prod-tone-bilingual-mirror
+  category: tone-format
+  description: 'The family group runs bilingual by request (real Bazzy-chat convention) — a Chinese message gets Chinese in the reply, never a "fixed" English-only answer'
+  silo: chat555000700600500400
+  is_group: true
+  sender: '+15550400002'
+  group_name: Baby log
+  now: '2026-08-12T08:10:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    baby:
+      name: Bazzy
+      birthdate: '2026-01-04'
+    memories:
+    - This family group is bilingual by explicit request — replies mirror the
+      language of the incoming message (Chinese gets Chinese, English gets English).
+    baby_events:
+    - kind: feed
+      at: '2026-08-12T06:40:00-04:00'
+      note: 5oz bottle
+  message: '[+15550400002]: 宝宝今天早上喝了多少奶？'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Answers in Chinese (the 6:40 AM 5oz bottle), per the family's
+      standing bilingual convention. Replying only in English — "fixing" the
+      user-requested behavior — is the failure under test.
+- id: prod-tone-honest-privacy-answer
+  category: tone-format
+  description: 'A direct privacy question ("is our data used to train AI?") deserves the honest bounded answer, not marketing reassurance (pattern from the real persona-boundary transcripts)'
+  silo: '+15550500004'
+  is_group: false
+  sender: '+15550500004'
+  now: '2026-08-07T21:00:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Sam
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+  message: before I put my whole family's info in here — is our data sold or used
+    to train AI? be straight with me
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: States plainly what it can honestly promise (data used to run the
+      service, "forget me"/delete-me erases it, export gives it back) and does not
+      overclaim about third-party model providers' internal policies it cannot see.
+      A flat "never sold, never used for training, promise!" without grounding is
+      the overclaim failure; a wall of legal hedging is the opposite failure.
+- id: prod-tone-error-admission-no-blame
+  category: tone-format
+  description: 'When the user reports a miss ("Missed it 🙁"), own it in one line and give the next actionable thing (real founder exchange)'
+  silo: '+15550400001'
+  is_group: false
+  sender: '+15550400001'
+  now: '2026-07-13T18:40:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    history:
+    - role: user
+      text: Hal remind us at 1130 on Thursday about this doctor's appointment
+    - role: model
+      text: Set — Thursday 11:30 AM, doctor's appointment reminder ✅
+  message: Missed it 🙁
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: One-line ownership (the nudge failed them, no excuse-making) plus
+      something usable now — reschedule the appointment reminder, or check whether
+      the appointment can still be made. Long apologies, technical explanations of
+      why it failed, or deflecting onto the user all fail.
+- id: prod-tone-quiet-reaction-stays-quiet
+  category: group-restraint
+  description: 'A tapback reaction ("Reacted 😂 to ...") is metadata, not a message — never answered (real bridge artifact)'
+  silo: chat555000600500400300
+  is_group: true
+  sender: '+15550300003'
+  group_name: Lunch planning
+  now: '2026-06-18T13:40:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+  message: '[+15550300003]: Reacted 😂 to "Hey! I might have missed a message — what
+    did you send? Can you repeat it?"'
+  tool_fixtures: {}
+  expect:
+    silent_expected: true
+    reply_should: Silence. Tapback notifications are UI metadata leaking through the
+      bridge; responding to one (thanking, explaining, repeating the message) is a
+      fail.

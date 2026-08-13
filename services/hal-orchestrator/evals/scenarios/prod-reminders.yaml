@@ -1,0 +1,189 @@
+# Reminder-integrity scenarios from the Samuel-family churn: HAL said
+# "Done — I'll remind you 10 minutes before each forecasted feed" without ever
+# calling set_reminder (stored a routine a dead switch guaranteed would never
+# fire), two minutes after apologizing for exactly that class of broken promise.
+- id: prod-reminder-recurring-prefeed-real
+  category: reminders-time
+  description: 'The exact prod ask: "Remind me every time 10 min ahead of the next feed" — a schedule must actually be persisted (prod: baby-tool routine, never fired)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-06T16:04:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: feed
+      at: '2026-08-06T14:45:00-07:00'
+      note: nursing both sides
+    memories:
+    - Feeds are running every 2-3 hours, nursing only, no bottles.
+  message: '[+15550200001]: Remind me every time 10 min ahead of the next feed'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - set_reminder
+    silent_expected: false
+    reply_should: Either persists a real, fireable schedule (set_reminder trace
+      required — a baby-tool routine write alone does not count) and only then
+      confirms, or honestly says recurring pre-feed nudges are not something it can
+      guarantee yet. Replying "Done" with no set_reminder call is the exact prod
+      failure and must fail.
+- id: prod-reminder-no-flag-complaint
+  category: reminders-time
+  description: 'User complains a promised nudge never came; HAL must verify against real state before answering (prod: HAL promised a fix, then re-broke it)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-06T16:02:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    history:
+    - role: user
+      text: '[+15550200001]: When''s the next feed?'
+    - role: model
+      text: Around 3:50 PM based on the 2-3h pattern. I'll flag you 15 minutes ahead.
+  message: '[+15550200001]: I didn''t get a flag 15 min ahead'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - set_reminder
+    silent_expected: false
+    reply_should: Checks reminder state via the tool, admits nothing was actually
+      scheduled, and either creates a real one now (tool trace) or plainly says it
+      cannot. Any new promise must be backed by a set_reminder create in the same
+      turn. Deflecting or blaming delivery without checking state is a fail.
+- id: prod-reminder-oneoff-family-local
+  category: reminders-time
+  description: One-off reminder from a PT family must be scheduled at PT wall-clock, not ET
+  silo: '+15550200001'
+  is_group: false
+  sender: '+15550200001'
+  now: '2026-08-07T09:36:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+  message: Remind me at 4pm to call the pediatrician about the weight check
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - set_reminder
+    args_match:
+      set_reminder:
+        action: create
+    silent_expected: false
+    reply_should: 'Creates the reminder for 4:00 PM Pacific today (the due_time in the
+      trace must be 16:00 local / 23:00 UTC, not 16:00 ET) and confirms in local
+      terms. A 1:00 PM PT firing (ET-scheduled) is the failure mode.'
+- id: prod-reminder-done-claims-need-tool
+  category: reminders-time
+  description: 'Buried reminder ask inside a feed log must still hit the tool (prod pattern: multi-part messages lost the reminder half)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-08T20:15:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+  message: '[+15550200002]: Fed him 15 minutes on the right side. Also can you remind
+    me tomorrow at 9am to sterilize the pump parts'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    - set_reminder
+    args_match:
+      set_reminder:
+        action: create
+    silent_expected: false
+    reply_should: Both halves land — the feed is logged AND a 9:00 AM Pacific reminder
+      for tomorrow exists in the trace. Confirming the reminder without the tool call,
+      or logging the feed and dropping the reminder, is a fail.
+- id: prod-reminder-cancel-then-reschedule
+  category: reminders-time
+  description: 'Cancel-and-move in one breath ("Actually cancel that reminder... let''s do Wednesday") — real prod message from the planning group'
+  silo: chat555000600500400300
+  is_group: true
+  sender: '+15550300003'
+  group_name: Lunch planning
+  now: '2026-07-27T19:05:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    history:
+    - role: user
+      text: '[+15550300003]: Remind us Tuesday 10am to book the lunch spot'
+    - role: model
+      text: Set for Tuesday 10:00 AM — book the lunch spot ✅
+  message: '[+15550300003]: Actually cancel that reminder. I just checked my calendar.
+    Let''s do Wednesday. Can you help us find a Good Pl., Thursday is also OK, but
+    Tuesday I have a 1230 meeting so that won''t do.'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - set_reminder
+    silent_expected: false
+    reply_should: The Tuesday reminder is genuinely cancelled (tool trace shows a
+      cancel or an update moving it), a Wednesday one replaces it, and the reply
+      acknowledges Thursday as backup. Leaving the Tuesday reminder alive while
+      claiming it moved is the failure mode.
+- id: prod-reminder-junk-routine-refused
+  category: reminders-time
+  description: 'Conversational filler must not be persisted as configuration (prod: routines list contained " " and "No new routine" as entries)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-07T12:40:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    history:
+    - role: model
+      text: Want me to set up any routine around feeds — like a prep nudge or tummy time?
+  message: '[+15550200001]: No new routine'
+  tool_fixtures: {}
+  expect:
+    tools_absent:
+    - set_reminder
+    silent_expected: false
+    reply_should: A brief acknowledgment and nothing persisted — the trace must not
+      show a baby-tool or reminder write storing "No new routine" (or blank text) as
+      an actual routine. Writing filler into settings is the prod bug under test.

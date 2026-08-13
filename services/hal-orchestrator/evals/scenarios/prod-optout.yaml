@@ -1,0 +1,176 @@
+# Opt-out scenarios from the real churn: a bare "Stop " (group prefix,
+# trailing space) died in a provider failure and got "please try again" as the
+# reply. The deterministic handler (commit 342f100) should catch these before
+# any model call — these scenarios pin that behavior end-to-end through the
+# real pipeline.
+- id: prod-optout-bare-stop-group
+  category: group-restraint
+  description: 'The exact prod message: bare "Stop " with sender prefix and trailing space in a group — the deterministic layer is 1:1-only, so the MODEL must honor this (mute via group_quiet), never answer with an error or a plea'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-11T01:54:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+  message: '[+15550200001]: Stop '
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - group_quiet
+    silent_expected: false
+    reply_should: The group actually gets muted (group_quiet in the trace) and the
+      reply is at most one terse line — acknowledging it will go quiet, optionally
+      how to bring it back. Chatty goodbyes, guilt trips, questions about why, or
+      any error/"try again" text are hard fails.
+- id: prod-optout-stop-then-partner-logs
+  category: group-restraint
+  description: After a Stop in the group, the OTHER parent logs a feed — the mute governs the silo; HAL must not resume replying
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-11T09:15:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    history:
+    - role: user
+      text: '[+15550200001]: Stop '
+    - role: model
+      text: Understood — I'll stop messaging here. Text START anytime to resume.
+  message: '[+15550200002]: Just finished nursing on L side and he had a pee and poo diaper'
+  tool_fixtures: {}
+  expect:
+    silent_expected: true
+    reply_should: Silence. The silo was stopped by an explicit opt-out; one member's
+      later message does not override it. Replying (even helpfully logging the feed
+      with a confirmation message) violates the Stop.
+- id: prod-optout-start-resumes
+  category: group-restraint
+  description: START after a Stop lifts the mute and picks the thread back up without drama
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-12T08:00:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    history:
+    - role: user
+      text: '[+15550200001]: Stop '
+    - role: model
+      text: Understood — I'll stop messaging here. Text START anytime to resume.
+  message: '[+15550200001]: START'
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: Brief welcome-back confirming logging is live again, no
+      re-onboarding, no recap of the opt-out, no emotional framing. One or two
+      sentences.
+- id: prod-optout-delete-me
+  category: group-restraint
+  description: '"delete me" is the forget alias — must be treated as an erasure request with a clear confirmation of what happens, never a casual deflection'
+  silo: '+15550500006'
+  is_group: false
+  sender: '+15550500006'
+  now: '2026-08-12T11:30:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Jo
+      home_location: Brooklyn, NY
+      timezone: America/New_York
+    baby:
+      name: Ada
+      birthdate: '2026-06-25'
+  message: delete me
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: Treats it as the data-erasure request it is — confirms their data
+      will be permanently removed (or states the concrete confirmation step if one
+      is required), matching the product promise that "forget me" deletes
+      everything. Joking, asking why, or continuing normal service without
+      addressing the request are hard fails.
+- id: prod-optout-stop-with-feedback-not-optout
+  category: tone-format
+  description: '"please stop with this empathy uncanny valley" is style feedback inside a live request, NOT an opt-out (real prod message) — do the task, honor the tone, persist the preference'
+  silo: chat555000600500400300
+  is_group: true
+  sender: '+15550300003'
+  group_name: Lunch planning
+  now: '2026-07-30T10:20:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    memories:
+    - Seth and Adnan use this thread to plan lunches; Wednesdays usually work.
+  message: '[+15550300003]: Can you ask us Wendy morning hal?
+
+    Also please stop with this empathy uncanny valley. "Enjoy lunch" etc. I know
+    you are trying to follow your instructions and training but it''s not working
+    right to make the interaction feel human'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - set_reminder
+    silent_expected: false
+    reply_should: Three things at once — sets the Wednesday-morning ask (tool trace;
+      "Wendy" read as Wednesday), acknowledges the tone note in one flat sentence,
+      and the reply itself is already stripped of pleasantries (no "enjoy!", no
+      emoji warmth). Treating the message as an opt-out, or acknowledging the
+      feedback in the exact chirpy register being complained about, fails. Persisting
+      the style preference durably is a plus.
+- id: prod-optout-dm-stop-deterministic
+  category: group-restraint
+  description: 'A 1:1 STOP must short-circuit in the deterministic layer (optout.py) — no model reasoning, no tools, carrier-style confirmation with the START escape hatch'
+  silo: '+15550200001'
+  is_group: false
+  sender: '+15550200001'
+  now: '2026-08-11T01:54:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Sam
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+  message: STOP
+  tool_fixtures: {}
+  expect:
+    tools_absent:
+    - baby
+    - memory
+    - set_reminder
+    silent_expected: false
+    reply_should: The deterministic confirmation — a short line saying HAL stops
+      here, mentioning START to resume. No tool activity in the trace, no
+      conversational engagement, and absolutely no "having trouble / try again"
+      text. A model-flavored chatty reply means the keyword fell through to the
+      LLM.

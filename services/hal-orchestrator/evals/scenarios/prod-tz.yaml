@@ -1,0 +1,160 @@
+# Timezone scenarios from the Samuel-family churn (2026-08-06..11): family tz
+# was captured correctly on day one, yet logged times ran 3h off for four days
+# because conversion happened per-turn in the model. Anonymized: PT family
+# "Noah", numbers in the +1555 test range.
+- id: prod-tz-log-in-family-time
+  category: baby-logging
+  description: 'PT family logs a feed; entry and reply must be family-local, not ET (prod: entries logged 3h off)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-08T14:59:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    memories:
+    - 'Family is in San Diego — all times Pacific. They corrected HAL about this once already.'
+  message: '[+15550200001]: Just finished nursing on L side and he had a pee and poo diaper'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Logs the feed and diaper now, and any time it states reads as Pacific
+      (about 2:59 PM, or simply "just now") — never an Eastern-shifted time like 5:59 PM.
+      Mentioning a wrong-timezone clock time is a fail even if the log itself is right.
+- id: prod-tz-correction-sticks
+  category: baby-logging
+  description: 'User corrects the clock ("it is currently 11:13AM here"); HAL must accept, fix tz, and restate correctly (prod day-1 exchange)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-06T11:13:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    history:
+    - role: user
+      text: '[+15550200002]: Last feed was at 9:55AM'
+    - role: model
+      text: Logged the 9:55 AM feed ✅ Next feed window is around 12:55 PM.
+    - role: user
+      text: '[+15550200002]: It''s 2-3 hour feeds and he is nursing, no bottles as of now'
+    - role: model
+      text: Noted — nursing every 2-3 hours, no bottles.
+  message: '[+15550200002]: The time is wrong it''s currently 11:13AM in San Diego'
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: Accepts the correction without arguing, confirms the family runs on
+      Pacific time (11:13 AM now), and if it restates the feed schedule the times are
+      Pacific-consistent. Doubling down on the wrong clock, or a vague apology that
+      does not confirm the corrected time, is a fail.
+- id: prod-tz-remember-we-are-pst
+  category: memory-recall
+  description: 'A terse "Remember we are PST" after days of drift must persist as durable state, not just an apology (prod: correction never stuck)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-10T02:11:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/New_York
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    history:
+    - role: user
+      text: '[+15550200001]: Just finished nursing on L side and he had a pee and poo diaper '
+    - role: model
+      text: Logged left-side nursing plus a pee/poo diaper at 5:10 AM ✅
+  message: '[+15550200001]: Remember we are PST'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - profile
+    silent_expected: false
+    reply_should: Persists the Pacific timezone via a real tool write (profile/memory
+      trace must show it) and corrects the just-logged entry's stated time to ~2:10 AM
+      Pacific. A bare "got it, you're PST" with no durable write is exactly the prod
+      failure and must fail.
+- id: prod-tz-count-crosses-local-midnight
+  category: baby-logging
+  description: 'Feed count for "today" must use the family-local day boundary; an ET boundary drops the 11pm PT feed (prod: "are you counting the am?")'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-09T13:55:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: feed
+      at: '2026-08-08T23:05:00-07:00'
+      note: nursing both sides
+    - kind: feed
+      at: '2026-08-09T01:00:00-07:00'
+      note: nursing
+    - kind: feed
+      at: '2026-08-09T05:15:00-07:00'
+      note: nursing 15 min right
+    - kind: feed
+      at: '2026-08-09T10:40:00-07:00'
+      note: nursing both sides 20 min
+  message: '[+15550200002]: How many feeds so far?'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: 'Answers three feeds today (1:00 AM, 5:15 AM, 10:40 AM Pacific) —
+      the 11:05 PM feed belongs to yesterday. Counting four (Eastern day boundary) or
+      two (dropping the 1 AM as "yesterday") is a fail. Times, if listed, are Pacific.'
+- id: prod-tz-onboard-sets-tz-from-city
+  category: baby-logging
+  description: 'Birth announcement with time and city must set family tz from the city at onboarding (prod: captured correctly — keep it that way)'
+  silo: '+15550200001'
+  is_group: false
+  sender: '+15550200001'
+  now: '2026-08-06T10:38:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: ''
+      timezone: America/New_York
+  message: Hi Hal, new baby born today. Noah born at 1:25AM August 6th in San Diego, CA
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Creates the baby with birthdate Aug 6 and treats the family as
+      Pacific-time (San Diego) going forward — the reply's stated times must be
+      Pacific. Congratulates briefly without medical advice. Leaving the family on
+      Eastern time after being told San Diego is a fail.

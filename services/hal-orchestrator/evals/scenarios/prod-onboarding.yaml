@@ -1,0 +1,148 @@
+# Onboarding scenarios from the five real stranger arrivals. Every paid
+# household opened with the SMS prefill; three of five never sent a second
+# meaningful message. Also covers the K'hloe ambiguity: "27 weeks 1 day" was
+# silently treated as baby age (birthdate backdated 27 weeks) when it could
+# equally be a pregnancy.
+- id: prod-onboard-prefill-first-touch
+  category: baby-logging
+  description: 'The ad prefill ("Hi HAL — new baby here 👶 What can you do?") — the first reply decides retention; concrete, short, one clear next step'
+  silo: '+15550500001'
+  is_group: false
+  sender: '+15550500001'
+  now: '2026-08-12T09:26:00-05:00'
+  internal: false
+  seed: {}
+  message: Hi HAL — new baby here 👶 What can you do?
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: Short and concrete — names 2-4 real capabilities (log feeds/naps/
+      diapers by text, shared family thread, next-nap forecast, export) and ends with
+      ONE easy next step such as telling it the baby's name or logging the last feed.
+      A wall of features, multiple questions at once, or generic chatbot pleasantries
+      are the churn pattern and must fail.
+- id: prod-onboard-gestational-ambiguity
+  category: baby-logging
+  description: '"K''hloe 27 weeks 1 day" — pregnant or born? Must ask or state its reading, never silently backdate a birthdate (real prod bug: birthdate set 27 weeks back)'
+  silo: '+15550500002'
+  is_group: false
+  sender: '+15550500002'
+  now: '2026-08-10T13:20:00-05:00'
+  internal: false
+  seed:
+    history:
+    - role: user
+      text: Hi HAL — new baby here 👶 What can you do?
+    - role: model
+      text: I keep your baby's feeds, naps and diapers in one shared text thread.
+        What's your baby's name?
+  message: Kai Lawrence 27 weeks 1 day
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: Recognizes "27 weeks 1 day" is ambiguous between a 27-week
+      pregnancy and a baby who is 27 weeks old, and either asks which one it is or
+      states its interpretation explicitly and invites correction. Silently
+      computing and storing a birthdate 27 weeks in the past — the prod behavior —
+      is the failure under test.
+- id: prod-onboard-expecting-february
+  category: baby-logging
+  description: '"They will be born in February 2027" — an expecting family, not a born baby; no phantom birthdate, offer what works pre-birth (real prod arrival)'
+  silo: '+15550500003'
+  is_group: false
+  sender: '+15550500003'
+  now: '2026-08-08T02:30:00-04:00'
+  internal: false
+  seed:
+    history:
+    - role: user
+      text: New baby here
+    - role: model
+      text: Congratulations! I track feeds, naps and diapers by text. What's your
+        baby's name and when were they born?
+  message: They will be born in February 2027
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: Understands the baby is not born yet, does not record a birthdate
+      or start feed tracking, and says plainly what it can do now versus once the
+      baby arrives. Congratulating them on a birth that has not happened, or logging
+      a February 2027 "birthdate" as fact, fails.
+- id: prod-onboard-terse-then-silence-no-push
+  category: proactive-judgment
+  description: 'A one-word onboarding answer ("Samuel. Born today") deserves a complete, self-sufficient reply — the family may never text again (3 of 5 real arrivals went silent)'
+  silo: '+15550500004'
+  is_group: false
+  sender: '+15550500004'
+  now: '2026-08-06T10:34:00-07:00'
+  internal: false
+  seed:
+    history:
+    - role: user
+      text: Hi HAL — new baby here 👶 What can you do?
+    - role: model
+      text: Congrats! I log feeds, naps and diapers over text and keep the whole
+        family on one thread. What's your baby's name?
+  message: Samuel. Born today
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Creates the baby (born today) and the reply stands alone — a warm
+      one-liner plus exactly one concrete action they could take next (log the last
+      feed, add the other parent to a group). No interrogation, no list of ten
+      features, nothing that requires further setup to be useful.
+- id: prod-onboard-add-partner-group
+  category: baby-logging
+  description: The move that made the one retained family work — parent asks how to get their partner on the thread; the answer must be the group-chat mechanic, stated simply
+  silo: '+15550500004'
+  is_group: false
+  sender: '+15550500004'
+  now: '2026-08-06T10:36:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Sam
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+  message: Can my wife log stuff too?
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: 'Yes, plus the one concrete step: add HAL''s number to a group
+      text with her (or add her to this thread) and both parents log to the same
+      record. Anything requiring an app, account, or link contradicts the product
+      and fails.'
+- id: prod-onboard-what-can-you-do-existing
+  category: tone-format
+  description: An already-onboarded family asking "what else can you do" gets capabilities grounded in their own data, not a sales pitch
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-09T15:22:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: feed
+      at: '2026-08-09T10:40:00-07:00'
+      note: nursing both sides
+  message: '[+15550200001]: what else can you do'
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: Names capabilities they have not used yet (summaries, export,
+      next-feed estimates, reminders) with an example phrased in Noah's terms.
+      Re-explaining what they already do daily, or a generic marketing list, is
+      lazy and fails.

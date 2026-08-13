@@ -116,3 +116,15 @@ expect:
 - Memory seeds have no embeddings; recall exercises the non-semantic path
   while Gemini embedding credits are depleted (matches current prod, ironically).
 - Turns run sequentially by design; trace/usage capture is process-global.
+
+## The prod- corpus (added 2026-08-12)
+
+The `scenarios/prod-*.yaml` files (49 scenarios, multi-doc lists) are distilled
+from real production conversations — the Samuel-family churn (timezone drift,
+the unkept reminder promise, the group "Stop"), the founder family's analytics
+usage, real onboarding arrivals, and real spam inbound. Phone numbers are
+remapped to the +1555 test range and names pseudonymized; message text keeps
+the original garbling (speech-to-text noise, typos, tapback artifacts) because
+that noise is what production actually looks like. Each scenario's comment
+header names the incident it came from. ENG-020/021/022 acceptance re-runs
+lean on these as the regression net.

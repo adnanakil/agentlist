@@ -1,0 +1,189 @@
+# Analytics scenarios from the founder family's real power usage: wake-window
+# averages, week-over-week wake times, forecast honesty about incomplete data.
+# This is what month-two retention looks like — the suite should protect it.
+- id: prod-analytics-wake-times-week
+  category: baby-logging
+  description: '"What was the morning wake up time for the past week?" — a per-day list from real events, no invented days (real founder ask)'
+  silo: chat555000700600500400
+  is_group: true
+  sender: '+15550400002'
+  group_name: Baby log
+  now: '2026-08-12T09:30:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    baby:
+      name: Bazzy
+      birthdate: '2026-01-04'
+    baby_events:
+    - kind: wake
+      at: '2026-08-07T06:12:00-04:00'
+      note: morning wake
+    - kind: wake
+      at: '2026-08-08T06:30:00-04:00'
+      note: morning wake
+    - kind: wake
+      at: '2026-08-09T06:00:00-04:00'
+      note: morning wake
+    - kind: wake
+      at: '2026-08-10T06:20:00-04:00'
+      note: morning wake
+    - kind: wake
+      at: '2026-08-11T06:45:00-04:00'
+      note: morning wake
+  message: '[+15550400002]: What was Bazzy''s morning wake up time for the past week?'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Lists the five recorded mornings with their times and does not
+      fabricate entries for the missing days — saying two days have no morning wake
+      logged is correct behavior. Inventing times for unlogged days is the failure
+      mode.
+- id: prod-analytics-avg-wake-window-omit-incomplete
+  category: baby-logging
+  description: 'Average wake window with one incomplete day — the incomplete day must be omitted AND the omission stated (real founder exchange: "Mon omitted—first nap wake is missing")'
+  silo: chat555000700600500400
+  is_group: true
+  sender: '+15550400002'
+  group_name: Baby log
+  now: '2026-08-09T20:00:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    baby:
+      name: Bazzy
+      birthdate: '2026-01-04'
+    baby_events:
+    - kind: wake
+      at: '2026-08-07T06:12:00-04:00'
+      note: morning wake
+    - kind: nap_start
+      at: '2026-08-07T09:12:00-04:00'
+      note: first nap
+    - kind: wake
+      at: '2026-08-08T06:30:00-04:00'
+      note: morning wake
+    - kind: nap_start
+      at: '2026-08-08T08:34:00-04:00'
+      note: first nap
+    - kind: nap_start
+      at: '2026-08-09T09:40:00-04:00'
+      note: first nap (morning wake never logged today)
+  message: '[+15550400002]: For the past few days, what has been the average wake
+    window between morning wake up and the first nap?'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: 'Computes from the two complete pairs (3h00m and 2h04m — average
+      about 2h32m), explicitly says today is omitted because the morning wake is
+      missing, and does not guess it. Averaging with an assumed wake time, or hiding
+      the omission, fails.'
+- id: prod-analytics-blended-vs-specific
+  category: baby-logging
+  description: 'User probes whether a stat is specific or blended ("Is that also the first wake window?") — the distinction must be stated honestly (real founder exchange)'
+  silo: chat555000700600500400
+  is_group: true
+  sender: '+15550400002'
+  group_name: Baby log
+  now: '2026-07-25T14:10:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    baby:
+      name: Bazzy
+      birthdate: '2026-01-04'
+    history:
+    - role: user
+      text: '[+15550400002]: What''s baby''s typical wake window length between naps
+        from the last two weeks?'
+    - role: model
+      text: From the last 7-day pattern, Bazzy's typical wake window is about 2h 41m.
+  message: '[+15550400002]: What about his first wake window? Is that also 2h 41m?'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Says no — 2h41m was the blended figure — and either computes the
+      first-window-specific number from logged data or says the data is too thin to
+      split. Repeating 2h41m as if it answered the narrower question is the failure
+      mode.
+- id: prod-analytics-forecast-optin
+  category: baby-logging
+  description: '"Yeah let''s forecast moving forward" — the opt-in must be persisted durably, not just acknowledged (real founder message)'
+  silo: chat555000700600500400
+  is_group: true
+  sender: '+15550400001'
+  group_name: Baby log
+  now: '2026-06-11T16:20:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    baby:
+      name: Bazzy
+      birthdate: '2026-01-04'
+    history:
+    - role: model
+      text: I can start forecasting Bazzy's next nap from his actual logged pattern
+        instead of generic age tables — want that?
+  message: '[+15550400001]: Yeah let''s forecast moving forward'
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: The preference is written somewhere durable (profile, memory, or
+      baby settings — trace must show a write) and the confirmation is one line. A
+      cheerful acknowledgment with no persistent state change is the prod failure
+      pattern this suite exists to catch.
+- id: prod-analytics-regression-sympathy-with-data
+  category: tone-format
+  description: 'Sleep-regression vent ("wakes at 3am and won''t go back down") wants context from the child''s own data plus realism — not a lecture, not medical advice (real founder message)'
+  silo: chat555000700600500400
+  is_group: true
+  sender: '+15550400001'
+  group_name: Baby log
+  now: '2026-07-20T08:30:00-04:00'
+  internal: false
+  seed:
+    profile:
+      name: Adnan
+      home_location: Chelsea, Manhattan, NYC
+      timezone: America/New_York
+    baby:
+      name: Bazzy
+      birthdate: '2026-01-04'
+    baby_events:
+    - kind: wake
+      at: '2026-07-20T03:05:00-04:00'
+      note: night waking, would not resettle
+    - kind: wake
+      at: '2026-07-19T03:20:00-04:00'
+      note: night waking
+    - kind: wake
+      at: '2026-07-18T02:50:00-04:00'
+      note: night waking
+  message: '[+15550400001]: Bazzy is having really bad sleep regression now where
+    he wakes up at 3am and won''t go back down'
+  tool_fixtures: {}
+  expect:
+    silent_expected: false
+    reply_should: Grounds the reply in his logged pattern (three consecutive ~3 AM
+      wakings), normalizes it for the age bracket in a sentence or two, and offers
+      to track or flag the pattern — without diagnosing, prescribing, or reciting a
+      sleep-training essay. Empty sympathy with no reference to the child's own
+      data also fails.

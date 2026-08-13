@@ -52,17 +52,35 @@ def fail(errors: list[str], sid: str, msg: str) -> None:
     errors.append(f"{sid}: {msg}")
 
 
-def check_scenario(path: str, errors: list[str]) -> str | None:
+def check_file(path: str, errors: list[str]) -> list[str]:
+    """A file holds one scenario doc or a list of them (same contract as
+    run.py). Returns the categories of the valid scenarios found."""
     with open(path) as f:
-        sc = yaml.safe_load(f)
-    sid = os.path.splitext(os.path.basename(path))[0]
+        doc = yaml.safe_load(f)
+    docs = doc if isinstance(doc, list) else [doc]
+    fname = os.path.splitext(os.path.basename(path))[0]
+    cats = []
+    for i, sc in enumerate(docs):
+        label = fname if len(docs) == 1 else f"{fname}[{i}]"
+        cat = check_scenario(sc, label, len(docs) == 1, errors)
+        if cat:
+            cats.append(cat)
+    return cats
 
+
+def check_scenario(
+    sc: dict, sid: str, standalone: bool, errors: list[str]
+) -> str | None:
+    if not isinstance(sc, dict):
+        fail(errors, sid, "scenario doc is not a mapping")
+        return None
     for field in REQUIRED:
         if field not in sc:
             fail(errors, sid, f"missing required field '{field}'")
             return None
 
-    if sc["id"] != sid:
+    # Single-doc files keep the id==filename rule; list files carry ids inline.
+    if standalone and sc["id"] != sid:
         fail(errors, sid, f"id '{sc['id']}' != filename")
     if sc["category"] not in CATEGORIES:
         fail(errors, sid, f"unknown category '{sc['category']}'")
@@ -141,11 +159,12 @@ def main() -> int:
         return 1
     errors: list[str] = []
     counts: dict[str, int] = {}
+    total = 0
     for name in files:
-        cat = check_scenario(os.path.join(HERE, name), errors)
-        if cat:
+        for cat in check_file(os.path.join(HERE, name), errors):
             counts[cat] = counts.get(cat, 0) + 1
-    print(f"{len(files)} scenarios")
+            total += 1
+    print(f"{total} scenarios")
     for cat in sorted(counts):
         print(f"  {cat}: {counts[cat]}")
     if errors:

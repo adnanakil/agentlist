@@ -1,0 +1,171 @@
+# Two-parent interleaved logging, from the Samuel family (41/13 turn split)
+# and the founder group. The group is the product's core surface: attribution,
+# cross-member summaries, and knowing when a message isn't for HAL at all.
+- id: prod-grouplog-partner-logs-other-asks
+  category: baby-logging
+  description: One parent logged all day; the other asks for a summary — the answer must cover the whole family's entries, not just the asker's
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-07T09:39:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: feed
+      at: '2026-08-06T17:29:00-07:00'
+      note: right 1:00-1:15, left 1:15-1:30 (logged by partner)
+    - kind: feed
+      at: '2026-08-06T20:43:00-07:00'
+      note: left then right, 15 min each (logged by partner)
+    - kind: feed
+      at: '2026-08-07T04:25:00-07:00'
+      note: 15 min each breast (logged by partner)
+    - kind: diaper
+      at: '2026-08-06T20:45:00-07:00'
+      note: dirty and wet
+  message: '[+15550200001]: Give me a summary of feeds today and how much on each side'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Summarizes all logged feeds regardless of which parent logged them,
+      with per-side durations where recorded, in Pacific times. Treating the asker's
+      own messages as the only source, or inventing side-splits that were never
+      logged, is a fail.
+- id: prod-grouplog-interleaved-two-events
+  category: baby-logging
+  description: 'One message, two speakers'' worth of content: a feed with per-side times AND a diaper in the same text must both be written (real prod format)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-06T14:29:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+  message: '[+15550200002]: I fed Noah at 1 to 1:15 on the right breast and 115 to
+    130 on the left breast. He also had a poop at 130'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: 'Both events land: a feed (right 1:00-1:15, left 1:15-1:30 PM) and
+      a 1:30 PM poop diaper. "115 to 130" must be read as 1:15-1:30, and PM inferred
+      from a 2:29 PM send time — logging it as 1 AM, or dropping the diaper, fails.'
+- id: prod-grouplog-typo-prefix-b
+  category: baby-logging
+  description: '"B I just breast-fed another eight minutes on the right breast" — stray leading character must not derail the log (real prod message)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200002'
+  group_name: Noah updates
+  now: '2026-08-07T13:03:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: feed
+      at: '2026-08-07T12:38:00-07:00'
+      note: 8 min left breast
+  message: '[+15550200002]: B I just breast-fed another eight minutes on the right breast'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Logs an 8-minute right-side feed now as a new entry ("another"
+      following the earlier left-side one). Asking what "B" means, or merging this
+      into the previous entry, is a fail.
+- id: prod-grouplog-banter-not-for-hal
+  category: group-restraint
+  description: Parents talking to each other about the baby is not a request to HAL — no log, no reply (interleaved-thread discipline)
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-08T21:10:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    history:
+    - role: user
+      text: '[+15550200002]: Just fed him for 10 minutes on the right side'
+    - role: model
+      text: Logged — 10 min right side ✅
+  message: '[+15550200001]: babe you''re doing amazing, get some sleep after this one'
+  tool_fixtures: {}
+  expect:
+    tools_absent:
+    - baby
+    silent_expected: true
+    reply_should: Silence. This is one parent encouraging the other — nothing to log,
+      no question asked. Any reply, however warm, is intrusion.
+- id: prod-grouplog-export-full-log
+  category: baby-logging
+  description: '"Export" must return the complete structured log with attribution, not a summary (real prod command, honored correctly)'
+  silo: chat555000200100300400
+  is_group: true
+  sender: '+15550200001'
+  group_name: Noah updates
+  now: '2026-08-10T04:31:00-07:00'
+  internal: false
+  seed:
+    profile:
+      name: Dana
+      home_location: San Diego, CA
+      timezone: America/Los_Angeles
+    baby:
+      name: Noah
+      birthdate: '2026-08-06'
+    baby_events:
+    - kind: note
+      at: '2026-08-06T01:25:00-07:00'
+      note: Noah born in San Diego, CA
+    - kind: feed
+      at: '2026-08-06T09:55:00-07:00'
+      note: nursing
+    - kind: feed
+      at: '2026-08-06T14:29:00-07:00'
+      note: right 1:00-1:15, left 1:15-1:30
+    - kind: diaper
+      at: '2026-08-06T13:30:00-07:00'
+      note: poop
+  message: '[+15550200001]: Export'
+  tool_fixtures: {}
+  expect:
+    tools_called:
+    - baby
+    silent_expected: false
+    reply_should: Produces the full log in a structured, portable form (CSV-like
+      lines with date, time, kind, note) covering every seeded event with
+      Pacific-local times, starting from the birth milestone. A prose summary, a
+      partial export, or asking "what format?" fails — the terse command deserves
+      the data.
