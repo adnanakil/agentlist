@@ -73,15 +73,17 @@ def test_microcopy_present_in_hero():
 
 
 def test_rotating_headline_word():
-    """ENG-014: H1 ends 'up with baby's <word>.' — server-renders a real word,
-    reserves width, and the JS cycles naps/poops/feeds."""
+    """ENG-014, re-worded by the 2026-08-15 routines pivot: H1 is now
+    'A consistent routine for baby's <word>' cycling naps/feeds/bedtime."""
     html = render_landing(NUMBER)
     assert 'id="rotator"' in html, "rotator span missing from H1"
     assert ">naps.<" in html, "server must render a complete word, not an empty span"
+    assert "A consistent routine" in html, "routines-pivot headline missing"
     assert "min-width" in html and "rot-word" in html, "reserved width missing — line would reflow each tick"
     assert "prefers-reduced-motion" in html, "reduced-motion handling missing"
-    for w in ("'naps.'", "'poops.'", "'feeds.'"):
+    for w in ("'naps.'", "'feeds.'", "'bedtime.'"):
         assert w in _LANDING_JS, f"{w} missing from rotator word list"
+    assert "min-width:8ch" in html, "'bedtime.' is 8ch — smaller reserve makes the line reflow"
     assert "'milestones.'" not in _LANDING_JS, "milestones was dropped by Adnan — do not re-add"
 
 

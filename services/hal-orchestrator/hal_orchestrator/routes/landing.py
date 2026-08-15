@@ -128,7 +128,7 @@ _LANDING_JS = """
     var reduce=false;
     try{reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
     if(!reduce){
-      var words=['naps.','poops.','feeds.'], wi=0;
+      var words=['naps.','feeds.','bedtime.'], wi=0;
       setInterval(function(){
         wi=(wi+1)%words.length;
         rw.classList.add('rot-out');
@@ -295,12 +295,12 @@ def render_landing(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#f5f4ee">
-<title>HAL — the baby log that lives in your group chat</title>
-<meta name="description" content="Your whole household on one baby schedule. Parents, nanny, grandma text feeds and naps to the family thread — HAL keeps one record, forecasts the next nap, and recaps the day. No app.">
+<title>HAL — consistent baby routines, private in your group chat</title>
+<meta name="description" content="Babies settle easier when days are predictable. HAL keeps parents, grandparents, and sitters on one consistent routine for naps, feeds, and bedtime — in the family group chat. Private by design: never sold, never ads, delete with one text.">
 <meta name="application-name" content="HAL">
 <meta property="og:site_name" content="HAL">
-<meta property="og:title" content="HAL — the baby log that lives in your group chat">
-<meta property="og:description" content="One calm, shared baby log for the whole household. Just text.">
+<meta property="og:title" content="HAL — consistent baby routines, private in your group chat">
+<meta property="og:description" content="One consistent routine every caregiver can follow — private, in the chat you already have.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.texthal.com/">
 <link rel="canonical" href="https://www.texthal.com/">
@@ -367,7 +367,7 @@ def render_landing(
   }}
   .hero h1 .h1-l2 {{ display:block; }}
   .nw {{ white-space:nowrap; }}
-  .rot-word {{ display:inline-block; min-width:5.6ch; text-align:left; color:#128a47;
+  .rot-word {{ display:inline-block; min-width:8ch; text-align:left; color:#128a47;
     transition:opacity .24s ease, transform .24s ease; }}
   .rot-word.rot-out {{ opacity:0; transform:translateY(10px); }}
   @media (prefers-reduced-motion:reduce) {{ .rot-word {{ transition:none; }} }}
@@ -647,9 +647,9 @@ def render_landing(
     <section class="hero">
       <div class="hero-inner">
         <div class="hero-text">
-          <p class="eyebrow">HAL — the baby log that lives in your group chat.</p>
-          <h1>A calmer way to keep <span class="h1-l2">up with <span class="nw">baby's <span id="rotator" class="rot-word">naps.</span></span></span></h1>
-          <p class="hero-copy">HAL turns the family group chat into one reliable baby schedule—without asking anyone to learn another app.</p>
+          <p class="eyebrow">HAL — the private baby log in your group chat.</p>
+          <h1>A consistent routine <span class="h1-l2">for <span class="nw">baby's <span id="rotator" class="rot-word">naps.</span></span></span></h1>
+          <p class="hero-copy">Babies settle easier when their days are predictable. HAL keeps parents, grandparents, and sitters on one routine — in the chat you already have, private by design.</p>
           {hero_cta}
           <div class="hero-chips" aria-label="Trust highlights">
             <span class="chip">No account</span><span class="chip">No password</span><span class="chip">No app to install</span>
@@ -657,6 +657,7 @@ def render_landing(
           <div class="hero-trust" aria-label="Privacy assurance">
             <span class="trust-badge">Your number is never sold or shared</span>
             <span class="trust-badge">Delete everything with one text</span>
+            <span class="trust-badge">No ads, no trackers — it's a text thread</span>
           </div>
         </div>
         <img class="hero-phone" src="/static/hero-phone.png"
@@ -678,7 +679,7 @@ def render_landing(
           <div class="step-item">
             <div class="step-num" aria-hidden="true">2</div>
             <h3>Everyone texts in naturally</h3>
-            <p>Feeds, naps, notes — HAL understands plain language and keeps one shared record the whole household can trust.</p>
+            <p>Feeds, naps, notes — HAL understands plain language and keeps one shared record, so every caregiver follows the same routine instead of their best guess.</p>
           </div>
           <div class="step-item">
             <div class="step-num" aria-hidden="true">3</div>
@@ -691,8 +692,8 @@ def render_landing(
 
     <section class="section intro" aria-labelledby="intro-title">
       <div class="section-inner intro-grid">
-        <div><p class="kicker">Made for real households</p><h2 class="display" id="intro-title">Everyone texts. HAL remembers.</h2></div>
-        <p class="intro-copy">Parents, nanny, grandma—everyone logs feeds and naps the way they already talk. <strong>HAL keeps one record straight</strong>, quietly does the schedule math, and tells the family what is likely next.</p>
+        <div><p class="kicker">Consistency, without the nagging</p><h2 class="display" id="intro-title">Same routine, whoever's on duty.</h2></div>
+        <p class="intro-copy">Parents, nanny, grandma—everyone logs feeds and naps the way they already talk. <strong>HAL keeps one record straight and holds the routine steady across handoffs</strong>, so the day stays predictable no matter who's holding the baby. Predictable days are easier on everyone—especially the baby.</p>
       </div>
     </section>
 
@@ -759,7 +760,7 @@ def render_landing(
         <div class="value-head"><div><p class="kicker">Built for the 3 AM version of you</p><h2 class="display" id="values-title">Less managing. More knowing.</h2></div><p>HAL lives where the family already talks and turns small updates into a clear picture everyone can use.</p></div>
         <div class="value-cards">
           <article class="value-card"><div class="value-icon" aria-hidden="true">↗</div><div><h3>Natural in. Useful out.</h3><p>“4oz at 3:15” is enough. HAL understands the update and keeps the day current.</p></div></article>
-          <article class="value-card"><div class="value-icon" aria-hidden="true">◷</div><div><h3>It quietly does the math.</h3><p>Get the next likely nap window, sized to your baby's own rhythm and shared with honest uncertainty.</p></div></article>
+          <article class="value-card"><div class="value-icon" aria-hidden="true">◷</div><div><h3>It holds the routine steady.</h3><p>Nap windows and feed rhythms, sized to your baby's own pattern — so handoffs don't reset the day, and nobody's guessing.</p></div></article>
           <article class="value-card"><div class="value-icon" aria-hidden="true">◎</div><div><h3>No app. Ever.</h3><p>One thumb, one text, screen off. There is nothing new for the household to download or maintain.</p></div></article>
           <article class="value-card"><div class="value-icon" aria-hidden="true">⌁</div><div><h3>Yours, and disposable.</h3><p>Say “export” for your full log. Say “forget me” and everything is permanently deleted.</p></div></article>
         </div>
@@ -769,8 +770,8 @@ def render_landing(
     <section class="section" id="privacy" aria-labelledby="privacy-title">
       <div class="section-inner privacy-panel">
         <div class="shield" aria-hidden="true">✓</div>
-        <div><p class="kicker">Personal, private, in your control</p><h2 id="privacy-title">Your family’s data stays yours.</h2><p>HAL is designed around a simple promise: your household information should help your household—and nobody else. Your family's data is never sold, never ads, and never used to train anything.</p>
-          <ul class="privacy-list"><li>Never sold, never ads</li><li>Never used to train anything</li><li>Export or permanently delete it by text</li></ul>
+        <div><p class="kicker">Protect your baby's privacy</p><h2 id="privacy-title">Your baby's data stays in the family.</h2><p>Baby-tracker apps come with accounts, ad networks, and analytics. HAL is a text thread. Your baby's first months are recorded where they happen—in your family's chat—and your household's information helps your household, nobody else.</p>
+          <ul class="privacy-list"><li>Never sold, never ads, no third-party trackers</li><li>Never used to train anything</li><li>Export or permanently delete it by text</li></ul>
         </div>
       </div>
     </section>
@@ -782,13 +783,14 @@ def render_landing(
           <details><summary>Do we all need to install something?</summary><p>No. HAL works over text. Add HAL to the family thread and everyone can participate from the messaging app already on their phone.</p></details>
           <details><summary>What can HAL keep track of?</summary><p>HAL can log feeds, naps, wake-ups, and other baby-day updates, summarize the day, and estimate what is likely next from your baby's own recent rhythm.</p></details>
           <details><summary>Can I get my data back?</summary><p>Yes. Text “export” and HAL will prepare the log as a file. Text “forget me” to permanently delete the household's stored data.</p></details>
+          <details><summary>Does it help at pediatrician visits?</summary><p>It helps you arrive prepared. HAL keeps an accurate day-by-day record—feeds, naps, diapers—so you can answer “how many wet diapers?” from the log instead of 3 AM memory, and export it to bring along.</p></details>
           <details><summary>Is HAL medical advice?</summary><p>No. HAL is a household coordination and logging assistant, not a medical service. For health concerns, contact your pediatrician or another qualified professional.</p></details>
         </div>
       </div>
     </section>
 
     <section class="section final-cta" id="start" aria-labelledby="start-title">
-      <div class="section-inner"><p class="eyebrow">Start with one text</p><h2 id="start-title">A calmer family rhythm is already in the chat.</h2>{cta}</div>
+      <div class="section-inner"><p class="eyebrow">Start with one text</p><h2 id="start-title">One routine, whoever's holding the baby.</h2>{cta}</div>
     </section>
   </main>
 
