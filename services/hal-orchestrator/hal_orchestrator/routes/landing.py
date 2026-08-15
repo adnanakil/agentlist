@@ -128,7 +128,7 @@ _LANDING_JS = """
     var reduce=false;
     try{reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
     if(!reduce){
-      var words=['naps.','feeds.','bedtime.'], wi=0;
+      var words=['routine.','naps.','bedtime.'], wi=0;
       setInterval(function(){
         wi=(wi+1)%words.length;
         rw.classList.add('rot-out');
@@ -295,11 +295,11 @@ def render_landing(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#f5f4ee">
-<title>HAL — consistent baby routines, private in your group chat</title>
-<meta name="description" content="Babies settle easier when days are predictable. HAL keeps parents, grandparents, and sitters on one consistent routine for naps, feeds, and bedtime — in the family group chat. Private by design: never sold, never ads, delete with one text.">
+<title>HAL — protect your baby's routine, private in your group chat</title>
+<meta name="description" content="Protect your baby's routine. Pediatricians stress how much predictable days help babies settle and sleep — HAL keeps every caregiver on one consistent routine for naps, feeds, and bedtime, in the family group chat. Private by design: never sold, never ads, delete with one text.">
 <meta name="application-name" content="HAL">
 <meta property="og:site_name" content="HAL">
-<meta property="og:title" content="HAL — consistent baby routines, private in your group chat">
+<meta property="og:title" content="HAL — protect your baby's routine, private in your group chat">
 <meta property="og:description" content="One consistent routine every caregiver can follow — private, in the chat you already have.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.texthal.com/">
@@ -648,8 +648,8 @@ def render_landing(
       <div class="hero-inner">
         <div class="hero-text">
           <p class="eyebrow">HAL — the private baby log in your group chat.</p>
-          <h1>A consistent routine <span class="h1-l2">for <span class="nw">baby's <span id="rotator" class="rot-word">naps.</span></span></span></h1>
-          <p class="hero-copy">Babies settle easier when their days are predictable. HAL keeps parents, grandparents, and sitters on one routine — in the chat you already have, private by design.</p>
+          <h1>Protect your baby's <span class="h1-l2"><span id="rotator" class="rot-word">routine.</span></span></h1>
+          <p class="hero-copy">Pediatricians stress it: predictable days help babies settle and sleep. HAL keeps parents, grandparents, and sitters protecting one routine — in the chat you already have, private by design.</p>
           {hero_cta}
           <div class="hero-chips" aria-label="Trust highlights">
             <span class="chip">No account</span><span class="chip">No password</span><span class="chip">No app to install</span>
@@ -692,7 +692,7 @@ def render_landing(
 
     <section class="section intro" aria-labelledby="intro-title">
       <div class="section-inner intro-grid">
-        <div><p class="kicker">Consistency, without the nagging</p><h2 class="display" id="intro-title">Same routine, whoever's on duty.</h2></div>
+        <div><p class="kicker">Consistency, without the nagging</p><h2 class="display" id="intro-title">Create predictability for your little one.</h2></div>
         <p class="intro-copy">Parents, nanny, grandma—everyone logs feeds and naps the way they already talk. <strong>HAL keeps one record straight and holds the routine steady across handoffs</strong>, so the day stays predictable no matter who's holding the baby. Predictable days are easier on everyone—especially the baby.</p>
       </div>
     </section>

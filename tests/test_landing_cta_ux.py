@@ -73,18 +73,30 @@ def test_microcopy_present_in_hero():
 
 
 def test_rotating_headline_word():
-    """ENG-014, re-worded by the 2026-08-15 routines pivot: H1 is now
-    'A consistent routine for baby's <word>' cycling naps/feeds/bedtime."""
+    """2026-08-15 routines pivot, revised same day: H1 is 'Protect your baby's
+    <word>' cycling routine/naps/bedtime. 'Protect' is Adnan's chosen verb."""
     html = render_landing(NUMBER)
     assert 'id="rotator"' in html, "rotator span missing from H1"
-    assert ">naps.<" in html, "server must render a complete word, not an empty span"
-    assert "A consistent routine" in html, "routines-pivot headline missing"
+    assert ">routine.<" in html, "server must render a complete word, not an empty span"
+    assert "Protect your baby's" in html, "protect-pivot headline missing"
     assert "min-width" in html and "rot-word" in html, "reserved width missing — line would reflow each tick"
     assert "prefers-reduced-motion" in html, "reduced-motion handling missing"
-    for w in ("'naps.'", "'feeds.'", "'bedtime.'"):
+    for w in ("'routine.'", "'naps.'", "'bedtime.'"):
         assert w in _LANDING_JS, f"{w} missing from rotator word list"
-    assert "min-width:8ch" in html, "'bedtime.' is 8ch — smaller reserve makes the line reflow"
+    assert "min-width:8ch" in html, "'routine.'/'bedtime.' are 8ch — smaller reserve reflows the line"
     assert "'milestones.'" not in _LANDING_JS, "milestones was dropped by Adnan — do not re-add"
+
+
+def test_pediatrician_claim_attaches_to_principle_not_product():
+    """The pediatrician mention must endorse PREDICTABILITY (established general
+    guidance), never HAL itself — 'recommended by pediatricians' about the
+    product would violate the no-invented-endorsements rule."""
+    html = render_landing(NUMBER)
+    assert "Pediatricians stress" in html, "pediatrician principle line missing"
+    low = html.lower()
+    for banned in ("pediatricians recommend hal", "pediatrician-approved",
+                   "doctors recommend hal", "endorsed by"):
+        assert banned not in low, f"product-endorsement phrasing found: {banned!r}"
 
 
 def test_hero_phone_is_grid_column_not_background():

@@ -201,7 +201,7 @@ check("hero is not the old cover background",
 hero_img_status, _, _ = get("/static/hero-phone.png")
 check("hero phone image serves 200", hero_img_status == 200, f"got {hero_img_status}")
 check("H1 rotator span present with a real word",
-      'id="rotator"' in ios_html and ">naps.<" in ios_html)
+      'id="rotator"' in ios_html and ">routine.<" in ios_html)
 
 for n in notes:
     print(f"  note: {n}")
