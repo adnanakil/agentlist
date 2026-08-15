@@ -664,7 +664,7 @@ def render_landing(
           </div>
         </div>
         <img class="hero-phone" src="/static/hero-phone.png"
-          alt="Family group chat where HAL logs a feed and a nap and answers Grandma"
+          alt="Family group chat where HAL warns that Leo will likely need to nap in 20 minutes and a parent starts wind-down"
           fetchpriority="high">
       </div>
       <div class="scroll-cue" aria-hidden="true">See how HAL helps</div>

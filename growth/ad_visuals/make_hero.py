@@ -27,15 +27,15 @@ from make_ads import SCREEN_RATIO, status_icons, esc  # noqa: E402
 
 W, H = 2400, 1200
 
-# The conversation that shows the handoff in three beats: a caregiver logs,
-# HAL confirms and predicts, someone else asks and gets a straight answer.
+# Routine-protection beat (Adnan, 2026-08-15): HAL's proactive nap heads-up is
+# the star message; a caregiver acts on it and the routine holds. Matches the
+# "Protect your baby's routine" hero headline.
 MSGS = [
-    ("Mom", "4oz at 3:15"),
-    ("HAL", "Logged ✅ That's his 4th feed today."),
-    (None, "down for a nap 😴"),
-    ("HAL", "Logged 💤 He'll likely wake around 5:15."),
-    ("Grandma", "how's his day going?"),
-    ("HAL", "3 naps, 5 feeds — last at 3:15. Bedtime's usually around 7:15 💛"),
+    ("Mom", "4oz at 12:40"),
+    ("HAL", "Logged ✅ Third feed today."),
+    ("HAL", "Heads up — Leo will likely need to nap in 20 minutes 😴"),
+    (None, "on it, starting wind-down 👍"),
+    ("HAL", "Perfect. His usual window is 1:00–1:20 — right on routine 💛"),
 ]
 
 AVATARS = [("M", "#ec6ba8"), ("D", "#5b9cf5"), ("N", "#e8a13c"), ("H", "#1c644c")]
@@ -148,7 +148,7 @@ def build_html() -> str:
   <div class="stage">
     <div class="phone"><div class="screen">
       <div class="statusbar">
-        <span>3:15</span><div class="island"></div>
+        <span>12:40</span><div class="island"></div>
         <span class="icons">{status_icons(DEV)}</span>
       </div>
       <div class="chathead">
@@ -156,7 +156,7 @@ def build_html() -> str:
         <div class="gname">Leo HQ <span>›</span></div>
       </div>
       <div class="thread">
-        <div class="daystamp">Today 3:15 PM</div>
+        <div class="daystamp">Today 12:40 PM</div>
         {msgs}
       </div>
       <div class="inputbar"><div class="plus">+</div><div class="field">iMessage</div></div>
