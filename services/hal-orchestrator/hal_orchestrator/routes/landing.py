@@ -129,11 +129,14 @@ _LANDING_JS = """
     try{reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
     if(!reduce){
       var words=['routine.','naps.','bedtime.'], wi=0;
+      // Skip ticks while hidden: throttled background timers stretch the fade
+      // window, so a returning visitor could catch the word at opacity 0.
       setInterval(function(){
+        if(document.hidden) return;
         wi=(wi+1)%words.length;
         rw.classList.add('rot-out');
-        setTimeout(function(){rw.textContent=words[wi];rw.classList.remove('rot-out');},240);
-      },2200);
+        setTimeout(function(){rw.textContent=words[wi];rw.classList.remove('rot-out');},140);
+      },3000);
     }
   }
 
@@ -368,7 +371,7 @@ def render_landing(
   .hero h1 .h1-l2 {{ display:block; }}
   .nw {{ white-space:nowrap; }}
   .rot-word {{ display:inline-block; min-width:8ch; text-align:left; color:#128a47;
-    transition:opacity .24s ease, transform .24s ease; }}
+    transition:opacity .14s ease, transform .14s ease; }}
   .rot-word.rot-out {{ opacity:0; transform:translateY(10px); }}
   @media (prefers-reduced-motion:reduce) {{ .rot-word {{ transition:none; }} }}
   .hero-copy {{ max-width:590px; margin:0; font-size:clamp(18px, 2vw, 24px);
