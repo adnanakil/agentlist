@@ -663,7 +663,7 @@ def render_landing(
             <span class="trust-badge">No ads, no trackers — it's a text thread</span>
           </div>
         </div>
-        <img class="hero-phone" src="/static/hero-phone.png"
+        <img class="hero-phone" src="/static/hero-phone.png?v=2"
           alt="Family group chat where HAL warns that Leo will likely need to nap in 20 minutes and a parent starts wind-down"
           fetchpriority="high">
       </div>
