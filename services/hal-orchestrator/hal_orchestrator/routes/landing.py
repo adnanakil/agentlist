@@ -45,6 +45,7 @@ from hal_orchestrator.middleware.page_hits import (
 
 log = structlog.get_logger()
 
+from hal_orchestrator.routes.guide_content import GUIDES as _GUIDES
 from hal_orchestrator.routes.logo_data import LOGO_DATA_URI
 from hal_orchestrator.state import get_settings
 
@@ -742,7 +743,7 @@ def render_landing(
   <nav class="site-nav" aria-label="Main navigation">
     <a class="brand" href="#top"><img src="{LOGO_DATA_URI}" alt=""><span>HAL</span></a>
     <div class="nav-links">
-      <a href="#how">How it works</a><a href="#privacy">Privacy</a>{nav_cta}
+      <a href="#how">How it works</a><a href="#privacy">Privacy</a><a href="/guides">Guides</a>{nav_cta}
     </div>
   </nav>
 
@@ -897,7 +898,7 @@ def render_landing(
     </section>
   </main>
 
-  <footer><div class="footer-inner"><span class="footer-brand">HAL</span><span>© 2026 HAL</span><div class="footer-links"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div></div></footer>
+  <footer><div class="footer-inner"><span class="footer-brand">HAL</span><span>© 2026 HAL</span><div class="footer-links"><a href="/guides">Guides</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div></div></footer>
   {sticky_cta}
 <script src="/static/landing.js"></script>
 </body></html>"""
@@ -1150,9 +1151,14 @@ def build_landing_router() -> APIRouter:
 
     @router.get("/sitemap.xml", include_in_schema=False)
     async def sitemap() -> PlainTextResponse:
-        pages = ["", "privacy", "terms"]
+        pages = ["", "privacy", "terms", "guides"]
         urls = "\n".join(
             f"  <url><loc>https://www.texthal.com/{p}</loc></url>" for p in pages
+        )
+        urls += "\n" + "\n".join(
+            f"  <url><loc>https://www.texthal.com/guides/{g['slug']}</loc>"
+            f"<lastmod>{g['updated']}</lastmod></url>"
+            for g in _GUIDES
         )
         return PlainTextResponse(
             '<?xml version="1.0" encoding="UTF-8"?>\n'

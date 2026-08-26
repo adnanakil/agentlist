@@ -24,6 +24,7 @@ from hal_orchestrator.middleware.security_headers import SecurityHeadersMiddlewa
 from hal_orchestrator.routes.admin import build_admin_router
 from hal_orchestrator.routes.card import build_card_router
 from hal_orchestrator.routes.google import build_google_router
+from hal_orchestrator.routes.guides import build_guides_router
 from hal_orchestrator.routes.landing import build_landing_router
 from hal_orchestrator.routes.legal import build_legal_router
 from hal_orchestrator.routes.message import build_message_router
@@ -257,6 +258,9 @@ def create_app() -> FastAPI:
 
     # Public landing page (texthal.com)
     application.include_router(build_landing_router())
+
+    # SEO content pages (/guides)
+    application.include_router(build_guides_router())
 
     # Stripe payment webhook (pay -> auto-unlock the message cap)
     application.include_router(build_stripe_router())
