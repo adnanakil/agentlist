@@ -18,8 +18,9 @@ feature that doesn't exist.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -32,11 +33,10 @@ from fastapi.responses import (
     RedirectResponse,
     Response,
 )
+from sqlalchemy import func, select
 
 import ag_db.session as db_session
 from ag_db.models import HalFunnelEvent
-from sqlalchemy import func, select
-
 from hal_orchestrator.middleware.page_hits import (
     LANDING_VARIANTS,
     landing_variant,
@@ -161,6 +161,8 @@ _CODE_RX = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
 _BOTTLES_IMAGE = Path(__file__).parent.parent / "static" / "donebottles.png"
 _HERO_IMAGE = Path(__file__).parent.parent / "static" / "hero-conversation.png"
 _HERO_PHONE_IMAGE = Path(__file__).parent.parent / "static" / "hero-phone.png"
+_OG_CARD_IMAGE = Path(__file__).parent.parent / "static" / "og-card.png"
+_LOGO_IMAGE = Path(__file__).parent.parent / "static" / "logo.png"
 
 
 def _pretty_number(raw: str) -> str:
@@ -293,6 +295,94 @@ def render_landing(
         else '<a class="nav-cta" href="#start">Coming soon</a>'
     )
 
+    # JSON-LD entity graph. FAQ strings MUST stay verbatim copies of the
+    # visible .faq-list markup below — Google ignores FAQPage markup whose
+    # text diverges from the page.
+    structured_data = json.dumps(
+        {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "Organization",
+                    "@id": "https://www.texthal.com/#org",
+                    "name": "HAL",
+                    "url": "https://www.texthal.com/",
+                    "logo": "https://www.texthal.com/static/logo.png",
+                    "sameAs": [
+                        "https://www.facebook.com/people/HAL-Baby-Log-by-Text/61592858016305/",
+                        "https://www.instagram.com/texthal4baby/",
+                    ],
+                },
+                {
+                    "@type": "WebSite",
+                    "@id": "https://www.texthal.com/#website",
+                    "name": "HAL",
+                    "alternateName": "texthal.com",
+                    "url": "https://www.texthal.com/",
+                    "publisher": {"@id": "https://www.texthal.com/#org"},
+                },
+                {
+                    "@type": "SoftwareApplication",
+                    "name": "HAL",
+                    "url": "https://www.texthal.com/",
+                    "applicationCategory": "LifestyleApplication",
+                    "operatingSystem": "iMessage, WhatsApp",
+                    "description": (
+                        "HAL keeps every caregiver on one consistent baby "
+                        "routine — naps, feeds, and bedtime logged by text in "
+                        "the family group chat. No app to install."
+                    ),
+                    "publisher": {"@id": "https://www.texthal.com/#org"},
+                },
+                {
+                    "@type": "FAQPage",
+                    "mainEntity": [
+                        {
+                            "@type": "Question",
+                            "name": "Do we all need to install something?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "No. HAL works over text. Add HAL to the family thread and everyone can participate from the messaging app already on their phone.",
+                            },
+                        },
+                        {
+                            "@type": "Question",
+                            "name": "What can HAL keep track of?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "HAL can log feeds, naps, wake-ups, and other baby-day updates, summarize the day, and estimate what is likely next from your baby's own recent rhythm.",
+                            },
+                        },
+                        {
+                            "@type": "Question",
+                            "name": "Can I get my data back?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "Yes. Text “export” and HAL will prepare the log as a file. Text “forget me” to permanently delete the household's stored data.",
+                            },
+                        },
+                        {
+                            "@type": "Question",
+                            "name": "Does it help at pediatrician visits?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "It helps you arrive prepared. HAL keeps an accurate day-by-day record—feeds, naps, diapers—so you can answer “how many wet diapers?” from the log instead of 3 AM memory, and export it to bring along.",
+                            },
+                        },
+                        {
+                            "@type": "Question",
+                            "name": "Is HAL medical advice?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "No. HAL is a household coordination and logging assistant, not a medical service. For health concerns, contact your pediatrician or another qualified professional.",
+                            },
+                        },
+                    ],
+                },
+            ],
+        }
+    )
+
     return f"""<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -306,8 +396,18 @@ def render_landing(
 <meta property="og:description" content="One consistent routine every caregiver can follow — private, in the chat you already have.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.texthal.com/">
+<meta property="og:image" content="https://www.texthal.com/static/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Protect your baby's routine — HAL tracks naps, feeds, and bedtime by text in your family group chat.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="HAL — protect your baby's routine, private in your group chat">
+<meta name="twitter:description" content="One consistent routine every caregiver can follow — private, in the chat you already have.">
+<meta name="twitter:image" content="https://www.texthal.com/static/og-card.png">
 <link rel="canonical" href="https://www.texthal.com/">
-<script type="application/ld+json">{{"@context":"https://schema.org","@type":"WebSite","name":"HAL","alternateName":"texthal.com","url":"https://www.texthal.com/"}}</script>
+<link rel="icon" type="image/png" sizes="200x200" href="/static/logo.png">
+<link rel="apple-touch-icon" href="/static/logo.png">
+<script type="application/ld+json">{structured_data}</script>
 <style>
   :root {{
     color-scheme: light;
@@ -829,7 +929,7 @@ async def _record_tap(
     try:
         async with factory() as session:
             # Dedup: skip if this visitor already fired this event in the last 60 seconds.
-            cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+            cutoff = datetime.now(UTC) - timedelta(seconds=60)
             recent = await session.scalar(
                 select(func.count()).where(
                     HalFunnelEvent.event_type == event_type,
@@ -997,6 +1097,37 @@ def build_landing_router() -> APIRouter:
         # served above for social/ads reuse but the page no longer loads it.
         return FileResponse(
             _HERO_PHONE_IMAGE,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @router.get("/static/og-card.png", include_in_schema=False)
+    async def og_card_image() -> FileResponse:
+        # 1200x630 social share card (scratchpad make_og_card.py composed it
+        # from hero-conversation.png + hero-phone.png); referenced by og:image
+        # and twitter:image.
+        return FileResponse(
+            _OG_CARD_IMAGE,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @router.get("/static/logo.png", include_in_schema=False)
+    async def logo_image() -> FileResponse:
+        # Same 200x200 mark as LOGO_DATA_URI, as a real URL: Organization
+        # schema `logo` and the favicon links need one.
+        return FileResponse(
+            _LOGO_IMAGE,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @router.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> FileResponse:
+        # Browsers request this path unprompted; a PNG body is fine for every
+        # modern browser regardless of the .ico extension.
+        return FileResponse(
+            _LOGO_IMAGE,
             media_type="image/png",
             headers={"Cache-Control": "public, max-age=86400"},
         )
