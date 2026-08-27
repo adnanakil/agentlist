@@ -14,14 +14,30 @@ through the landing page with a per-guide `?c=` attribution code, so guide
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+)
 
 from hal_orchestrator.routes.guide_content import DISCLAIMER, GUIDES, GUIDES_BY_SLUG
 from hal_orchestrator.routes.logo_data import LOGO_DATA_URI
 
 _BASE = "https://www.texthal.com"
+_STATIC_DIR = Path(__file__).parent.parent / "static"
+
+
+def _og_image_url(slug: str) -> str:
+    # Per-page card when the generated asset exists (scratchpad
+    # make_guide_assets.py); the generic og-card otherwise.
+    if (_STATIC_DIR / "og" / f"{slug}.png").is_file():
+        return f"{_BASE}/static/og/{slug}.png"
+    return f"{_BASE}/static/og-card.png"
 
 _CSS = """
   :root { color-scheme: light; --ink:#202124; --muted:#5f6368; --paper:#f6f5f1;
@@ -48,12 +64,17 @@ _CSS = """
     font-weight:600; color:var(--green); margin-bottom:14px; }
   .byline { font-size:14px; color:var(--muted); margin-bottom:34px;
     padding-bottom:22px; border-bottom:1px solid var(--line); }
+  .toc { background:#fff; border:1px solid var(--line); border-radius:12px;
+    padding:16px 20px; margin-bottom:10px; font-size:15px; }
+  .toc ul { margin:8px 0 0 20px; } .toc li { margin-bottom:5px; }
+  .toc a { text-decoration:none; }
   article h2 { font-size:24px; letter-spacing:-.015em; font-weight:600;
     color:var(--green); margin:38px 0 12px; }
   article p { margin:0 0 16px; }
   article ul, article ol { margin:0 0 16px 22px; }
   article li { margin-bottom:8px; }
   .tablewrap { overflow-x:auto; margin:0 0 16px; }
+  article img { max-width:100%; height:auto; border-radius:12px; }
   article table { border-collapse:collapse; width:100%; background:#fff;
     border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:15px; }
   article th, article td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); }
@@ -105,6 +126,7 @@ def _shell(
     canonical: str,
     structured_data: str,
     body: str,
+    og_image: str = f"{_BASE}/static/og-card.png",
 ) -> str:
     return f"""<!doctype html>
 <html lang="en"><head>
@@ -118,10 +140,10 @@ def _shell(
 <meta property="og:description" content="{description}">
 <meta property="og:type" content="article">
 <meta property="og:url" content="{canonical}">
-<meta property="og:image" content="{_BASE}/static/og-card.png">
+<meta property="og:image" content="{og_image}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{title}">
-<meta name="twitter:image" content="{_BASE}/static/og-card.png">
+<meta name="twitter:image" content="{og_image}">
 <link rel="canonical" href="{canonical}">
 <link rel="icon" type="image/png" sizes="200x200" href="/static/logo.png">
 <link rel="apple-touch-icon" href="/static/logo.png">
@@ -148,6 +170,7 @@ def _fmt_date(iso: str) -> str:
 
 def _render_guide(g: dict) -> str:
     url = f"{_BASE}/guides/{g['slug']}"
+    og_image = _og_image_url(g["slug"])
     structured_data = json.dumps(
         {
             "@context": "https://schema.org",
@@ -159,7 +182,7 @@ def _render_guide(g: dict) -> str:
                     "url": url,
                     "datePublished": g["updated"],
                     "dateModified": g["updated"],
-                    "image": f"{_BASE}/static/og-card.png",
+                    "image": og_image,
                     "author": {"@type": "Organization", "name": "HAL", "url": f"{_BASE}/"},
                     "publisher": {"@id": f"{_BASE}/#org"},
                 },
@@ -195,12 +218,33 @@ def _render_guide(g: dict) -> str:
         "</table>", "</table></div>"
     )
 
+    # Jump-link TOC from the H2s (winning-page anatomy in this SERP): give
+    # each H2 an id and list them when the page is long enough to need it.
+    headings: list[tuple[str, str]] = []
+
+    def _anchor(match: re.Match) -> str:
+        text = match.group(1)
+        plain = re.sub(r"<[^>]+>", "", text)
+        hid = re.sub(r"[^a-z0-9]+", "-", plain.lower()).strip("-")[:60]
+        headings.append((hid, plain))
+        return f'<h2 id="{hid}">{text}</h2>'
+
+    body_html = re.sub(r"<h2>(.*?)</h2>", _anchor, body_html)
+    toc = (
+        '<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>'
+        + "".join(f'<li><a href="#{hid}">{label}</a></li>' for hid, label in headings)
+        + "</ul></nav>"
+        if len(headings) >= 5
+        else ""
+    )
+
     body = f"""
   <main class="wrap">
     <nav class="crumbs" aria-label="Breadcrumb"><a href="/">HAL</a> › <a href="/guides">Guides</a> › {g["title"]}</nav>
     <article>
       <h1>{g["title"]}</h1>
       <p class="byline">By the HAL team · Updated {_fmt_date(g["updated"])}</p>
+      {toc}
       {body_html}
       <div class="cta">
         <h2>Keep the schedule without keeping a spreadsheet</h2>
@@ -220,6 +264,7 @@ def _render_guide(g: dict) -> str:
         canonical=url,
         structured_data=structured_data,
         body=body,
+        og_image=og_image,
     )
 
 
@@ -277,6 +322,7 @@ def _render_index() -> str:
         canonical=f"{_BASE}/guides",
         structured_data=structured_data,
         body=body,
+        og_image=_og_image_url("guides"),
     )
 
 
@@ -429,6 +475,25 @@ def build_guides_router() -> APIRouter:
             _CALC_JS,
             media_type="application/javascript",
             headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    @router.get("/static/og/{slug}.png", include_in_schema=False)
+    async def og_card(slug: str):
+        # slug is validated against known pages — no path traversal.
+        if slug not in pages and slug != "guides":
+            return RedirectResponse("/static/og-card.png", status_code=302)
+        return FileResponse(
+            _STATIC_DIR / "og" / f"{slug}.png",
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @router.get("/static/wake-windows-chart.png", include_in_schema=False)
+    async def wake_chart():
+        return FileResponse(
+            _STATIC_DIR / "wake-windows-chart.png",
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
         )
 
     @router.get("/guides/{slug}", include_in_schema=False)

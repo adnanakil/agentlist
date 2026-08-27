@@ -146,6 +146,7 @@ GUIDES: list[dict] = [
 <tr><td>18–24 months</td><td>1</td><td>4–6 h</td><td>~1.5–2.5 h</td><td>~11 h</td><td>11–14 h</td></tr>
 </tbody>
 </table>
+<p><img src="/static/wake-windows-chart.png" alt="Chart of typical wake windows by age from newborn to 24 months, widening from 30–60 minutes at 0–4 weeks to 4–6 hours at 18–24 months" width="1200" height="900" loading="lazy"></p>
 <h2>How to read this chart honestly</h2>
 <p>Two different kinds of numbers live in that table. The <strong>totals</strong> are formal medical guidance: the American Academy of Sleep Medicine (endorsed by the AAP) recommends 12–16 hours per 24 for infants 4–12 months and 11–14 hours for ages 1–2, with no formal recommendation under 4 months. The <strong>nap counts and wake windows</strong> are convention from sleep practitioners — useful, broadly agreed, but not research-derived. Treat them as starting ranges and let your baby's own recent pattern be the tiebreaker. (More on this in the <a href="/guides/wake-windows-by-age">wake windows guide</a>, or skip the math with the <a href="/guides/wake-window-calculator">calculator</a>.)</p>
 <h2>0–3 months: rhythm, not schedule</h2>
@@ -195,7 +196,7 @@ GUIDES: list[dict] = [
         "slug": "wake-windows-by-age",
         "code": "g-ww",
         "category": "By age",
-        "page_title": "Wake Windows by Age: Chart for 0–24 Months",
+        "page_title": "Wake Windows by Age: 0–24 Month Chart [+ Calculator]",
         "title": "Wake windows by age: 0–24 months",
         "description": "A practical wake-windows chart from newborn to 24 months — how long baby can comfortably stay awake between sleeps, how nap counts change, and how to use the ranges without living by the clock.",
         "teaser": "The full chart, 0–24 months, and how to actually use it.",
@@ -221,6 +222,7 @@ GUIDES: list[dict] = [
 <tr><td>18–24 months</td><td>about 4–6 h</td><td>1</td></tr>
 </tbody>
 </table>
+<p><img src="/static/wake-windows-chart.png" alt="Wake windows by age chart: 0–4 weeks 30–60 minutes; 1–3 months 60–90 minutes; 3–4 months 75 minutes to 2 hours; 5–6 months 2–3 hours; 7–9 months 2.5–3.5 hours; 10–12 months 3–4 hours; 13–18 months 3–5 hours; 18–24 months 4–6 hours" width="1200" height="900" loading="lazy"></p>
 <p>For totals, which <em>are</em> formal medical guidance: the American Academy of Sleep Medicine (endorsed by the AAP) recommends 12–16 hours per 24 hours (including naps) for babies 4–12 months, and 11–14 hours for ages 1–2. There is no formal recommendation for newborns under 4 months — their sleep is too variable to standardize.</p>
 <p>Prefer to skip the mental math? The free <a href="/guides/wake-window-calculator">wake window calculator</a> turns age + last wake-up into a next-nap time range.</p>
 <h2>How to use wake windows (without living by the clock)</h2>
@@ -290,7 +292,7 @@ GUIDES: list[dict] = [
         "slug": "4-month-old-nap-schedule",
         "code": "g-4mo",
         "category": "By age",
-        "page_title": "4-Month-Old Nap Schedule: Wake Windows, Naps & the Regression",
+        "page_title": "4 Month Old Nap Schedule: Wake Windows & Naps [Sample Day]",
         "title": "4-month-old nap schedule: wake windows, naps, and the regression",
         "description": "A realistic 4-month-old schedule: 3–4 naps, wake windows of about 75 minutes to 2 hours, a sample day, and what the famous 4-month sleep regression actually is.",
         "teaser": "3–4 naps, the first real wake windows — and the famous regression.",
@@ -334,7 +336,7 @@ GUIDES: list[dict] = [
         "slug": "6-month-old-nap-schedule",
         "code": "g-6mo",
         "category": "By age",
-        "page_title": "6-Month-Old Nap Schedule: 3 Naps, Wake Windows & a Sample Day",
+        "page_title": "6 Month Old Nap Schedule: 3 Naps & Wake Windows [Sample Day]",
         "title": "6-month-old nap schedule: 3 naps, wake windows, and a sample day",
         "description": "Most 6-month-olds settle on 3 naps with wake windows around 2–2.5 hours. A sample day, signs the third nap is on its way out, and how to keep every caregiver on the same schedule.",
         "teaser": "The 3-nap sweet spot, and the first hints of dropping to two.",
@@ -375,7 +377,7 @@ GUIDES: list[dict] = [
         "slug": "9-month-old-nap-schedule",
         "code": "g-9mo",
         "category": "By age",
-        "page_title": "9-Month-Old Nap Schedule: 2 Naps, Wake Windows & a Sample Day",
+        "page_title": "9 Month Old Nap Schedule: 2 Naps & Wake Windows [Sample Day]",
         "title": "9-month-old nap schedule: 2 naps, wake windows, and a sample day",
         "description": "By 9 months most babies are on 2 naps with wake windows of about 2.5–3.5 hours. A sample day, the 8–10 month sleep bump, and keeping nannies and grandparents on the same schedule.",
         "teaser": "Two proper naps, longer windows, and the 8–10 month bump.",
@@ -415,7 +417,7 @@ GUIDES: list[dict] = [
         "slug": "12-month-old-nap-schedule",
         "code": "g-12mo",
         "category": "By age",
-        "page_title": "12-Month-Old Nap Schedule: 2 Naps, Wake Windows & a Sample Day",
+        "page_title": "12 Month Old Nap Schedule: Wake Windows & Naps [Sample Day]",
         "title": "12-month-old nap schedule: two naps (for now)",
         "description": "A realistic 12-month-old schedule: still 2 naps for most, wake windows around 3–4 hours, a sample day, and why the one-year nap strike usually isn't the 2-to-1 transition yet.",
         "teaser": "Still two naps for most — don't let the nap strike fool you.",
@@ -455,7 +457,7 @@ GUIDES: list[dict] = [
         "slug": "2-to-1-nap-transition",
         "code": "g-2to1",
         "category": "By age",
-        "page_title": "The 2-to-1 Nap Transition: When and How to Drop to One Nap",
+        "page_title": "2 to 1 Nap Transition: When & How to Drop to One Nap",
         "title": "The 2-to-1 nap transition: when and how",
         "description": "Most toddlers drop to one nap between 14 and 18 months. The readiness signs that matter, a gradual week-by-week method, sample days during the transition, and survival tips.",
         "teaser": "The trickiest nap transition — readiness signs and a gradual method.",
@@ -501,7 +503,7 @@ GUIDES: list[dict] = [
         "slug": "3-to-2-nap-transition",
         "code": "g-3to2",
         "category": "By age",
-        "page_title": "The 3-to-2 Nap Transition: When the Catnap Goes (6–9 Months)",
+        "page_title": "3 to 2 Nap Transition: When the Catnap Goes (6–9 Months)",
         "title": "The 3-to-2 nap transition: when the catnap goes",
         "description": "Most babies drop the third catnap between 6 and 9 months. The readiness signs, how to stretch to a two-nap day without an overtired week, sample schedules, and what to do when baby can't make it to bedtime.",
         "teaser": "Dropping the catnap without an overtired week.",
@@ -652,7 +654,7 @@ GUIDES: list[dict] = [
         "slug": "pediatrician-visit-checklist",
         "code": "g-ped",
         "category": "Practical",
-        "page_title": "Pediatrician Visit Checklist: What to Track & Bring (0–12 Months)",
+        "page_title": "Pediatrician Visit Checklist: What to Track & Bring",
         "title": "Pediatrician visit checklist: what to track and bring",
         "description": "What pediatricians actually ask at well-child visits — feeds per day, wet diapers, sleep, milestones — and how to arrive with real numbers instead of 3 AM guesses.",
         "teaser": "The questions they'll ask, and how to arrive with real numbers.",

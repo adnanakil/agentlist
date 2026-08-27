@@ -13,7 +13,8 @@ from contextlib import asynccontextmanager
 import httpx
 import structlog
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import text
 
 import hal_orchestrator.state as state
@@ -227,6 +228,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # --------------------------------------------------------------------------- #
 
 
+_NOT_FOUND_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Page not found — HAL</title>
+<link rel="icon" type="image/png" href="/static/logo.png">
+<style>
+  body { background:#f6f5f1; color:#202124; margin:0; min-height:100vh;
+    display:grid; place-items:center; text-align:center;
+    font-family:"Helvetica Neue", Helvetica, Arial, system-ui, sans-serif; }
+  h1 { color:#153f32; font-size:44px; letter-spacing:-.02em; margin:0 0 10px; }
+  p { color:#5f6368; margin:0 0 26px; }
+  a.btn { background:#153f32; color:#fff; border-radius:999px; padding:12px 20px;
+    text-decoration:none; font-weight:600; margin:0 6px; }
+  a.alt { color:#128a47; }
+</style></head><body><div>
+<h1>That page went down for a nap.</h1>
+<p>It's not on the schedule. These are:</p>
+<p><a class="btn" href="/">HAL home</a> <a class="btn" href="/guides">Baby sleep guides</a></p>
+<p><a class="alt" href="/guides/wake-window-calculator">Or try the wake window calculator →</a></p>
+</div></body></html>"""
+
+
 def create_app() -> FastAPI:
     application = FastAPI(
         title="HAL Orchestrator",
@@ -238,6 +262,29 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(PageHitMiddleware)
+
+    @application.middleware("http")
+    async def redirect_bare_domain(request: Request, call_next):
+        # texthal.com serves a full 200 duplicate of www without this —
+        # canonical tags mitigate but the 301 is the real fix (SEO batch 3).
+        # Only the bare marketing host redirects; the Railway hostname the
+        # bridges call and www itself pass through untouched.
+        if request.headers.get("host", "").split(":")[0] == "texthal.com":
+            url = "https://www.texthal.com" + request.url.path
+            if request.url.query:
+                url += "?" + request.url.query
+            return RedirectResponse(url, status_code=301)
+        return await call_next(request)
+
+    @application.exception_handler(404)
+    async def not_found(request: Request, exc: Exception):
+        # Branded 404 for human-facing pages; API consumers (bridges etc.)
+        # keep the JSON shape they've always parsed.
+        if request.url.path.startswith("/api") or "text/html" not in request.headers.get(
+            "accept", ""
+        ):
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        return HTMLResponse(_NOT_FOUND_HTML, status_code=404)
 
     # Health check
     @application.get("/health")
