@@ -223,6 +223,7 @@ GUIDES: list[dict] = [
 </tbody>
 </table>
 <p><img src="/static/wake-windows-chart.png" alt="Wake windows by age chart: 0–4 weeks 30–60 minutes; 1–3 months 60–90 minutes; 3–4 months 75 minutes to 2 hours; 5–6 months 2–3 hours; 7–9 months 2.5–3.5 hours; 10–12 months 3–4 hours; 13–18 months 3–5 hours; 18–24 months 4–6 hours" width="1200" height="900" loading="lazy"></p>
+<p><strong>Put it on the fridge:</strong> <a href="/static/printables/wake-windows-fridge-chart.pdf">download the printable chart (PDF)</a> — same ranges, plus the four how-to rules, sized for one page.</p>
 <p>For totals, which <em>are</em> formal medical guidance: the American Academy of Sleep Medicine (endorsed by the AAP) recommends 12–16 hours per 24 hours (including naps) for babies 4–12 months, and 11–14 hours for ages 1–2. There is no formal recommendation for newborns under 4 months — their sleep is too variable to standardize.</p>
 <p>Prefer to skip the mental math? The free <a href="/guides/wake-window-calculator">wake window calculator</a> turns age + last wake-up into a next-nap time range.</p>
 <h2>How to use wake windows (without living by the clock)</h2>
@@ -554,7 +555,7 @@ GUIDES: list[dict] = [
         "title": "How to share your baby's schedule with grandparents and caregivers",
         "description": "Handoffs are where baby schedules fall apart. What every caregiver actually needs to know, why apps and paper both fail at it, and how to keep everyone on one routine in the group chat.",
         "teaser": "Handoffs are where routines die. Here's how to keep everyone synced.",
-        "updated": "2026-08-26",
+        "updated": "2026-08-27",
         "related": ["baby-tracker-without-an-app", "2-to-1-nap-transition", "9-month-old-nap-schedule"],
         "body": """
 <p>Babies do best on a consistent routine — and the routine's weakest point is the <strong>handoff</strong>. You leave for the afternoon, grandma takes over, and suddenly nobody knows when the last feed was or when the nap window opens. The baby pays for it at bedtime.</p>
@@ -574,6 +575,12 @@ GUIDES: list[dict] = [
 <li>Anyone asks: "when's her next nap?" and gets an answer from <em>this baby's</em> recent rhythm, not a generic chart.</li>
 <li>The handoff writes itself: the incoming caregiver scrolls up or asks for a recap of the day.</li>
 </ul>
+<h2>What if grandma won't follow the schedule?</h2>
+<p>Pick your battles — two hills are worth it, and the rest mostly isn't. Hold firm on <strong>safe sleep</strong> (back, empty crib, every sleep — non-negotiable) and the <strong>rough nap timing</strong>, because those protect the baby and the night that follows. The extra cookie of attention, the slightly-too-long cuddle, the outfit changes? Grandma currency. A baby can absorb a grandma day; what wrecks the week is a skipped nap, so make the timing effortless for her: the fridge chart plus "she woke at 1:40, so aim for down by 4" is a far better ask than a lecture about wake windows.</p>
+<h2>Baby won't nap at grandma's house — is that normal?</h2>
+<p>Completely. New room, new smells, new (thrilling) person — naps away from home run shorter and later for most babies, and it isn't a schedule failure. Make the routine portable: send the sleep sack and sound machine, write the wind-down steps on the handoff sheet, and accept that a rescue catnap in the stroller counts. Then protect the night with an earlier bedtime once baby's home. One scrambled day doesn't break a routine; three unmanaged ones start to.</p>
+<h2>The printable handoff sheet</h2>
+<p>For households that want paper anyway: a free one-page <a href="/static/printables/caregiver-schedule-sheet.pdf">caregiver schedule sheet (PDF)</a> — fill in the wake-up, last feed, next-nap window, and the wind-down steps at each handoff. Pair it with the <a href="/static/printables/wake-windows-fridge-chart.pdf">wake-windows fridge chart</a> so the "typical wake window" line is never a guess. (And when the paper inevitably goes stale mid-afternoon, that's the problem the group chat solves.)</p>
 <h2>Make the handoff boring</h2>
 <p>Whatever tool you use, the goal is that any adult can walk in mid-day and know the state of the day in under a minute, without calling you. That's what "protecting the routine" means in practice — the schedule survives the people changing.</p>
 """,
@@ -609,6 +616,10 @@ GUIDES: list[dict] = [
 <li><strong>Anticipates</strong> — next-nap and next-feed estimates from your baby's own recent rhythm, with honest uncertainty.</li>
 <li><strong>Exports and deletes on request</strong> — text "export" for your full log; text "forget me" and everything is permanently deleted. No ads, never sold.</li>
 </ul>
+<h2>What about a plain paper feeding log?</h2>
+<p>Paper genuinely works — for one caregiver, in one house, for a while. Hospitals hand out feeding-log sheets for exactly that reason, and we made a free <a href="/static/printables/caregiver-schedule-sheet.pdf">caregiver sheet (PDF)</a> ourselves. Where paper fails is everywhere modern childcare actually happens: it can't follow the baby to grandma's, both parents can't read it from work, and nobody tallies wet diapers per day off a fridge sheet at 11 PM before a pediatrician visit. Paper is a fine log; it's a bad <em>shared</em> log.</p>
+<h2>Do you even need to track at all?</h2>
+<p>Not forever, and not everything. Tracking earns its keep in specific seasons: the newborn weeks (feeds and wet diapers are how you and your pediatrician confirm baby's getting enough), the emergence of the first real schedule around 3–4 months, every nap transition, and the week before any checkup. Between those, a lighter touch is fine. The trap is that the seasons arrive unannounced — which is why a log that happens as a side effect of texting beats one you have to remember to resume.</p>
 <h2>When you do want an app anyway</h2>
 <p>Fair cases exist: pumping-session timers, medical-grade charts for a NICU graduate, wearable integrations. If that's you, use the app — and consider keeping the family-facing layer in the group chat regardless, because the app still won't get grandma logging.</p>
 """,
@@ -658,7 +669,7 @@ GUIDES: list[dict] = [
         "title": "Pediatrician visit checklist: what to track and bring",
         "description": "What pediatricians actually ask at well-child visits — feeds per day, wet diapers, sleep, milestones — and how to arrive with real numbers instead of 3 AM guesses.",
         "teaser": "The questions they'll ask, and how to arrive with real numbers.",
-        "updated": "2026-08-26",
+        "updated": "2026-08-27",
         "related": ["newborn-sleep-schedule", "baby-tracker-without-an-app", "wake-windows-by-age"],
         "body": """
 <p>Well-child visits are frequent in year one — the AAP schedule runs roughly newborn, 1, 2, 4, 6, 9, and 12 months — and each one opens with the same thing: <strong>questions with numeric answers</strong>. Parents who track arrive with data; everyone else estimates from memory, and the estimates are famously bad.</p>
@@ -678,6 +689,10 @@ GUIDES: list[dict] = [
 <li><strong>Your questions, written down.</strong> The visit is short and 3 of your 5 questions evaporate in the room. Keep a running list between visits.</li>
 <li><strong>The weird-thing evidence.</strong> Rash, odd breathing, strange stool: a photo or video beats any description.</li>
 </ol>
+<h2>What will the pediatrician ask about sleep and feeding?</h2>
+<p>The sleep questions are predictable: total sleep per day, how many night wakings, where and how baby sleeps (they're checking safe sleep), and at later visits, snoring or unusual breathing. Feeding: how many feeds per day and how much, wet diapers per day for young babies, and solids variety after 6 months. Arriving with last week's actual numbers turns each of these from an estimate into an answer.</p>
+<h2>How do I bring a log they can actually use?</h2>
+<p>Simple beats comprehensive: pediatricians want per-day counts — feeds, wet diapers, total sleep — not a minute-by-minute diary. A one-page summary of the last week is ideal. If you track with HAL, text "export" and bring the file (or just the recent-week summary); if you're on paper, our <a href="/static/printables/caregiver-schedule-sheet.pdf">caregiver sheet</a> doubles as a daily template worth photographing at the end of each day.</p>
 <h2>Make the log a side effect</h2>
 <p>Nobody maintains a spreadsheet for the pediatrician. The trick is a log that happens anyway, as a side effect of normal family coordination. That's HAL's model: the feeds and naps your household already texts into the group chat <em>are</em> the record — before a visit, text "export" and bring the full log, or just ask "how many feeds a day this week?" on the drive over.</p>
 <h2>Between visits</h2>

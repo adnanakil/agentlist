@@ -488,6 +488,25 @@ def build_guides_router() -> APIRouter:
             headers={"Cache-Control": "public, max-age=86400"},
         )
 
+    _printables = {
+        "wake-windows-fridge-chart.pdf": "application/pdf",
+        "wake-windows-fridge-chart.png": "image/png",
+        "caregiver-schedule-sheet.pdf": "application/pdf",
+        "caregiver-schedule-sheet.png": "image/png",
+    }
+
+    @router.get("/static/printables/{name}", include_in_schema=False)
+    async def printable(name: str):
+        # Allowlisted filenames only — no path traversal.
+        media_type = _printables.get(name)
+        if media_type is None:
+            return RedirectResponse("/guides", status_code=302)
+        return FileResponse(
+            _STATIC_DIR / "printables" / name,
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
     @router.get("/static/wake-windows-chart.png", include_in_schema=False)
     async def wake_chart():
         return FileResponse(
