@@ -94,6 +94,10 @@ _SRC_HB_3TO2 = (
     "Huckleberry — How to manage the transition from three naps to two naps",
     "https://huckleberrycare.com/blog/3-to-2-nap-transition",
 )
+_SRC_TCB_3TO2 = (
+    "Taking Cara Babies — 3 to 2 Nap Transition",
+    "https://www.takingcarababies.com/blogs/naps/3-to-2-nap-transition",
+)
 _SRC_IPR_BABYAPPS = (
     "Pybus, Matheson & Lachmansingh — Extraction-by-design: Auditing infrastructures of datafication in baby-tracking apps (Internet Policy Review, 2026)",
     "https://policyreview.info/articles/analysis/datafication-baby-tracking-apps",
@@ -250,7 +254,7 @@ GUIDES: list[dict] = [
         "title": "Newborn sleep schedule (0–3 months): what's realistic",
         "description": "Newborns don't follow schedules — they follow feed-sleep cycles. What a realistic 0–3 month rhythm looks like, day/night confusion, safe sleep basics, and when patterns start to emerge.",
         "teaser": "There is no schedule yet — here's the rhythm to expect instead.",
-        "updated": "2026-08-26",
+        "updated": "2026-08-27",
         "related": ["baby-sleep-schedules-by-age", "wake-windows-by-age", "4-month-old-nap-schedule"],
         "body": """
 <p>First, permission to relax: <strong>newborns do not have schedules, and nothing is wrong with your baby or your parenting.</strong> For roughly the first three months, sleep is driven by feeding and a not-yet-developed body clock. What you can build now is a <em>rhythm</em> — and a record — while the schedule arrives on its own later.</p>
@@ -272,6 +276,11 @@ GUIDES: list[dict] = [
 <p>Expect one longer stretch (hopefully!) somewhere at night, and know that "good nights" and rough nights alternate without explanation at this age.</p>
 <h2>Safe sleep, every sleep</h2>
 <p>The AAP's guidance applies to naps as much as nights: baby on their <strong>back</strong>, on a <strong>firm, flat surface</strong>, in their <strong>own sleep space</strong> (crib or bassinet) with <strong>nothing else in it</strong> — no blankets, pillows, bumpers, or toys. Room-sharing (not bed-sharing) is recommended for at least the first 6 months.</p>
+<h2>Questions parents ask in the newborn months</h2>
+<p><strong>How much should a newborn sleep?</strong> Commonly 14–17 hours per 24 — but in fragments. There's no formal medical recommendation under 4 months because normal variation is so wide; totals a few hours either side of that range can still be fine. When in doubt, ask at your next visit.</p>
+<p><strong>Should I wake a newborn to feed?</strong> In the early weeks, often yes — until weight gain is established, pediatricians typically want feeds every 2–3 hours even overnight. Once your pediatrician clears it, you can let longer stretches run.</p>
+<p><strong>Why does my newborn sleep all day and party all night?</strong> Day/night confusion — the body clock isn't wired up yet. It consolidates around 6–12 weeks; you can nudge it along with bright, normal-noise days and dark, boring nights.</p>
+<p><strong>When can I start an actual schedule?</strong> Around 3–4 months, when sleep cycles mature and the first real nap pattern emerges. Before that, aim for a repeatable cycle, not clock times.</p>
 <h2>Why log anything this early?</h2>
 <p>Two reasons. Your pediatrician will ask concrete questions — feeds per day, wet diapers, sleep — and 3 AM memory is not a data source. And around 8–12 weeks, patterns quietly emerge; a log is how you notice the nap that's stabilizing. HAL does this by text in your family group chat: "ate 3:10" and "down 4:05" is the whole workflow, and either parent (or grandma) can log or ask what's next.</p>
 """,
@@ -329,8 +338,8 @@ GUIDES: list[dict] = [
         "title": "6-month-old nap schedule: 3 naps, wake windows, and a sample day",
         "description": "Most 6-month-olds settle on 3 naps with wake windows around 2–2.5 hours. A sample day, signs the third nap is on its way out, and how to keep every caregiver on the same schedule.",
         "teaser": "The 3-nap sweet spot, and the first hints of dropping to two.",
-        "updated": "2026-08-26",
-        "related": ["baby-sleep-schedules-by-age", "4-month-old-nap-schedule", "9-month-old-nap-schedule"],
+        "updated": "2026-08-27",
+        "related": ["baby-sleep-schedules-by-age", "3-to-2-nap-transition", "9-month-old-nap-schedule"],
         "body": """
 <p>Six months is often the first genuinely predictable stretch: most babies settle on <strong>3 naps</strong> with wake windows around <strong>2–2.5 hours</strong>, and the day starts to look similar from one date to the next.</p>
 <h2>The shape of the day</h2>
@@ -352,6 +361,11 @@ GUIDES: list[dict] = [
 </table>
 <h2>Signs the third nap is on its way out</h2>
 <p>Somewhere between 6 and 9 months (most commonly around 7–9), the catnap goes. You'll know it's close when the catnap starts routinely failing, when taking it pushes bedtime past 8, or when it happens but bedtime becomes a battle anyway. The move: cap or skip the catnap, pull bedtime as early as 6:30 for a few weeks, and stretch the two remaining windows gradually.</p>
+<h2>Questions parents ask at this age</h2>
+<p><strong>How much should a 6-month-old sleep?</strong> The formal guidance is 12–16 hours per 24 including naps — commonly ~11–12 hours at night plus 2.5–4 hours across the three naps.</p>
+<p><strong>What's a good bedtime for a 6-month-old?</strong> Most land between 7:00 and 7:45 PM, roughly 2.5–3 hours after the last nap ends. If the catnap failed, pull bedtime as early as 6:30.</p>
+<p><strong>Can a 6-month-old sleep through the night?</strong> Many can manage a long stretch by now, and some drop night feeds entirely; others genuinely still need one. Both are within normal — your pediatrician can tell you whether your baby is ready to go without.</p>
+<p><strong>Why is the third nap suddenly so hard?</strong> Because it's the first one to go. A catnap that fails a couple of times a week at 6 months is usually early wobble, not the transition — but it's the preview. When it fails most days for two weeks, read the section above.</p>
 <h2>Solids join the schedule</h2>
 <p>Around 6 months, solids enter the day (typically after or between milk feeds, not replacing them yet). It's one more thing to coordinate — who fed what, when — and one more reason a shared log beats texting "did she eat?" back and forth. In HAL's case, "oatmeal 11:30, 5oz at 12" in the family thread keeps the food log and the sleep schedule in one place everyone can see.</p>
 """,
@@ -365,8 +379,8 @@ GUIDES: list[dict] = [
         "title": "9-month-old nap schedule: 2 naps, wake windows, and a sample day",
         "description": "By 9 months most babies are on 2 naps with wake windows of about 2.5–3.5 hours. A sample day, the 8–10 month sleep bump, and keeping nannies and grandparents on the same schedule.",
         "teaser": "Two proper naps, longer windows, and the 8–10 month bump.",
-        "updated": "2026-08-26",
-        "related": ["baby-sleep-schedules-by-age", "6-month-old-nap-schedule", "12-month-old-nap-schedule"],
+        "updated": "2026-08-27",
+        "related": ["baby-sleep-schedules-by-age", "3-to-2-nap-transition", "12-month-old-nap-schedule"],
         "body": """
 <p>By nine months the catnap is usually gone and the day has a clean two-nap architecture: wake windows of about <strong>2.5–3.5 hours</strong>, a real morning nap, a real afternoon nap.</p>
 <h2>The shape of the day</h2>
@@ -387,6 +401,11 @@ GUIDES: list[dict] = [
 </table>
 <h2>The 8–10 month bump</h2>
 <p>Right when the schedule stabilizes, many babies hit a rough patch: separation anxiety peaks, crawling and pulling-to-stand are irresistible to practice in the crib, and naps or nights wobble for a few weeks. It's developmental, not a broken schedule — hold the routine steady, give lots of daytime practice for the new skills, and it passes. Motor-skill disruption usually settles within a few weeks; separation-anxiety waking can take longer, sometimes a few months. (If your baby fights nap 1 hard for weeks near 12 months, that's a different thing — see the 12-month guide.)</p>
+<h2>Questions parents ask at this age</h2>
+<p><strong>How much should a 9-month-old sleep?</strong> 12–16 hours per 24 including naps (the formal AASM/AAP guidance) — commonly ~11–12 hours at night plus 2–3.5 hours across the two naps.</p>
+<p><strong>Why is my 9-month-old suddenly waking at night again?</strong> Usually the 8–10 month bump: separation anxiety intensifies and new motor skills demand midnight practice. It's developmental — hold the routine steady rather than rebuilding it. Motor-skill waking usually settles in a few weeks; separation-anxiety waking can take longer.</p>
+<p><strong>Should I drop to one nap if the morning nap gets refused?</strong> Almost never at this age — one-nap readiness typically arrives at 13–18 months. Treat refusal as a strike: keep offering the nap at the usual time, count quiet crib play as rest, and it usually passes within a couple of weeks.</p>
+<p><strong>What's a good bedtime for a 9-month-old?</strong> Most land between 7:00 and 7:30 PM, about 3–3.5 hours after the second nap ends — earlier on days a nap came up short.</p>
 <h2>The handoff problem gets real</h2>
 <p>Nine-month-olds are often in part-time childcare or spending days with grandparents — and a 2-nap schedule with 3-hour windows falls apart when the morning handoff loses the wake-up time. A shared record fixes the handoff: with HAL, the nanny texts "down 9:35" in the same thread you use, and whoever does pickup already knows how the day went and when bedtime should land.</p>
 """,
@@ -400,7 +419,7 @@ GUIDES: list[dict] = [
         "title": "12-month-old nap schedule: two naps (for now)",
         "description": "A realistic 12-month-old schedule: still 2 naps for most, wake windows around 3–4 hours, a sample day, and why the one-year nap strike usually isn't the 2-to-1 transition yet.",
         "teaser": "Still two naps for most — don't let the nap strike fool you.",
-        "updated": "2026-08-26",
+        "updated": "2026-08-27",
         "related": ["baby-sleep-schedules-by-age", "9-month-old-nap-schedule", "2-to-1-nap-transition"],
         "body": """
 <p>At twelve months most babies are still solidly on <strong>2 naps</strong>, with wake windows around <strong>3–4 hours</strong>. The headline for this age: many one-year-olds suddenly fight the morning nap, and it usually <em>isn't</em> time to drop it yet.</p>
@@ -422,6 +441,11 @@ GUIDES: list[dict] = [
 </table>
 <h2>The one-year nap strike</h2>
 <p>Around 11–13 months many babies abruptly refuse a nap — usually the morning one — for a week or three, thanks to standing-and-walking practice, teething, or a wave of separation anxiety. The common mistake is reading this as the 2-to-1 transition and dropping the nap permanently; most babies genuinely need two naps until somewhere around 13–18 months, and dropping early buys weeks of overtired evenings. Hold the offer: keep putting baby down at the usual time, treat quiet crib play as rest, and most strikes end on their own. If the refusal persists for 3–4 weeks <em>with</em> the other readiness signs, then read the 2-to-1 guide.</p>
+<h2>Questions parents ask at this age</h2>
+<p><strong>How much should a 12-month-old sleep?</strong> At the first birthday the guidance shifts to the 1–2 year recommendation: 11–14 hours per 24 including naps — commonly ~11 hours at night plus 2–3 hours across two naps.</p>
+<p><strong>Is 12 months too early for one nap?</strong> For most babies, yes. True one-nap readiness typically arrives between 13 and 18 months. A 12-month-old refusing a nap is far more likely striking than transitioning — hold the two-nap offer.</p>
+<p><strong>How do I know if my baby is actually ready for one nap?</strong> Several signs together, sustained for 2+ weeks: one nap consistently refused, skipped-nap days that go <em>fine</em> (no 5 PM meltdown), bedtime drifting past 8:30, or naps fine but early-morning waking creeping in. One rough week is not readiness — see the 2-to-1 guide for the full checklist.</p>
+<p><strong>What's a good bedtime for a 12-month-old?</strong> Around 7:00–7:45 PM for most — and on a day a nap got refused, as early as 6:00–6:30. The early bedtime is what keeps a nap strike from becoming an overtired spiral.</p>
 <h2>Knowing the difference takes a record</h2>
 <p>"Is this a strike or the transition?" is answerable only from data: how many days, which nap, how long did she actually sleep, what happened to bedtime. That's exactly what a log in the family thread gives you — with HAL, you can just ask "how were naps this week?" and get the recap instead of reconstructing it from memory.</p>
 """,
@@ -472,6 +496,50 @@ GUIDES: list[dict] = [
 <p>Transitions fail most often on inconsistency: daycare runs one schedule, the weekend runs another, grandma still does two naps. A toddler mid-transition needs everyone running the same play. Put the plan where every caregiver already is — with HAL, the current schedule and today's actual timing live in the family thread, so "which schedule are we on today?" has one answer for everyone.</p>
 """,
         "sources": [_SRC_AASM, _SRC_HB_2TO1, _SRC_TCB_2TO1],
+    },
+    {
+        "slug": "3-to-2-nap-transition",
+        "code": "g-3to2",
+        "category": "By age",
+        "page_title": "The 3-to-2 Nap Transition: When the Catnap Goes (6–9 Months)",
+        "title": "The 3-to-2 nap transition: when the catnap goes",
+        "description": "Most babies drop the third catnap between 6 and 9 months. The readiness signs, how to stretch to a two-nap day without an overtired week, sample schedules, and what to do when baby can't make it to bedtime.",
+        "teaser": "Dropping the catnap without an overtired week.",
+        "updated": "2026-08-27",
+        "related": ["baby-sleep-schedules-by-age", "6-month-old-nap-schedule", "9-month-old-nap-schedule"],
+        "body": """
+<p>The third nap — that late-afternoon catnap — is the first structural piece of the day to go. Most babies drop it between <strong>6 and 9 months</strong>, landing on the two-nap day that will carry them to toddlerhood. It's the gentlest of the nap transitions: done with an early-bedtime bridge, it usually takes only a week or two.</p>
+<h2>Signs the catnap is done</h2>
+<ul>
+<li>It's <strong>refused most days for two weeks</strong> — baby plays or protests through the old catnap slot</li>
+<li>When it does happen, <strong>bedtime slides past 8:00</strong> or turns into a battle</li>
+<li>The first two naps have consolidated — often 1–1.5 hours each — and wake windows are stretching toward 2.5–3 hours</li>
+</ul>
+<p>One failed catnap in a rough week is noise. At 6 months, occasional failures are usually early wobble rather than readiness — the drop most commonly completes around 7–9 months.</p>
+<h2>How to make the switch</h2>
+<ol>
+<li><strong>Cap, then skip.</strong> Shorten the catnap to 20–30 minutes for a few days, then drop it entirely.</li>
+<li><strong>Bridge with an early bedtime.</strong> For the first week or two, bedtime as early as 6:00–6:30 absorbs the lost sleep. This is temporary — it drifts back to 7:00–7:30 as the two-nap day settles.</li>
+<li><strong>Stretch the remaining windows gradually.</strong> Nap 1 shifts toward 9:00–9:30 and nap 2 toward 1:30–2:00 over a week or so, with wake windows settling at 2.5–3.5 hours.</li>
+</ol>
+<h2>Sample days</h2>
+<table>
+<thead><tr><th></th><th>During the transition</th><th>Settled (two naps)</th></tr></thead>
+<tbody>
+<tr><td>Wake</td><td>6:45 am</td><td>6:45 am</td></tr>
+<tr><td>Nap 1</td><td>9:00–10:15</td><td>9:30–10:45</td></tr>
+<tr><td>Nap 2</td><td>1:00–2:15</td><td>1:45–3:15</td></tr>
+<tr><td>Bedtime</td><td>6:15–6:45 pm</td><td>7:00–7:30 pm</td></tr>
+</tbody>
+</table>
+<h2>What if baby can't make it to bedtime?</h2>
+<p>Some days the stretch from nap 2 to even a 6:15 bedtime is too much. A 10–15 minute rescue catnap (stroller or car, ending by ~4:30) buys the evening without resurrecting the third nap — use it as an escape hatch, not a routine.</p>
+<h2>Is it a regression or the transition?</h2>
+<p>The 3-to-2 window overlaps the 8–10 month rough patch — separation anxiety plus crawling practice can wreck naps in a way that looks like transition readiness. The tell: transition-ready babies handle catnap-free days fine; bump-affected babies are struggling at <em>every</em> sleep, not just the third nap. If nights fell apart at the same time the catnap did, treat it as the bump and hold the three-nap offer for another week or two.</p>
+<h2>Keeping caregivers on the new day</h2>
+<p>Mid-transition, the schedule changes week to week — exactly when a nanny or grandparent is most likely to run last month's version. With HAL in the family thread, today's actual nap times and the current plan are one question away for whoever has the baby, and every logged nap updates the estimate for the next one.</p>
+""",
+        "sources": [_SRC_TCB_3TO2, _SRC_HB_3TO2, _SRC_AASM],
     },
     # ------------------------------------------------------------------ #
     # Practical / product-adjacent long-tail
