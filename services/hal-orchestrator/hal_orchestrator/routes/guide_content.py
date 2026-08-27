@@ -19,8 +19,11 @@ from __future__ import annotations
 DISCLAIMER = (
     "HAL is a household coordination and logging assistant, not a medical "
     "service. Sleep needs vary from baby to baby; the ranges here are common "
-    "patterns, not prescriptions. For health concerns, contact your "
-    "pediatrician or another qualified professional."
+    "patterns, not prescriptions. Wake-window and nap-count ranges in "
+    "particular are sleep-practitioner conventions rather than formal medical "
+    "guidance — medical bodies publish only total-sleep recommendations. For "
+    "health concerns, contact your pediatrician or another qualified "
+    "professional."
 )
 
 _SRC_AAP_HOURS = (
@@ -51,6 +54,46 @@ _SRC_WELL_CHILD = (
     "AAP / HealthyChildren.org — Well-Child Care: A Check-Up for Success",
     "https://www.healthychildren.org/English/family-life/health-management/Pages/Well-Child-Care-A-Check-Up-for-Success.aspx",
 )
+_SRC_CLEVELAND_WW = (
+    "Cleveland Clinic — Wake Windows by Age (pediatrician-reviewed)",
+    "https://health.clevelandclinic.org/wake-windows-by-age",
+)
+_SRC_CANAPARI = (
+    "Dr. Craig Canapari, Yale Pediatric Sleep Center — Do Wake Windows Help Kids Nap Better?",
+    "https://drcraigcanapari.com/do-wake-windows-help-kids-nap-better/",
+)
+_SRC_AAP_FEEDING = (
+    "AAP / HealthyChildren.org — How Often and How Much Should Your Baby Eat?",
+    "https://www.healthychildren.org/English/ages-stages/baby/feeding-nutrition/Pages/how-often-and-how-much-should-your-baby-eat.aspx",
+)
+_SRC_SF_NEWBORN_WW = (
+    "Sleep Foundation — Newborn Wake Windows: What's Normal?",
+    "https://www.sleepfoundation.org/baby-sleep/newborn-wake-window",
+)
+_SRC_CC_REGRESSION = (
+    "Cleveland Clinic — Infant Sleep Regression: What Parents Need To Know",
+    "https://health.clevelandclinic.org/the-4-month-sleep-regression-what-parents-need-to-know",
+)
+_SRC_AAP_SEP_ANXIETY = (
+    "AAP / HealthyChildren.org — Separation Anxiety & Sleeping Trouble in Young Children",
+    "https://www.healthychildren.org/English/healthy-living/sleep/Pages/separation-anxiety-and-sleeping.aspx",
+)
+_SRC_SF_12MO = (
+    "Sleep Foundation — The 12-Month Sleep Regression",
+    "https://www.sleepfoundation.org/baby-sleep/12-month-sleep-regression",
+)
+_SRC_HB_2TO1 = (
+    "Huckleberry — How to manage the transition from two naps to one nap",
+    "https://huckleberrycare.com/blog/2-to-1-nap-transition",
+)
+_SRC_TCB_2TO1 = (
+    "Taking Cara Babies — Transitioning from 2 Naps to 1",
+    "https://www.takingcarababies.com/blogs/naps/transitioning-from-2-naps-to-1",
+)
+_SRC_HB_3TO2 = (
+    "Huckleberry — How to manage the transition from three naps to two naps",
+    "https://huckleberrycare.com/blog/3-to-2-nap-transition",
+)
 
 GUIDES: list[dict] = [
     # ------------------------------------------------------------------ #
@@ -68,36 +111,38 @@ GUIDES: list[dict] = [
         "related": ["newborn-sleep-schedule", "4-month-old-nap-schedule", "6-month-old-nap-schedule", "9-month-old-nap-schedule"],
         "body": """
 <p>A <strong>wake window</strong> is the stretch of time a baby can comfortably stay awake between one sleep and the next. Keep it too short and the next nap is a fight; stretch it too long and you get an overtired baby who paradoxically sleeps <em>worse</em>. Most of practical baby scheduling comes down to landing inside these windows.</p>
+<h2>First, an honest note about where these numbers come from</h2>
+<p>No medical body publishes a wake-windows chart. The AAP and the American Academy of Sleep Medicine publish <em>total</em> sleep recommendations; wake windows are a convention developed by sleep consultants, and their charts disagree with each other at the edges. Pediatric sleep physicians point out the specific numbers aren't derived from research. They're still a genuinely useful planning tool — just treat them as a starting range to adjust from, not a prescription, and let your baby's own pattern be the tiebreaker.</p>
 <h2>Wake windows chart</h2>
-<p>These are common ranges, not rules — premature babies, growth spurts, and plain individual temperament all shift them. Your baby's own recent pattern beats any chart.</p>
+<p>The ranges below reflect the rough consensus across the major charts (including a pediatrician-reviewed one — see sources). Premature babies, growth spurts, and plain individual temperament all shift them.</p>
 <table>
 <thead><tr><th>Age</th><th>Typical wake window</th><th>Naps per day</th></tr></thead>
 <tbody>
-<tr><td>0–4 weeks</td><td>about 45–60 min</td><td>4–6+ (irregular)</td></tr>
-<tr><td>1–2 months</td><td>about 45–75 min</td><td>4–5</td></tr>
+<tr><td>0–4 weeks</td><td>about 30–60 min</td><td>4–6+ (irregular)</td></tr>
+<tr><td>1–2 months</td><td>about 60–90 min</td><td>4–5</td></tr>
 <tr><td>2–3 months</td><td>about 60–90 min</td><td>4–5</td></tr>
 <tr><td>3–4 months</td><td>about 75 min–2 h</td><td>3–4</td></tr>
-<tr><td>5–6 months</td><td>about 2–2.5 h</td><td>3</td></tr>
+<tr><td>5–6 months</td><td>about 2–3 h</td><td>3</td></tr>
 <tr><td>7–9 months</td><td>about 2.5–3.5 h</td><td>2–3 → 2</td></tr>
 <tr><td>10–12 months</td><td>about 3–4 h</td><td>2</td></tr>
 <tr><td>13–18 months</td><td>about 3–5 h</td><td>2 → 1</td></tr>
 <tr><td>18–24 months</td><td>about 4–6 h</td><td>1</td></tr>
 </tbody>
 </table>
-<p>For totals: the American Academy of Sleep Medicine (endorsed by the AAP) recommends 12–16 hours per 24 hours (including naps) for babies 4–12 months, and 11–14 hours for ages 1–2. There is no formal recommendation for newborns under 4 months — their sleep is too variable to standardize.</p>
+<p>For totals, which <em>are</em> formal medical guidance: the American Academy of Sleep Medicine (endorsed by the AAP) recommends 12–16 hours per 24 hours (including naps) for babies 4–12 months, and 11–14 hours for ages 1–2. There is no formal recommendation for newborns under 4 months — their sleep is too variable to standardize.</p>
 <h2>How to use wake windows (without living by the clock)</h2>
 <ul>
 <li><strong>Count from wake-up, not from when you started trying.</strong> The window opens when baby actually wakes.</li>
 <li><strong>Use the early end after short naps.</strong> A 30-minute catnap doesn't buy a full window.</li>
 <li><strong>Watch the baby, then check the clock.</strong> Rubbing eyes, zoning out, fussing at toys — start wind-down. The chart tells you when to <em>expect</em> those cues.</li>
-<li><strong>The last window of the day is usually the longest</strong>, and the first is often the shortest.</li>
+<li><strong>The last window of the day is usually the longest</strong>, and the first is often the shortest (a consultant convention, but an uncontested one).</li>
 </ul>
 <h2>Overtired vs. undertired</h2>
-<p>Both look like "won't sleep," which is why guessing fails. An <strong>overtired</strong> baby is wired, cries hard at the crib, wakes 30–45 minutes in, and is up extra early. An <strong>undertired</strong> baby is cheerful in the crib, plays or chats for a long time, and settles late without drama. If you're seeing the first, shorten windows by 15 minutes for a few days; the second, stretch by 15.</p>
+<p>Both look like "won't sleep," which is why guessing fails — and short naps happen in <em>both</em> cases, so nap length alone won't tell you which. The distinguishing signal is mood and distress: an <strong>overtired</strong> baby is wired, cries hard at the crib, and wakes from short naps still cranky. An <strong>undertired</strong> baby resists calmly — plays or chats in the crib for a long time, settles late without drama, and wakes from a short nap cheerful. A common rule of thumb among sleep consultants: if you're seeing the first, shorten windows by 10–15 minutes and hold that for a few days; the second, stretch by the same amount.</p>
 <h2>The part no chart solves: everyone has to know today's timing</h2>
 <p>Wake windows only work if whoever is holding the baby knows when the last sleep ended. That's the actual hard part in a two-parent-plus-caregivers household. HAL solves it in the family group chat: anyone texts "woke 2:40" and everyone — including HAL's next-nap estimate from your baby's own recent rhythm — is looking at the same day.</p>
 """,
-        "sources": [_SRC_AASM, _SRC_AAP_HOURS, _SRC_NHS_NEWBORN],
+        "sources": [_SRC_AASM, _SRC_AAP_HOURS, _SRC_CLEVELAND_WW, _SRC_CANAPARI],
     },
     # ------------------------------------------------------------------ #
     # Age-band schedules
@@ -117,7 +162,7 @@ GUIDES: list[dict] = [
 <h2>What newborn sleep actually looks like</h2>
 <ul>
 <li><strong>Total sleep:</strong> commonly 14–17 hours per 24 — but in fragments of 30 minutes to 3–4 hours, around the clock.</li>
-<li><strong>Wake windows:</strong> very short — about 45–60 minutes including the feed. Many newborns are ready to sleep again almost as soon as they've fed and been changed.</li>
+<li><strong>Wake windows:</strong> very short — about 30–60 minutes in the first weeks, stretching toward 60–90 minutes by 2–3 months, and that includes the feed. Many newborns are ready to sleep again almost as soon as they've fed and been changed. (Newborns typically feed about every 2–3 hours.)</li>
 <li><strong>Day/night confusion is normal.</strong> The circadian rhythm doesn't start consolidating until around 6–12 weeks. Help it along: bright light and normal noise for daytime feeds, dark and boring for night ones.</li>
 </ul>
 <h2>A realistic cycle (not a schedule)</h2>
@@ -135,7 +180,7 @@ GUIDES: list[dict] = [
 <h2>Why log anything this early?</h2>
 <p>Two reasons. Your pediatrician will ask concrete questions — feeds per day, wet diapers, sleep — and 3 AM memory is not a data source. And around 8–12 weeks, patterns quietly emerge; a log is how you notice the nap that's stabilizing. HAL does this by text in your family group chat: "ate 3:10" and "down 4:05" is the whole workflow, and either parent (or grandma) can log or ask what's next.</p>
 """,
-        "sources": [_SRC_SAFE_SLEEP, _SRC_NHS_NEWBORN, _SRC_AAP_HOURS],
+        "sources": [_SRC_SAFE_SLEEP, _SRC_NHS_NEWBORN, _SRC_AAP_FEEDING, _SRC_SF_NEWBORN_WW],
     },
     {
         "slug": "4-month-old-nap-schedule",
@@ -169,11 +214,11 @@ GUIDES: list[dict] = [
 </tbody>
 </table>
 <h2>The 4-month sleep regression, briefly</h2>
-<p>It isn't really a regression — it's a permanent upgrade. Around 3–5 months, baby's sleep matures into cycles with more light-sleep stages, which means more chances to fully wake between cycles. A baby who needs help falling asleep at bedtime will often need the same help at every overnight cycle break. It typically shows up as sudden frequent night waking and short naps for 2–6 weeks. What helps: protecting age-appropriate wake windows, practicing some falling-asleep-in-the-crib at bedtime, and riding it out consistently.</p>
+<p>It isn't really a regression — the underlying change is a permanent upgrade, even though the rough patch it causes is temporary. Around 3–5 months, baby's sleep matures into cycles with more light-sleep stages, which means more chances to fully wake between cycles. A baby who needs help falling asleep at bedtime will often need the same help at every overnight cycle break. It typically shows up as sudden frequent night waking and short naps lasting anywhere from a few days to a few weeks (some babies take up to six). What helps: protecting age-appropriate wake windows, practicing some falling-asleep-in-the-crib at bedtime, and riding it out consistently.</p>
 <h2>Keeping two parents on the same day</h2>
 <p>At 3–4 naps a day, timing drifts fast — a 20-minute-late nap moves everything behind it. This is the age where households start needing a shared record. In HAL's case that's your existing group chat: "woke 7:05" from whoever got up, and everyone sees the same schedule and the same next-nap window estimate, sized to your baby's own recent rhythm rather than a generic chart.</p>
 """,
-        "sources": [_SRC_SF_REGRESSION, _SRC_AASM, _SRC_AAP_HOURS],
+        "sources": [_SRC_SF_REGRESSION, _SRC_CC_REGRESSION, _SRC_AASM],
     },
     {
         "slug": "6-month-old-nap-schedule",
@@ -190,7 +235,7 @@ GUIDES: list[dict] = [
 <h2>The shape of the day</h2>
 <ul>
 <li><strong>Wake windows:</strong> about 2 h before nap 1, stretching toward 2.5 h by bedtime.</li>
-<li><strong>Naps:</strong> two solid naps (often 1–1.5 h) plus a short third catnap late afternoon. Day sleep commonly totals ~3–3.5 hours.</li>
+<li><strong>Naps:</strong> two solid naps (often 1–1.5 h) plus a short third catnap late afternoon. Day sleep commonly totals ~2.5–4 hours.</li>
 <li><strong>Night:</strong> commonly 11–12 hours, with the 24-hour total inside the recommended 12–16 hours.</li>
 </ul>
 <h2>Sample 6-month day</h2>
@@ -205,11 +250,11 @@ GUIDES: list[dict] = [
 </tbody>
 </table>
 <h2>Signs the third nap is on its way out</h2>
-<p>Somewhere between 6 and 9 months (most commonly 7–8), the catnap goes. You'll know it's close when the catnap starts routinely failing, when taking it pushes bedtime past 8, or when it happens but bedtime becomes a battle anyway. The move: cap or skip the catnap, pull bedtime as early as 6:30 for a few weeks, and stretch the two remaining windows gradually.</p>
+<p>Somewhere between 6 and 9 months (most commonly around 7–9), the catnap goes. You'll know it's close when the catnap starts routinely failing, when taking it pushes bedtime past 8, or when it happens but bedtime becomes a battle anyway. The move: cap or skip the catnap, pull bedtime as early as 6:30 for a few weeks, and stretch the two remaining windows gradually.</p>
 <h2>Solids join the schedule</h2>
 <p>Around 6 months, solids enter the day (typically after or between milk feeds, not replacing them yet). It's one more thing to coordinate — who fed what, when — and one more reason a shared log beats texting "did she eat?" back and forth. In HAL's case, "oatmeal 11:30, 5oz at 12" in the family thread keeps the food log and the sleep schedule in one place everyone can see.</p>
 """,
-        "sources": [_SRC_AASM, _SRC_AAP_HOURS],
+        "sources": [_SRC_AASM, _SRC_AAP_HOURS, _SRC_HB_3TO2],
     },
     {
         "slug": "9-month-old-nap-schedule",
@@ -226,7 +271,7 @@ GUIDES: list[dict] = [
 <h2>The shape of the day</h2>
 <ul>
 <li><strong>Wake windows:</strong> roughly 2.5–3 h before nap 1, 3–3.5 h before nap 2 and bedtime.</li>
-<li><strong>Naps:</strong> two, ideally 1–1.5 h each; day sleep totals ~2.5–3 h.</li>
+<li><strong>Naps:</strong> two, ideally 1–1.5 h each; day sleep totals ~2–3.5 h.</li>
 <li><strong>Night:</strong> commonly 11–12 h; many babies can go all or most of the night without a feed by now (ask your pediatrician about yours).</li>
 </ul>
 <h2>Sample 9-month day</h2>
@@ -240,11 +285,11 @@ GUIDES: list[dict] = [
 </tbody>
 </table>
 <h2>The 8–10 month bump</h2>
-<p>Right when the schedule stabilizes, many babies hit a rough patch: separation anxiety peaks, crawling and pulling-to-stand are irresistible to practice in the crib, and naps or nights wobble for a few weeks. It's developmental, not a broken schedule — hold the routine steady, give lots of daytime practice for the new skills, and it passes. (If your baby fights nap 1 hard for weeks near 12 months, that's a different thing — see the 12-month guide.)</p>
+<p>Right when the schedule stabilizes, many babies hit a rough patch: separation anxiety peaks, crawling and pulling-to-stand are irresistible to practice in the crib, and naps or nights wobble for a few weeks. It's developmental, not a broken schedule — hold the routine steady, give lots of daytime practice for the new skills, and it passes. Motor-skill disruption usually settles within a few weeks; separation-anxiety waking can take longer, sometimes a few months. (If your baby fights nap 1 hard for weeks near 12 months, that's a different thing — see the 12-month guide.)</p>
 <h2>The handoff problem gets real</h2>
 <p>Nine-month-olds are often in part-time childcare or spending days with grandparents — and a 2-nap schedule with 3-hour windows falls apart when the morning handoff loses the wake-up time. A shared record fixes the handoff: with HAL, the nanny texts "down 9:35" in the same thread you use, and whoever does pickup already knows how the day went and when bedtime should land.</p>
 """,
-        "sources": [_SRC_AASM, _SRC_AAP_HOURS],
+        "sources": [_SRC_AASM, _SRC_AAP_HOURS, _SRC_AAP_SEP_ANXIETY],
     },
     {
         "slug": "12-month-old-nap-schedule",
@@ -275,11 +320,11 @@ GUIDES: list[dict] = [
 </tbody>
 </table>
 <h2>The one-year nap strike</h2>
-<p>Around 11–13 months many babies abruptly refuse a nap — usually the morning one — for a week or three, thanks to walking practice, a language burst, or molars. The common mistake is reading this as the 2-to-1 transition and dropping the nap permanently; most babies genuinely need two naps until somewhere around 14–18 months, and dropping early buys weeks of overtired evenings. Hold the offer: keep putting baby down at the usual time, treat quiet crib play as rest, and most strikes end on their own. If the refusal persists for 3–4 weeks <em>with</em> the other readiness signs, then read the 2-to-1 guide.</p>
+<p>Around 11–13 months many babies abruptly refuse a nap — usually the morning one — for a week or three, thanks to standing-and-walking practice, teething, or a wave of separation anxiety. The common mistake is reading this as the 2-to-1 transition and dropping the nap permanently; most babies genuinely need two naps until somewhere around 13–18 months, and dropping early buys weeks of overtired evenings. Hold the offer: keep putting baby down at the usual time, treat quiet crib play as rest, and most strikes end on their own. If the refusal persists for 3–4 weeks <em>with</em> the other readiness signs, then read the 2-to-1 guide.</p>
 <h2>Knowing the difference takes a record</h2>
 <p>"Is this a strike or the transition?" is answerable only from data: how many days, which nap, how long did she actually sleep, what happened to bedtime. That's exactly what a log in the family thread gives you — with HAL, you can just ask "how were naps this week?" and get the recap instead of reconstructing it from memory.</p>
 """,
-        "sources": [_SRC_AASM, _SRC_AAP_HOURS],
+        "sources": [_SRC_AASM, _SRC_AAP_HOURS, _SRC_SF_12MO],
     },
     {
         "slug": "2-to-1-nap-transition",
@@ -292,19 +337,19 @@ GUIDES: list[dict] = [
         "updated": "2026-08-26",
         "related": ["12-month-old-nap-schedule", "wake-windows-by-age", "share-baby-schedule-with-grandparents"],
         "body": """
-<p>The move from two naps to one is the trickiest nap transition — it's a big consolidation, and it happens while wake windows are stretching toward <strong>4–5 hours</strong>. Most toddlers make it between <strong>14 and 18 months</strong>. Done gradually it takes 2–4 weeks; done abruptly it usually means a very cranky month.</p>
+<p>The move from two naps to one is the trickiest nap transition — it's a big consolidation, and it happens while wake windows are stretching toward <strong>4–5 hours</strong>. Most toddlers make it between <strong>13 and 18 months</strong>, commonly around 15. Done gradually it takes 2–4 weeks; done abruptly it usually means a very cranky month.</p>
 <h2>Real readiness signs (need several, for 2+ weeks)</h2>
 <ul>
 <li>Consistently fighting or skipping one of the naps (usually the second), while coping fine on the days it's missed</li>
 <li>Nap 1 going long while nap 2 fails — or naps fine but bedtime pushed past 8:30</li>
 <li>Early-morning wake-ups creeping in with no other cause</li>
-<li>Age 14+ months — before that, a rough patch is far more likely a strike (see the 12-month guide)</li>
+<li>Age 13–14+ months — before that, a rough patch is far more likely a strike (see the 12-month guide)</li>
 </ul>
 <h2>A gradual method</h2>
 <ol>
 <li><strong>Shift, don't drop.</strong> Push nap 1 later by ~15–30 minutes every few days: 9:30 → 10:00 → 10:30 → 11:00, capping it so bedtime survives.</li>
 <li><strong>Land at one midday nap</strong>, starting around 11:30–12:30, ideally 2–3 hours long. Keep shifting until it starts ~12:30–1:00.</li>
-<li><strong>Protect bedtime with an early-bedtime bridge.</strong> During the transition, bedtime as early as 6:30 keeps overtiredness from wrecking the night.</li>
+<li><strong>Protect bedtime with an early-bedtime bridge.</strong> During the transition, bedtime as early as 6:00–6:30 keeps overtiredness from wrecking the night.</li>
 <li><strong>Expect hybrid weeks.</strong> Two-nap days after rough nights, one-nap days otherwise, is normal mid-transition.</li>
 </ol>
 <h2>Sample days</h2>
@@ -319,7 +364,7 @@ GUIDES: list[dict] = [
 <h2>The coordination trap</h2>
 <p>Transitions fail most often on inconsistency: daycare runs one schedule, the weekend runs another, grandma still does two naps. A toddler mid-transition needs everyone running the same play. Put the plan where every caregiver already is — with HAL, the current schedule and today's actual timing live in the family thread, so "which schedule are we on today?" has one answer for everyone.</p>
 """,
-        "sources": [_SRC_AASM, _SRC_AAP_HOURS],
+        "sources": [_SRC_AASM, _SRC_HB_2TO1, _SRC_TCB_2TO1],
     },
     # ------------------------------------------------------------------ #
     # Practical / product-adjacent long-tail
