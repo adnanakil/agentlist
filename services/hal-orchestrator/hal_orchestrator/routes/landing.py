@@ -59,6 +59,10 @@ SMS_PREFILL = "Hi HAL — new baby here 👶 What can you do?"
 # JS — "/" is no-store, so per-UA markup can't be cached across visitors.
 _ANDROID_UA_RX = re.compile(r"android", re.IGNORECASE)
 
+# IndexNow site key — public by design (the key file proves domain ownership).
+# Served at /{key}.txt; submit URL changes via scripts/indexnow_ping.py.
+_INDEXNOW_KEY = "dd76015a8b4f3852832f9d57b2b3523e"
+
 
 def sms_separator(user_agent: str | None) -> str:
     return "?" if _ANDROID_UA_RX.search(user_agent or "") else "&"
@@ -766,7 +770,7 @@ def render_landing(
         </div>
         <img class="hero-phone" src="/static/hero-phone.png?v=2"
           alt="Family group chat where HAL warns that Leo will likely need to nap in 20 minutes and a parent starts wind-down"
-          fetchpriority="high">
+          width="480" height="1008" fetchpriority="high">
       </div>
       <div class="scroll-cue" aria-hidden="true">See how HAL helps</div>
     </section>
@@ -1149,6 +1153,40 @@ def build_landing_router() -> APIRouter:
             "User-agent: *\nAllow: /\nSitemap: https://www.texthal.com/sitemap.xml\n"
         )
 
+    @router.get(f"/{_INDEXNOW_KEY}.txt", include_in_schema=False)
+    async def indexnow_key() -> PlainTextResponse:
+        # IndexNow key file (public by design). Bing/ChatGPT retrieval rides
+        # this index; ping scripts/indexnow_ping.py after content deploys.
+        return PlainTextResponse(_INDEXNOW_KEY + "\n")
+
+    @router.get("/llms.txt", include_in_schema=False)
+    async def llms_txt() -> PlainTextResponse:
+        # llmstxt.org format. No engine commits to reading it as of mid-2026;
+        # zero-risk, near-zero-cost — do not invest further here.
+        lines = [
+            "# HAL (texthal.com)",
+            "",
+            "> HAL tracks a baby's naps, feeds, and bedtime by text in the",
+            "> family group chat — no app. Private by design: export or",
+            "> permanently delete everything with one text.",
+            "",
+            "## Guides",
+            "",
+        ]
+        lines += [
+            f"- [{g['title']}](https://www.texthal.com/guides/{g['slug']}): {g['teaser']}"
+            for g in _GUIDES
+        ]
+        lines += [
+            "- [Wake window calculator](https://www.texthal.com/guides/wake-window-calculator): free next-nap time-range tool",
+            "",
+            "## Product",
+            "",
+            "- [HAL landing page](https://www.texthal.com/): what HAL does and how to start",
+            "- [Privacy policy](https://www.texthal.com/privacy)",
+        ]
+        return PlainTextResponse("\n".join(lines) + "\n")
+
     @router.get("/sitemap.xml", include_in_schema=False)
     async def sitemap() -> PlainTextResponse:
         pages = ["", "privacy", "terms", "guides"]
@@ -1159,6 +1197,10 @@ def build_landing_router() -> APIRouter:
             f"  <url><loc>https://www.texthal.com/guides/{g['slug']}</loc>"
             f"<lastmod>{g['updated']}</lastmod></url>"
             for g in _GUIDES
+        )
+        urls += (
+            "\n  <url><loc>https://www.texthal.com/guides/wake-window-calculator"
+            "</loc></url>"
         )
         return PlainTextResponse(
             '<?xml version="1.0" encoding="UTF-8"?>\n'

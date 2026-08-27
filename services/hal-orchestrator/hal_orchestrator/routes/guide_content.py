@@ -94,10 +94,98 @@ _SRC_HB_3TO2 = (
     "Huckleberry — How to manage the transition from three naps to two naps",
     "https://huckleberrycare.com/blog/3-to-2-nap-transition",
 )
+_SRC_IPR_BABYAPPS = (
+    "Pybus, Matheson & Lachmansingh — Extraction-by-design: Auditing infrastructures of datafication in baby-tracking apps (Internet Policy Review, 2026)",
+    "https://policyreview.info/articles/analysis/datafication-baby-tracking-apps",
+)
+_SRC_FTC_PREMOM = (
+    "FTC — Ovulation Tracking App Premom Barred from Sharing Health Data for Advertising (2023)",
+    "https://www.ftc.gov/news-events/news/press-releases/2023/05/ovulation-tracking-app-premom-will-be-barred-sharing-health-data-advertising-under-proposed-ftc",
+)
+_SRC_MOZILLA_PNI = (
+    "Mozilla *Privacy Not Included — 18 of 25 Period and Pregnancy Tracking Apps Labeled with Privacy Warnings",
+    "https://www.mozillafoundation.org/en/privacynotincluded/articles/in-post-roe-v-wade-era-mozilla-labels-18-of-25-popular-period-and-pregnancy-tracking-tech-with-privacy-not-included-warning/",
+)
+_SRC_BMJ_APPS = (
+    "Grundy et al. — Data sharing practices of medicines related apps (BMJ 2019; open-access PMC mirror)",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC6425456/",
+)
 
 GUIDES: list[dict] = [
     # ------------------------------------------------------------------ #
-    # Hub page
+    # Pillar page — the cluster hub; every age/transition page links here
+    # and is linked from here (bidirectional, per topic-cluster practice).
+    # ------------------------------------------------------------------ #
+    {
+        "slug": "baby-sleep-schedules-by-age",
+        "code": "g-pillar",
+        "category": "By age",
+        "page_title": "Baby Sleep Schedules by Age: 0–24 Months [Full Chart]",
+        "title": "Baby sleep schedules by age: 0–24 months",
+        "description": "The full picture of baby sleep from newborn to age two: a master chart of naps, wake windows, and sleep totals by age, what changes at each stage, and every transition — with links to the detailed guide for each age.",
+        "teaser": "The master chart and what changes at every age — start here.",
+        "updated": "2026-08-27",
+        "related": ["wake-windows-by-age", "2-to-1-nap-transition", "share-baby-schedule-with-grandparents"],
+        "body": """
+<p>Baby sleep follows a surprisingly consistent arc: newborns sleep in fragments around the clock; by 4 months a real schedule emerges; naps consolidate from 4-ish to 3, to 2, to 1 by around 18 months. This page is the whole arc in one chart — with a deeper guide for every age when you need the details.</p>
+<h2>The master chart</h2>
+<p>Nap counts and wake windows are sleep-practitioner convention (medical bodies publish only the totals — more on that below). Every baby drifts from these ranges sometimes; that's normal.</p>
+<table>
+<thead><tr><th>Age</th><th>Naps</th><th>Wake windows</th><th>Day sleep</th><th>Night sleep</th><th>Total / 24 h</th></tr></thead>
+<tbody>
+<tr><td>0–3 months</td><td>4–6+ (irregular)</td><td>30–90 min</td><td>varies widely</td><td>fragmented</td><td>~14–17 h</td></tr>
+<tr><td>3–4 months</td><td>3–4</td><td>75 min–2 h</td><td>~3.5–4.5 h</td><td>~10–12 h</td><td>12–16 h</td></tr>
+<tr><td>5–6 months</td><td>3</td><td>2–3 h</td><td>~2.5–4 h</td><td>~11–12 h</td><td>12–16 h</td></tr>
+<tr><td>7–9 months</td><td>2–3 → 2</td><td>2.5–3.5 h</td><td>~2–3.5 h</td><td>~11–12 h</td><td>12–16 h</td></tr>
+<tr><td>10–12 months</td><td>2</td><td>3–4 h</td><td>~2–3 h</td><td>~11–12 h</td><td>12–16 h</td></tr>
+<tr><td>13–18 months</td><td>2 → 1</td><td>3–5 h</td><td>~2–3 h</td><td>~11 h</td><td>11–14 h</td></tr>
+<tr><td>18–24 months</td><td>1</td><td>4–6 h</td><td>~1.5–2.5 h</td><td>~11 h</td><td>11–14 h</td></tr>
+</tbody>
+</table>
+<h2>How to read this chart honestly</h2>
+<p>Two different kinds of numbers live in that table. The <strong>totals</strong> are formal medical guidance: the American Academy of Sleep Medicine (endorsed by the AAP) recommends 12–16 hours per 24 for infants 4–12 months and 11–14 hours for ages 1–2, with no formal recommendation under 4 months. The <strong>nap counts and wake windows</strong> are convention from sleep practitioners — useful, broadly agreed, but not research-derived. Treat them as starting ranges and let your baby's own recent pattern be the tiebreaker. (More on this in the <a href="/guides/wake-windows-by-age">wake windows guide</a>, or skip the math with the <a href="/guides/wake-window-calculator">calculator</a>.)</p>
+<h2>0–3 months: rhythm, not schedule</h2>
+<p>Newborns run on feed-sleep cycles of roughly 2–3 hours with wake windows so short (30–60 minutes at first) that a feed and a diaper change nearly fill them. Day/night confusion is standard-issue until the body clock consolidates around 6–12 weeks. Don't chase a schedule yet — build a repeatable cycle, keep days bright and nights boring, and follow safe-sleep rules for every sleep.</p>
+<p><a href="/guides/newborn-sleep-schedule">Full guide: newborn sleep, 0–3 months →</a></p>
+<h2>3–4 months: the schedule arrives (so does the regression)</h2>
+<p>Sleep reorganizes into adult-style cycles around 3–5 months — a permanent upgrade that temporarily wrecks nights (the famous 4-month regression). On the other side of it, most babies land on 3–4 naps with wake windows of 75 minutes to 2 hours, and the first genuinely predictable days appear.</p>
+<p><a href="/guides/4-month-old-nap-schedule">Full guide: 4-month-old nap schedule →</a></p>
+<h2>5–6 months: the three-nap sweet spot</h2>
+<p>Two proper naps plus a late-afternoon catnap, wake windows around 2–3 hours, and solids joining the day. For many families this is the first stretch where tomorrow reliably looks like today.</p>
+<p><a href="/guides/6-month-old-nap-schedule">Full guide: 6-month-old nap schedule →</a></p>
+<h2>7–9 months: the catnap goes</h2>
+<p>Somewhere around 7–9 months the third nap stops earning its keep. The two-nap day that replaces it — morning nap, afternoon nap, windows of 2.5–3.5 hours — is the most stable architecture of the first year. Expect a wobble around 8–10 months from separation anxiety and crawling practice.</p>
+<p><a href="/guides/9-month-old-nap-schedule">Full guide: 9-month-old nap schedule →</a></p>
+<h2>10–12 months: two naps, and the fake-out</h2>
+<p>Still two naps for almost everyone — but around the first birthday many babies stage a convincing nap strike that looks like readiness for one nap and usually isn't. Hold the two-nap line through it.</p>
+<p><a href="/guides/12-month-old-nap-schedule">Full guide: 12-month-old nap schedule →</a></p>
+<h2>13–18 months: the 2-to-1 transition</h2>
+<p>The real transition to one midday nap comes between 13 and 18 months, most commonly around 15. Done gradually — shifting the morning nap later in steps, bridging with early bedtimes — it takes two to four weeks.</p>
+<p><a href="/guides/2-to-1-nap-transition">Full guide: the 2-to-1 nap transition →</a></p>
+<h2>18–24 months: the one-nap era</h2>
+<p>One midday nap of 1.5–2.5 hours, wake windows of 4–6 hours, bedtime around 7–8. This architecture holds until the nap fades out entirely, typically sometime after age 3.</p>
+<h2>The three transitions at a glance</h2>
+<table>
+<thead><tr><th>Transition</th><th>Typical age</th><th>Tell-tale sign it's real</th></tr></thead>
+<tbody>
+<tr><td>4 → 3 naps</td><td>~4–5 months</td><td>the fourth catnap keeps failing and bedtime holds anyway</td></tr>
+<tr><td>3 → 2 naps</td><td>~7–9 months</td><td>the catnap pushes bedtime late or gets refused for weeks</td></tr>
+<tr><td>2 → 1 nap</td><td>~13–18 months</td><td>a nap is consistently refused for 2+ weeks and skipped days go fine</td></tr>
+</tbody>
+</table>
+<h2>When do babies drop to one nap?</h2>
+<p>Most toddlers move to a single midday nap between 13 and 18 months, commonly around 15. Before ~13 months, nap refusal is far more likely a temporary strike than true readiness — the <a href="/guides/2-to-1-nap-transition">2-to-1 guide</a> covers how to tell the difference.</p>
+<h2>Should you wake a sleeping baby?</h2>
+<p>Sometimes. Wake a newborn if a feed is due and weight gain is still being established (your pediatrician will tell you). Wake an older baby to cap a nap that's threatening bedtime or running past the family's schedule. Otherwise, let sleep run — babies mostly take what they need.</p>
+<h2>Should bedtime move earlier when a nap gets skipped?</h2>
+<p>Yes — the early bedtime is the universal repair tool. Pull it forward by roughly 30–60 minutes (rarely before 6:00 PM) whenever the day's sleep came up short. It's much easier to protect a night than to rescue an overtired one.</p>
+<h2>The part the chart can't do: keeping everyone on it</h2>
+<p>A schedule only protects your baby if every caregiver runs the same one — and knows where today actually stands. That's the job HAL does in the family group chat: anyone texts "woke 2:40," everyone sees the same day, and the next-nap estimate comes from your baby's own recent rhythm rather than this chart. The chart is the map; the log is the GPS.</p>
+""",
+        "sources": [_SRC_AASM, _SRC_AAP_HOURS, _SRC_CLEVELAND_WW, _SRC_SAFE_SLEEP],
+    },
+    # ------------------------------------------------------------------ #
+    # Wake-windows hub
     # ------------------------------------------------------------------ #
     {
         "slug": "wake-windows-by-age",
@@ -107,8 +195,8 @@ GUIDES: list[dict] = [
         "title": "Wake windows by age: 0–24 months",
         "description": "A practical wake-windows chart from newborn to 24 months — how long baby can comfortably stay awake between sleeps, how nap counts change, and how to use the ranges without living by the clock.",
         "teaser": "The full chart, 0–24 months, and how to actually use it.",
-        "updated": "2026-08-26",
-        "related": ["newborn-sleep-schedule", "4-month-old-nap-schedule", "6-month-old-nap-schedule", "9-month-old-nap-schedule"],
+        "updated": "2026-08-27",
+        "related": ["baby-sleep-schedules-by-age", "newborn-sleep-schedule", "4-month-old-nap-schedule"],
         "body": """
 <p>A <strong>wake window</strong> is the stretch of time a baby can comfortably stay awake between one sleep and the next. Keep it too short and the next nap is a fight; stretch it too long and you get an overtired baby who paradoxically sleeps <em>worse</em>. Most of practical baby scheduling comes down to landing inside these windows.</p>
 <h2>First, an honest note about where these numbers come from</h2>
@@ -130,6 +218,7 @@ GUIDES: list[dict] = [
 </tbody>
 </table>
 <p>For totals, which <em>are</em> formal medical guidance: the American Academy of Sleep Medicine (endorsed by the AAP) recommends 12–16 hours per 24 hours (including naps) for babies 4–12 months, and 11–14 hours for ages 1–2. There is no formal recommendation for newborns under 4 months — their sleep is too variable to standardize.</p>
+<p>Prefer to skip the mental math? The free <a href="/guides/wake-window-calculator">wake window calculator</a> turns age + last wake-up into a next-nap time range.</p>
 <h2>How to use wake windows (without living by the clock)</h2>
 <ul>
 <li><strong>Count from wake-up, not from when you started trying.</strong> The window opens when baby actually wakes.</li>
@@ -139,6 +228,12 @@ GUIDES: list[dict] = [
 </ul>
 <h2>Overtired vs. undertired</h2>
 <p>Both look like "won't sleep," which is why guessing fails — and short naps happen in <em>both</em> cases, so nap length alone won't tell you which. The distinguishing signal is mood and distress: an <strong>overtired</strong> baby is wired, cries hard at the crib, and wakes from short naps still cranky. An <strong>undertired</strong> baby resists calmly — plays or chats in the crib for a long time, settles late without drama, and wakes from a short nap cheerful. A common rule of thumb among sleep consultants: if you're seeing the first, shorten windows by 10–15 minutes and hold that for a few days; the second, stretch by the same amount.</p>
+<h2>Do wake windows include feeding time?</h2>
+<p>Yes. The wake window runs from the moment your baby wakes to the moment they're asleep again, and everything inside it counts — feeds, diaper changes, play, the wind-down. For newborns a feed can fill most of the window, which is why they're often ready to sleep right after eating.</p>
+<h2>When do wake windows start counting?</h2>
+<p>From wake-up, not from when you get baby out of the crib and not from the end of the feed. If she woke at 2:40 and you got her up at 3:00, the window opened at 2:40 — miss that and every estimate for the rest of the day runs 20 minutes late.</p>
+<h2>Should the last wake window of the day be the longest?</h2>
+<p>Usually, yes. Most babies handle their longest stretch of awake time right before bedtime, and the first window of the morning is typically the shortest. If bedtime is a nightly fight, the pre-bed window is the first one worth adjusting — often it's too short rather than too long.</p>
 <h2>The part no chart solves: everyone has to know today's timing</h2>
 <p>Wake windows only work if whoever is holding the baby knows when the last sleep ended. That's the actual hard part in a two-parent-plus-caregivers household. HAL solves it in the family group chat: anyone texts "woke 2:40" and everyone — including HAL's next-nap estimate from your baby's own recent rhythm — is looking at the same day.</p>
 """,
@@ -156,7 +251,7 @@ GUIDES: list[dict] = [
         "description": "Newborns don't follow schedules — they follow feed-sleep cycles. What a realistic 0–3 month rhythm looks like, day/night confusion, safe sleep basics, and when patterns start to emerge.",
         "teaser": "There is no schedule yet — here's the rhythm to expect instead.",
         "updated": "2026-08-26",
-        "related": ["wake-windows-by-age", "4-month-old-nap-schedule", "pediatrician-visit-checklist"],
+        "related": ["baby-sleep-schedules-by-age", "wake-windows-by-age", "4-month-old-nap-schedule"],
         "body": """
 <p>First, permission to relax: <strong>newborns do not have schedules, and nothing is wrong with your baby or your parenting.</strong> For roughly the first three months, sleep is driven by feeding and a not-yet-developed body clock. What you can build now is a <em>rhythm</em> — and a record — while the schedule arrives on its own later.</p>
 <h2>What newborn sleep actually looks like</h2>
@@ -190,8 +285,8 @@ GUIDES: list[dict] = [
         "title": "4-month-old nap schedule: wake windows, naps, and the regression",
         "description": "A realistic 4-month-old schedule: 3–4 naps, wake windows of about 75 minutes to 2 hours, a sample day, and what the famous 4-month sleep regression actually is.",
         "teaser": "3–4 naps, the first real wake windows — and the famous regression.",
-        "updated": "2026-08-26",
-        "related": ["wake-windows-by-age", "newborn-sleep-schedule", "6-month-old-nap-schedule"],
+        "updated": "2026-08-27",
+        "related": ["baby-sleep-schedules-by-age", "wake-windows-by-age", "newborn-sleep-schedule"],
         "body": """
 <p>Four months is when a schedule first becomes worth talking about. Sleep is reorganizing into adult-style cycles, the body clock is coming online, and most babies land on <strong>3–4 naps</strong> with wake windows of roughly <strong>75 minutes to 2 hours</strong>.</p>
 <h2>The shape of the day</h2>
@@ -215,6 +310,12 @@ GUIDES: list[dict] = [
 </table>
 <h2>The 4-month sleep regression, briefly</h2>
 <p>It isn't really a regression — the underlying change is a permanent upgrade, even though the rough patch it causes is temporary. Around 3–5 months, baby's sleep matures into cycles with more light-sleep stages, which means more chances to fully wake between cycles. A baby who needs help falling asleep at bedtime will often need the same help at every overnight cycle break. It typically shows up as sudden frequent night waking and short naps lasting anywhere from a few days to a few weeks (some babies take up to six). What helps: protecting age-appropriate wake windows, practicing some falling-asleep-in-the-crib at bedtime, and riding it out consistently.</p>
+<h2>Questions parents ask at this age</h2>
+<p><strong>How much should a 4-month-old sleep?</strong> The formal guidance (AASM, endorsed by the AAP) is 12–16 hours per 24 including naps — commonly ~10–12 hours at night plus 3.5–4.5 hours across naps.</p>
+<p><strong>Can a 4-month-old sleep through the night?</strong> Some manage one long stretch of 6–8 hours; many still genuinely need a night feed or two. Both are normal at this age — ask your pediatrician about your baby specifically before dropping night feeds.</p>
+<p><strong>What's a good bedtime for a 4-month-old?</strong> Most land between 6:30 and 7:30 PM — roughly 2 hours after the last nap ends. If the last nap ran late, bedtime shifts with it.</p>
+<p><strong>Can a 4-month-old nap too long?</strong> A single marathon nap that eats the day's sleep pressure can shortchange the night. Many families cap daytime naps around 2 hours; if nights are going fine, there's no need to wake a napper.</p>
+<p><strong>Should I move bedtime earlier if a nap gets skipped?</strong> Yes — an earlier bedtime (commonly 30–60 minutes, rarely before 6:00 PM) is the standard bridge that keeps a lost nap from snowballing into an overtired night.</p>
 <h2>Keeping two parents on the same day</h2>
 <p>At 3–4 naps a day, timing drifts fast — a 20-minute-late nap moves everything behind it. This is the age where households start needing a shared record. In HAL's case that's your existing group chat: "woke 7:05" from whoever got up, and everyone sees the same schedule and the same next-nap window estimate, sized to your baby's own recent rhythm rather than a generic chart.</p>
 """,
@@ -229,7 +330,7 @@ GUIDES: list[dict] = [
         "description": "Most 6-month-olds settle on 3 naps with wake windows around 2–2.5 hours. A sample day, signs the third nap is on its way out, and how to keep every caregiver on the same schedule.",
         "teaser": "The 3-nap sweet spot, and the first hints of dropping to two.",
         "updated": "2026-08-26",
-        "related": ["4-month-old-nap-schedule", "9-month-old-nap-schedule", "wake-windows-by-age"],
+        "related": ["baby-sleep-schedules-by-age", "4-month-old-nap-schedule", "9-month-old-nap-schedule"],
         "body": """
 <p>Six months is often the first genuinely predictable stretch: most babies settle on <strong>3 naps</strong> with wake windows around <strong>2–2.5 hours</strong>, and the day starts to look similar from one date to the next.</p>
 <h2>The shape of the day</h2>
@@ -265,7 +366,7 @@ GUIDES: list[dict] = [
         "description": "By 9 months most babies are on 2 naps with wake windows of about 2.5–3.5 hours. A sample day, the 8–10 month sleep bump, and keeping nannies and grandparents on the same schedule.",
         "teaser": "Two proper naps, longer windows, and the 8–10 month bump.",
         "updated": "2026-08-26",
-        "related": ["6-month-old-nap-schedule", "12-month-old-nap-schedule", "share-baby-schedule-with-grandparents"],
+        "related": ["baby-sleep-schedules-by-age", "6-month-old-nap-schedule", "12-month-old-nap-schedule"],
         "body": """
 <p>By nine months the catnap is usually gone and the day has a clean two-nap architecture: wake windows of about <strong>2.5–3.5 hours</strong>, a real morning nap, a real afternoon nap.</p>
 <h2>The shape of the day</h2>
@@ -300,7 +401,7 @@ GUIDES: list[dict] = [
         "description": "A realistic 12-month-old schedule: still 2 naps for most, wake windows around 3–4 hours, a sample day, and why the one-year nap strike usually isn't the 2-to-1 transition yet.",
         "teaser": "Still two naps for most — don't let the nap strike fool you.",
         "updated": "2026-08-26",
-        "related": ["9-month-old-nap-schedule", "2-to-1-nap-transition", "wake-windows-by-age"],
+        "related": ["baby-sleep-schedules-by-age", "9-month-old-nap-schedule", "2-to-1-nap-transition"],
         "body": """
 <p>At twelve months most babies are still solidly on <strong>2 naps</strong>, with wake windows around <strong>3–4 hours</strong>. The headline for this age: many one-year-olds suddenly fight the morning nap, and it usually <em>isn't</em> time to drop it yet.</p>
 <h2>The shape of the day</h2>
@@ -334,8 +435,8 @@ GUIDES: list[dict] = [
         "title": "The 2-to-1 nap transition: when and how",
         "description": "Most toddlers drop to one nap between 14 and 18 months. The readiness signs that matter, a gradual week-by-week method, sample days during the transition, and survival tips.",
         "teaser": "The trickiest nap transition — readiness signs and a gradual method.",
-        "updated": "2026-08-26",
-        "related": ["12-month-old-nap-schedule", "wake-windows-by-age", "share-baby-schedule-with-grandparents"],
+        "updated": "2026-08-27",
+        "related": ["baby-sleep-schedules-by-age", "12-month-old-nap-schedule", "wake-windows-by-age"],
         "body": """
 <p>The move from two naps to one is the trickiest nap transition — it's a big consolidation, and it happens while wake windows are stretching toward <strong>4–5 hours</strong>. Most toddlers make it between <strong>13 and 18 months</strong>, commonly around 15. Done gradually it takes 2–4 weeks; done abruptly it usually means a very cranky month.</p>
 <h2>Real readiness signs (need several, for 2+ weeks)</h2>
@@ -361,6 +462,12 @@ GUIDES: list[dict] = [
 <tr><td>Bedtime</td><td>6:30–7:00 pm</td><td>7:30 pm</td></tr>
 </tbody>
 </table>
+<h2>Which nap gets dropped?</h2>
+<p>The morning nap. It shifts later and later until it <em>becomes</em> the single midday nap — you don't remove it, you slide it. The afternoon nap is the one that quietly disappears as the morning nap moves into its slot.</p>
+<h2>What if my baby seems stuck between 2 naps and 1?</h2>
+<p>The stuck state — two naps won't fit, one nap isn't enough — is the normal middle of this transition, not a sign it's failing. Run hybrid weeks: one-nap days by default, a two-nap rescue day after any rough night, and an early bedtime whenever the single nap came up short. Most babies un-stick within a few weeks.</p>
+<h2>Fighting the second nap at 13 months — transition or strike?</h2>
+<p>At 13 months it can be either. Check the other readiness signs: if she copes fine on days the second nap is skipped and bedtime holds, it's probably the real transition starting. If skipped-nap days end in a 5 PM meltdown, treat it as a strike, keep offering both naps, and revisit in two weeks.</p>
 <h2>The coordination trap</h2>
 <p>Transitions fail most often on inconsistency: daycare runs one schedule, the weekend runs another, grandma still does two naps. A toddler mid-transition needs everyone running the same play. Put the plan where every caregiver already is — with HAL, the current schedule and today's actual timing live in the family thread, so "which schedule are we on today?" has one answer for everyone.</p>
 """,
@@ -410,7 +517,7 @@ GUIDES: list[dict] = [
         "title": "A baby tracker without an app: tracking feeds and naps by text",
         "description": "App fatigue is real, and baby-tracking apps lose half the household. Why texting is the best interface for logging feeds and naps, and what a text-based baby tracker looks like.",
         "teaser": "Why the best baby-tracking interface is the one you already have.",
-        "updated": "2026-08-26",
+        "updated": "2026-08-27",
         "related": ["share-baby-schedule-with-grandparents", "pediatrician-visit-checklist", "wake-windows-by-age"],
         "body": """
 <p>Every exhausted parent has done it: downloaded a highly-rated baby-tracking app, logged diligently for two weeks, and quietly stopped. Not because tracking isn't useful — it is — but because the interface asks too much of people running on four hours of sleep.</p>
@@ -421,6 +528,8 @@ GUIDES: list[dict] = [
 <li><strong>The 3 AM problem.</strong> Unlock, find app, tap through four screens, select left/right, start timer — one-handed, in the dark. A text is one thumb: "4oz."</li>
 <li><strong>The data problem.</strong> Your baby's daily life is intimate data, and app privacy policies vary wildly on what's collected and shared.</li>
 </ul>
+<h2>Can I track feedings and naps by text message?</h2>
+<p>Yes — that's exactly what HAL is. Add it to your family group chat and texting "4oz at 3:15" or "down for nap" <em>is</em> the logging. It reads plain English, keeps the running record, and answers questions like "when did she last eat?" for anyone in the thread. No app, no accounts for caregivers.</p>
 <h2>Texting is the interface that survives</h2>
 <p>Text messaging is already installed, already understood by every adult in your baby's life, already open in the group chat you use anyway. A tracker built on text means logging is as hard as sending "woke up 6:50" — which is to say, not hard at all, which is why it actually keeps happening in week six.</p>
 <h2>What HAL does with those texts</h2>
@@ -434,6 +543,42 @@ GUIDES: list[dict] = [
 <p>Fair cases exist: pumping-session timers, medical-grade charts for a NICU graduate, wearable integrations. If that's you, use the app — and consider keeping the family-facing layer in the group chat regardless, because the app still won't get grandma logging.</p>
 """,
         "sources": [_SRC_AAP_HOURS, _SRC_ENOUGH_MILK],
+    },
+    {
+        "slug": "baby-tracker-privacy",
+        "code": "g-priv",
+        "category": "Practical",
+        "page_title": "Baby Tracker Privacy: 5 Questions to Ask — and HAL's Answers",
+        "title": "Before you use any baby tracker: five privacy questions",
+        "description": "A baby log is intimate data — feeds, sleep, health worries, your family's daily rhythm. Five privacy questions to ask of any baby-tracking app, and HAL's plain answers to each.",
+        "teaser": "Your baby's data is intimate. Ask these five questions of any tracker.",
+        "updated": "2026-08-27",
+        "related": ["baby-tracker-without-an-app", "share-baby-schedule-with-grandparents", "pediatrician-visit-checklist"],
+        "body": """
+<p>A baby log is one of the most intimate datasets a family produces: when your child eats and sleeps, what worried you at 3 AM, when your home is on its daily rhythm. Most parents vet a stroller harder than they vet the app that will hold all of that. Regulators have already had to step in against health apps that shared user data with third parties, and app privacy policies vary enormously — so before you commit to any tracker (ours included), ask five questions.</p>
+<h2>1. What's the business model?</h2>
+<p>If the product is free forever, ask what pays for the servers. "Free plus ads" usually means the data you enter is feeding an advertising machine somewhere. A straightforward paid product has a straightforward reason to keep your data private: you're the customer, not the inventory.</p>
+<h2>2. What does the policy say about "sharing with partners"?</h2>
+<p>Words like "affiliates," "partners," and "for marketing purposes" in a privacy policy are where your baby's data leaves the building. This isn't hypothetical: a 2026 peer-reviewed audit of 14 popular baby-tracking apps found <strong>all 14 shared data with third parties</strong> — including due dates and pregnancy-loss data. Regulators have acted too: the FTC barred the Premom fertility app from sharing health data for advertising after it sent users' reproductive-health details to third parties against its own promises. Read that paragraph before entering a single feed.</p>
+<h2>3. Can you delete everything — easily?</h2>
+<p>Not "email support and wait." One clear, self-service action that permanently removes your family's data. If deletion is hard to find, that tells you how the company thinks about ownership.</p>
+<h2>4. Can you get your data out?</h2>
+<p>Your baby's history is yours. There should be a real export — usable, complete, whenever you want it — not screenshots.</p>
+<h2>5. Who else has to create an account?</h2>
+<p>Every caregiver who must register is another account, another password, another copy of the access. Grandparents shouldn't need to join a platform to tell you the baby napped.</p>
+<h2>HAL's answers, on the record</h2>
+<ul>
+<li><strong>Business model:</strong> HAL is a paid product. No ads, ever. Your family's data is never sold — being the product is the thing we built HAL to avoid.</li>
+<li><strong>What we hold:</strong> only what your household chooses to text. HAL's record is the messages you send it — there's no background collection, no location tracking, no contact scraping.</li>
+<li><strong>Deletion:</strong> text <em>"forget me"</em> and the household's stored data is permanently deleted. One text, no support ticket.</li>
+<li><strong>Export:</strong> text <em>"export"</em> and HAL prepares your full log as a file. Yours to keep, bring to the pediatrician, or take elsewhere.</li>
+<li><strong>Accounts:</strong> caregivers need none. No installs, no registrations — the record lives in the group chat your family already uses.</li>
+<li><strong>This website:</strong> no third-party trackers, no ad pixels. (Check the network tab — we'll wait.)</li>
+</ul>
+<h2>Hold us to it</h2>
+<p>Privacy promises are only as good as your ability to verify them. Ours are testable from your phone: send "export" and see exactly what we hold; send "forget me" and watch it go. If a promise on this page ever stops being true, that's a betrayal of the one job a family assistant has — keeping your family's trust.</p>
+""",
+        "sources": [_SRC_IPR_BABYAPPS, _SRC_FTC_PREMOM, _SRC_MOZILLA_PNI, _SRC_BMJ_APPS],
     },
     {
         "slug": "pediatrician-visit-checklist",
