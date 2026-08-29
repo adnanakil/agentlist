@@ -590,6 +590,16 @@ def render_landing(
   .privacy-list {{ display:grid; gap:13px; margin-top:28px; list-style:none; color:#fff; font-size:16px; }}
   .privacy-list li::before {{ content:"✓"; color:var(--green-bright); margin-right:12px; }}
 
+  .guides-strip {{ background:var(--green-soft); }}
+  .guides-sub {{ margin:18px 0 34px; font-size:18px; color:#315646; max-width:520px; }}
+  .guides-cards {{ display:grid; grid-template-columns:repeat(3, 1fr); gap:18px; }}
+  .guide-card {{ background:#fff; border:1px solid var(--line); border-radius:16px;
+    padding:24px; text-decoration:none; color:var(--ink); display:block; }}
+  .guide-card h3 {{ color:var(--green); font-size:20px; letter-spacing:-.015em; margin-bottom:8px; }}
+  .guide-card p {{ font-size:15px; color:var(--muted); line-height:1.5; }}
+  .guide-card:hover h3 {{ text-decoration:underline; }}
+  .guides-all {{ margin-top:26px; font-weight:650; }}
+  .guides-all a {{ color:var(--green); text-decoration:none; }}
   .faq {{ background:#fff; }}
   .faq-grid {{ display:grid; grid-template-columns:.7fr 1.3fr; gap:clamp(50px, 9vw, 130px); }}
   .faq-list {{ border-top:1px solid var(--line); }}
@@ -661,7 +671,7 @@ def render_landing(
     /* Stack: text (CTA stays above the fold), phone below at product-shot size. */
     .hero-inner {{ grid-template-columns:1fr; gap:44px; }}
     .hero-phone {{ justify-self:center; max-height:460px; }}
-    .intro-grid, .value-head, .privacy-panel, .faq-grid {{ grid-template-columns:1fr; }}
+    .intro-grid, .value-head, .privacy-panel, .faq-grid, .guides-cards {{ grid-template-columns:1fr; }}
     .phone-row {{ grid-template-columns:1fr; gap:54px; }}
     .phone-wrap {{ min-height:620px; }}
     .demo-header {{ align-items:start; flex-direction:column; }}
@@ -881,6 +891,20 @@ def render_landing(
         <div><p class="kicker">Protect your baby's privacy</p><h2 id="privacy-title">Your baby's data stays in the family.</h2><p>Baby-tracker apps come with accounts, ad networks, and analytics. HAL is a text thread. Your baby's first months are recorded where they happen—in your family's chat—and your household's information helps your household, nobody else.</p>
           <ul class="privacy-list"><li>Never sold, never ads, no third-party trackers</li><li>Never used to train anything</li><li>Export or permanently delete it by text</li></ul>
         </div>
+      </div>
+    </section>
+
+    <section class="section guides-strip" aria-labelledby="guides-title">
+      <div class="section-inner">
+        <p class="kicker">Free guides</p>
+        <h2 class="display" id="guides-title">The routine, explained.</h2>
+        <p class="guides-sub">Sourced, honest guides to baby sleep — no signup, no paywall.</p>
+        <div class="guides-cards">
+          <a class="guide-card" href="/guides/baby-sleep-schedules-by-age"><h3>Sleep schedules by age</h3><p>The 0–24 month master chart: naps, wake windows, and every transition.</p></a>
+          <a class="guide-card" href="/guides/wake-window-calculator"><h3>Wake window calculator</h3><p>Age in, next-nap window out — plus a printable fridge chart.</p></a>
+          <a class="guide-card" href="/guides/share-baby-schedule-with-grandparents"><h3>The caregiver handoff</h3><p>Keeping grandma, the nanny, and both parents on one schedule.</p></a>
+        </div>
+        <p class="guides-all"><a href="/guides">All guides →</a></p>
       </div>
     </section>
 
