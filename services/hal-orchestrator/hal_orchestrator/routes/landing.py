@@ -18,8 +18,9 @@ feature that doesn't exist.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -32,11 +33,10 @@ from fastapi.responses import (
     RedirectResponse,
     Response,
 )
+from sqlalchemy import func, select
 
 import ag_db.session as db_session
 from ag_db.models import HalFunnelEvent
-from sqlalchemy import func, select
-
 from hal_orchestrator.middleware.page_hits import (
     LANDING_VARIANTS,
     landing_variant,
@@ -45,6 +45,7 @@ from hal_orchestrator.middleware.page_hits import (
 
 log = structlog.get_logger()
 
+from hal_orchestrator.routes.guide_content import GUIDES as _GUIDES
 from hal_orchestrator.routes.logo_data import LOGO_DATA_URI
 from hal_orchestrator.state import get_settings
 
@@ -57,6 +58,10 @@ SMS_PREFILL = "Hi HAL — new baby here 👶 What can you do?"
 # chosen server-side from the request UA so the markup is already right without
 # JS — "/" is no-store, so per-UA markup can't be cached across visitors.
 _ANDROID_UA_RX = re.compile(r"android", re.IGNORECASE)
+
+# IndexNow site key — public by design (the key file proves domain ownership).
+# Served at /{key}.txt; submit URL changes via scripts/indexnow_ping.py.
+_INDEXNOW_KEY = "dd76015a8b4f3852832f9d57b2b3523e"
 
 
 def sms_separator(user_agent: str | None) -> str:
@@ -161,6 +166,8 @@ _CODE_RX = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
 _BOTTLES_IMAGE = Path(__file__).parent.parent / "static" / "donebottles.png"
 _HERO_IMAGE = Path(__file__).parent.parent / "static" / "hero-conversation.png"
 _HERO_PHONE_IMAGE = Path(__file__).parent.parent / "static" / "hero-phone.png"
+_OG_CARD_IMAGE = Path(__file__).parent.parent / "static" / "og-card.png"
+_LOGO_IMAGE = Path(__file__).parent.parent / "static" / "logo.png"
 
 
 def _pretty_number(raw: str) -> str:
@@ -293,6 +300,94 @@ def render_landing(
         else '<a class="nav-cta" href="#start">Coming soon</a>'
     )
 
+    # JSON-LD entity graph. FAQ strings MUST stay verbatim copies of the
+    # visible .faq-list markup below — Google ignores FAQPage markup whose
+    # text diverges from the page.
+    structured_data = json.dumps(
+        {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "Organization",
+                    "@id": "https://www.texthal.com/#org",
+                    "name": "HAL",
+                    "url": "https://www.texthal.com/",
+                    "logo": "https://www.texthal.com/static/logo.png",
+                    "sameAs": [
+                        "https://www.facebook.com/people/HAL-Baby-Log-by-Text/61592858016305/",
+                        "https://www.instagram.com/texthal4baby/",
+                    ],
+                },
+                {
+                    "@type": "WebSite",
+                    "@id": "https://www.texthal.com/#website",
+                    "name": "HAL",
+                    "alternateName": "texthal.com",
+                    "url": "https://www.texthal.com/",
+                    "publisher": {"@id": "https://www.texthal.com/#org"},
+                },
+                {
+                    "@type": "SoftwareApplication",
+                    "name": "HAL",
+                    "url": "https://www.texthal.com/",
+                    "applicationCategory": "LifestyleApplication",
+                    "operatingSystem": "iMessage, WhatsApp",
+                    "description": (
+                        "HAL keeps every caregiver on one consistent baby "
+                        "routine — naps, feeds, and bedtime logged by text in "
+                        "the family group chat. No app to install."
+                    ),
+                    "publisher": {"@id": "https://www.texthal.com/#org"},
+                },
+                {
+                    "@type": "FAQPage",
+                    "mainEntity": [
+                        {
+                            "@type": "Question",
+                            "name": "Do we all need to install something?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "No. HAL works over text. Add HAL to the family thread and everyone can participate from the messaging app already on their phone.",
+                            },
+                        },
+                        {
+                            "@type": "Question",
+                            "name": "What can HAL keep track of?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "HAL can log feeds, naps, wake-ups, and other baby-day updates, summarize the day, and estimate what is likely next from your baby's own recent rhythm.",
+                            },
+                        },
+                        {
+                            "@type": "Question",
+                            "name": "Can I get my data back?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "Yes. Text “export” and HAL will prepare the log as a file. Text “forget me” to permanently delete the household's stored data.",
+                            },
+                        },
+                        {
+                            "@type": "Question",
+                            "name": "Does it help at pediatrician visits?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "It helps you arrive prepared. HAL keeps an accurate day-by-day record—feeds, naps, diapers—so you can answer “how many wet diapers?” from the log instead of 3 AM memory, and export it to bring along.",
+                            },
+                        },
+                        {
+                            "@type": "Question",
+                            "name": "Is HAL medical advice?",
+                            "acceptedAnswer": {
+                                "@type": "Answer",
+                                "text": "No. HAL is a household coordination and logging assistant, not a medical service. For health concerns, contact your pediatrician or another qualified professional.",
+                            },
+                        },
+                    ],
+                },
+            ],
+        }
+    )
+
     return f"""<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -306,8 +401,18 @@ def render_landing(
 <meta property="og:description" content="One consistent routine every caregiver can follow — private, in the chat you already have.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.texthal.com/">
+<meta property="og:image" content="https://www.texthal.com/static/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Protect your baby's routine — HAL tracks naps, feeds, and bedtime by text in your family group chat.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="HAL — protect your baby's routine, private in your group chat">
+<meta name="twitter:description" content="One consistent routine every caregiver can follow — private, in the chat you already have.">
+<meta name="twitter:image" content="https://www.texthal.com/static/og-card.png">
 <link rel="canonical" href="https://www.texthal.com/">
-<script type="application/ld+json">{{"@context":"https://schema.org","@type":"WebSite","name":"HAL","alternateName":"texthal.com","url":"https://www.texthal.com/"}}</script>
+<link rel="icon" type="image/png" sizes="200x200" href="/static/logo.png">
+<link rel="apple-touch-icon" href="/static/logo.png">
+<script type="application/ld+json">{structured_data}</script>
 <style>
   :root {{
     color-scheme: light;
@@ -485,6 +590,16 @@ def render_landing(
   .privacy-list {{ display:grid; gap:13px; margin-top:28px; list-style:none; color:#fff; font-size:16px; }}
   .privacy-list li::before {{ content:"✓"; color:var(--green-bright); margin-right:12px; }}
 
+  .guides-strip {{ background:var(--green-soft); }}
+  .guides-sub {{ margin:18px 0 34px; font-size:18px; color:#315646; max-width:520px; }}
+  .guides-cards {{ display:grid; grid-template-columns:repeat(3, 1fr); gap:18px; }}
+  .guide-card {{ background:#fff; border:1px solid var(--line); border-radius:16px;
+    padding:24px; text-decoration:none; color:var(--ink); display:block; }}
+  .guide-card h3 {{ color:var(--green); font-size:20px; letter-spacing:-.015em; margin-bottom:8px; }}
+  .guide-card p {{ font-size:15px; color:var(--muted); line-height:1.5; }}
+  .guide-card:hover h3 {{ text-decoration:underline; }}
+  .guides-all {{ margin-top:26px; font-weight:650; }}
+  .guides-all a {{ color:var(--green); text-decoration:none; }}
   .faq {{ background:#fff; }}
   .faq-grid {{ display:grid; grid-template-columns:.7fr 1.3fr; gap:clamp(50px, 9vw, 130px); }}
   .faq-list {{ border-top:1px solid var(--line); }}
@@ -556,7 +671,7 @@ def render_landing(
     /* Stack: text (CTA stays above the fold), phone below at product-shot size. */
     .hero-inner {{ grid-template-columns:1fr; gap:44px; }}
     .hero-phone {{ justify-self:center; max-height:460px; }}
-    .intro-grid, .value-head, .privacy-panel, .faq-grid {{ grid-template-columns:1fr; }}
+    .intro-grid, .value-head, .privacy-panel, .faq-grid, .guides-cards {{ grid-template-columns:1fr; }}
     .phone-row {{ grid-template-columns:1fr; gap:54px; }}
     .phone-wrap {{ min-height:620px; }}
     .demo-header {{ align-items:start; flex-direction:column; }}
@@ -642,7 +757,7 @@ def render_landing(
   <nav class="site-nav" aria-label="Main navigation">
     <a class="brand" href="#top"><img src="{LOGO_DATA_URI}" alt=""><span>HAL</span></a>
     <div class="nav-links">
-      <a href="#how">How it works</a><a href="#privacy">Privacy</a>{nav_cta}
+      <a href="#how">How it works</a><a href="#privacy">Privacy</a><a href="/guides">Guides</a>{nav_cta}
     </div>
   </nav>
 
@@ -665,7 +780,7 @@ def render_landing(
         </div>
         <img class="hero-phone" src="/static/hero-phone.png?v=2"
           alt="Family group chat where HAL warns that Leo will likely need to nap in 20 minutes and a parent starts wind-down"
-          fetchpriority="high">
+          width="480" height="1008" fetchpriority="high">
       </div>
       <div class="scroll-cue" aria-hidden="true">See how HAL helps</div>
     </section>
@@ -779,6 +894,20 @@ def render_landing(
       </div>
     </section>
 
+    <section class="section guides-strip" aria-labelledby="guides-title">
+      <div class="section-inner">
+        <p class="kicker">Free guides</p>
+        <h2 class="display" id="guides-title">The routine, explained.</h2>
+        <p class="guides-sub">Sourced, honest guides to baby sleep — no signup, no paywall.</p>
+        <div class="guides-cards">
+          <a class="guide-card" href="/guides/baby-sleep-schedules-by-age"><h3>Sleep schedules by age</h3><p>The 0–24 month master chart: naps, wake windows, and every transition.</p></a>
+          <a class="guide-card" href="/guides/wake-window-calculator"><h3>Wake window calculator</h3><p>Age in, next-nap window out — plus a printable fridge chart.</p></a>
+          <a class="guide-card" href="/guides/share-baby-schedule-with-grandparents"><h3>The caregiver handoff</h3><p>Keeping grandma, the nanny, and both parents on one schedule.</p></a>
+        </div>
+        <p class="guides-all"><a href="/guides">All guides →</a></p>
+      </div>
+    </section>
+
     <section class="section faq" aria-labelledby="faq-title">
       <div class="section-inner faq-grid">
         <div><p class="kicker">Good to know</p><h2 class="display" id="faq-title">Questions, answered.</h2></div>
@@ -797,7 +926,7 @@ def render_landing(
     </section>
   </main>
 
-  <footer><div class="footer-inner"><span class="footer-brand">HAL</span><span>© 2026 HAL</span><div class="footer-links"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div></div></footer>
+  <footer><div class="footer-inner"><span class="footer-brand">HAL</span><span>© 2026 HAL</span><div class="footer-links"><a href="/guides">Guides</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div></div></footer>
   {sticky_cta}
 <script src="/static/landing.js"></script>
 </body></html>"""
@@ -829,7 +958,7 @@ async def _record_tap(
     try:
         async with factory() as session:
             # Dedup: skip if this visitor already fired this event in the last 60 seconds.
-            cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+            cutoff = datetime.now(UTC) - timedelta(seconds=60)
             recent = await session.scalar(
                 select(func.count()).where(
                     HalFunnelEvent.event_type == event_type,
@@ -1001,6 +1130,37 @@ def build_landing_router() -> APIRouter:
             headers={"Cache-Control": "public, max-age=86400"},
         )
 
+    @router.get("/static/og-card.png", include_in_schema=False)
+    async def og_card_image() -> FileResponse:
+        # 1200x630 social share card (scratchpad make_og_card.py composed it
+        # from hero-conversation.png + hero-phone.png); referenced by og:image
+        # and twitter:image.
+        return FileResponse(
+            _OG_CARD_IMAGE,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @router.get("/static/logo.png", include_in_schema=False)
+    async def logo_image() -> FileResponse:
+        # Same 200x200 mark as LOGO_DATA_URI, as a real URL: Organization
+        # schema `logo` and the favicon links need one.
+        return FileResponse(
+            _LOGO_IMAGE,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @router.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> FileResponse:
+        # Browsers request this path unprompted; a PNG body is fine for every
+        # modern browser regardless of the .ico extension.
+        return FileResponse(
+            _LOGO_IMAGE,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
     @router.get("/static/landing.js", include_in_schema=False)
     async def landing_js() -> PlainTextResponse:
         # External file, not inline: the CSP is script-src 'self' with no
@@ -1017,11 +1177,54 @@ def build_landing_router() -> APIRouter:
             "User-agent: *\nAllow: /\nSitemap: https://www.texthal.com/sitemap.xml\n"
         )
 
+    @router.get(f"/{_INDEXNOW_KEY}.txt", include_in_schema=False)
+    async def indexnow_key() -> PlainTextResponse:
+        # IndexNow key file (public by design). Bing/ChatGPT retrieval rides
+        # this index; ping scripts/indexnow_ping.py after content deploys.
+        return PlainTextResponse(_INDEXNOW_KEY + "\n")
+
+    @router.get("/llms.txt", include_in_schema=False)
+    async def llms_txt() -> PlainTextResponse:
+        # llmstxt.org format. No engine commits to reading it as of mid-2026;
+        # zero-risk, near-zero-cost — do not invest further here.
+        lines = [
+            "# HAL (texthal.com)",
+            "",
+            "> HAL tracks a baby's naps, feeds, and bedtime by text in the",
+            "> family group chat — no app. Private by design: export or",
+            "> permanently delete everything with one text.",
+            "",
+            "## Guides",
+            "",
+        ]
+        lines += [
+            f"- [{g['title']}](https://www.texthal.com/guides/{g['slug']}): {g['teaser']}"
+            for g in _GUIDES
+        ]
+        lines += [
+            "- [Wake window calculator](https://www.texthal.com/guides/wake-window-calculator): free next-nap time-range tool",
+            "",
+            "## Product",
+            "",
+            "- [HAL landing page](https://www.texthal.com/): what HAL does and how to start",
+            "- [Privacy policy](https://www.texthal.com/privacy)",
+        ]
+        return PlainTextResponse("\n".join(lines) + "\n")
+
     @router.get("/sitemap.xml", include_in_schema=False)
     async def sitemap() -> PlainTextResponse:
-        pages = ["", "privacy", "terms"]
+        pages = ["", "privacy", "terms", "guides"]
         urls = "\n".join(
             f"  <url><loc>https://www.texthal.com/{p}</loc></url>" for p in pages
+        )
+        urls += "\n" + "\n".join(
+            f"  <url><loc>https://www.texthal.com/guides/{g['slug']}</loc>"
+            f"<lastmod>{g['updated']}</lastmod></url>"
+            for g in _GUIDES
+        )
+        urls += (
+            "\n  <url><loc>https://www.texthal.com/guides/wake-window-calculator"
+            "</loc></url>"
         )
         return PlainTextResponse(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
