@@ -15,6 +15,24 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from hal_orchestrator.services import booking_widgets as W
 
+# Offline environments (CI sandboxes) have no public DNS; booking_widget_note
+# runs every URL through url_guard, which resolves hostnames. Fall back to a
+# fixed public address only when real resolution raises — a no-op wherever DNS
+# works, and the ssrf-guard section below stubs check_url itself regardless.
+import socket
+
+_real_getaddrinfo = socket.getaddrinfo
+
+
+def _getaddrinfo_offline_fallback(host, *args, **kwargs):
+    try:
+        return _real_getaddrinfo(host, *args, **kwargs)
+    except socket.gaierror:
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+
+
+socket.getaddrinfo = _getaddrinfo_offline_fallback
+
 failures = []
 
 
