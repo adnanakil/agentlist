@@ -27,6 +27,15 @@ def check(name, cond, detail=""):
 
 
 # --- SSRF url_guard -------------------------------------------------------- #
+# These suites must run with no network. url_guard resolves hostnames via DNS,
+# so stub the resolver: every name resolves to a public IP. The BLOCK cases all
+# reject before resolution (scheme, creds, literal IPs, internal suffixes), so
+# the stub only makes the ALLOW cases deterministic on offline machines.
+import socket as _socket
+
+_PUBLIC_ADDRINFO = [(2, 1, 6, "", ("93.184.216.34", 443))]
+_socket.getaddrinfo = lambda *a, **kw: _PUBLIC_ADDRINFO
+
 print("url_guard — must BLOCK (returns a reason):")
 BLOCK = [
     "http://169.254.169.254/latest/meta-data/",       # AWS/GCP metadata
