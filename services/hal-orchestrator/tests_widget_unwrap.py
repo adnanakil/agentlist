@@ -15,6 +15,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from hal_orchestrator.services import booking_widgets as W
 
+# These suites must run with no network, but booking_widget_note runs each
+# candidate URL through url_guard, which resolves hostnames via DNS. Stub the
+# resolver so every name resolves to a public IP; the ssrf-guard check below
+# monkeypatches url_guard.check_url directly, so it is unaffected.
+import socket as _socket
+
+_PUBLIC_ADDRINFO = [(2, 1, 6, "", ("93.184.216.34", 443))]
+_socket.getaddrinfo = lambda *a, **kw: _PUBLIC_ADDRINFO
+
 failures = []
 
 
